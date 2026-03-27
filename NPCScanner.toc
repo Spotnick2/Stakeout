@@ -1,0 +1,8 @@
+## Interface: 20504
+## Title: NPC Scanner
+## Notes: Scans for configurable NPCs via nameplates and proximity. Click the target frame to target and mark them.
+## Author: Karuzo
+## Version: 1.1.0
+## SavedVariablesPerCharacter : NPCScannerDB
+
+NPCScanner.lua
