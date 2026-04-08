@@ -1,4 +1,4 @@
-## Interface: 20504
+## Interface: 20505
 ## Title: Stakeout
 ## Notes: Watch configurable NPCs via nameplates and proximity. Click target buttons to target and mark them.
 ## Author: Spotnick
