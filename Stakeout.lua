@@ -1,11 +1,11 @@
 -------------------------------------------------------------------------------
--- NPCScanner — Standalone NPC detector with clickable target frame
+-- Stakeout — Standalone NPC detector with clickable target frame
 -- Replicates the RXPGuides targeting mechanic for any user-defined NPC list
 -------------------------------------------------------------------------------
 local addonName = ...
 
 -- Saved variables (persisted between sessions)
-NPCScannerDB = NPCScannerDB or {}
+StakeoutDB = StakeoutDB or NPCScannerDB or {}
 
 -------------------------------------------------------------------------------
 -- Defaults & state
@@ -26,14 +26,14 @@ local defaults = {
 
 local function EnsureDefaults()
     for k, v in pairs(defaults) do
-        if NPCScannerDB[k] == nil then NPCScannerDB[k] = v end
+        if StakeoutDB[k] == nil then StakeoutDB[k] = v end
     end
     -- v1.1 migration: default marker changed from skull(8) to blue square(6)
-    if not NPCScannerDB._v then
-        if NPCScannerDB.markerIndex == 8 then
-            NPCScannerDB.markerIndex = 6
+    if not StakeoutDB._v then
+        if StakeoutDB.markerIndex == 8 then
+            StakeoutDB.markerIndex = 6
         end
-        NPCScannerDB._v = 1
+        StakeoutDB._v = 1
     end
 end
 
@@ -63,7 +63,7 @@ local BUTTON_ICONS = {
 }
 
 local function GetButtonIcon()
-    local idx = NPCScannerDB.buttonIcon or 1
+    local idx = StakeoutDB.buttonIcon or 1
     local entry = BUTTON_ICONS[idx]
     return entry and entry.texture or BUTTON_ICONS[1].texture
 end
@@ -90,14 +90,14 @@ local CreateFrame     = CreateFrame
 -------------------------------------------------------------------------------
 local function IsInNPCList(name)
     if not name then return false end
-    for _, npc in ipairs(NPCScannerDB.npcList) do
+    for _, npc in ipairs(StakeoutDB.npcList) do
         if npc == name then return true end
     end
     return false
 end
 
 local function Print(msg, ...)
-    DEFAULT_CHAT_FRAME:AddMessage("|cff33ccff[NPCScanner]|r " .. fmt(msg, ...))
+    DEFAULT_CHAT_FRAME:AddMessage("|cff33ccff[Stakeout]|r " .. fmt(msg, ...))
 end
 
 -------------------------------------------------------------------------------
@@ -106,7 +106,7 @@ end
 local function CreateTargetFrame()
     if targetFrame then return end
 
-    targetFrame = CreateFrame("Frame", "NPCScannerFrame", UIParent,
+    targetFrame = CreateFrame("Frame", "StakeoutFrame", UIParent,
         BackdropTemplateMixin and "BackdropTemplate" or nil)
 
     local f = targetFrame
@@ -131,28 +131,28 @@ local function CreateTargetFrame()
     -- Title bar
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     f.title:SetPoint("TOP", f, "TOP", 0, -4)
-    f.title:SetText("|cff33ccffNPC Scanner|r")
+    f.title:SetText("|cff33ccffStakeout|r")
 
     -- Dragging
     f:SetScript("OnMouseDown", function(self, button)
-        if button == "LeftButton" and (not NPCScannerDB.lockFrame or IsAltKeyDown()) then
+        if button == "LeftButton" and (not StakeoutDB.lockFrame or IsAltKeyDown()) then
             self:StartMoving()
         end
     end)
     f:SetScript("OnMouseUp", function(self)
         self:StopMovingOrSizing()
         local point, _, relPoint, x, y = self:GetPoint()
-        NPCScannerDB.framePos = { point, relPoint, x, y }
+        StakeoutDB.framePos = { point, relPoint, x, y }
     end)
 
     -- Restore saved position
-    if NPCScannerDB.framePos then
-        local p = NPCScannerDB.framePos
+    if StakeoutDB.framePos then
+        local p = StakeoutDB.framePos
         f:ClearAllPoints()
         f:SetPoint(p[1], UIParent, p[2], p[3], p[4])
     end
 
-    f:SetScale(NPCScannerDB.frameScale or 1.0)
+    f:SetScale(StakeoutDB.frameScale or 1.0)
 end
 
 -------------------------------------------------------------------------------
@@ -207,7 +207,7 @@ local function RefreshTargetFrame()
     for i, name in ipairs(names) do
         local btn = targetButtons[i]
         if not btn then
-            btn = CreateFrame("Button", "NPCScannerBtn" .. i, targetFrame,
+            btn = CreateFrame("Button", "StakeoutBtn" .. i, targetFrame,
                 "SecureActionButtonTemplate")
             btn:SetSize(BUTTON_SIZE, BUTTON_SIZE)
             btn:SetAttribute("type", "macro")
@@ -263,12 +263,12 @@ end
 -- Raid marking
 -------------------------------------------------------------------------------
 local function TryMarkUnit(unitId)
-    if not NPCScannerDB.enableMarking then return end
+    if not StakeoutDB.enableMarking then return end
     if not unitId then return end
     if UnitIsDead(unitId) or UnitIsPlayer(unitId) then return end
     if GetRaidTargetIndex(unitId) then return end
 
-    SetRaidTarget(unitId, NPCScannerDB.markerIndex)
+    SetRaidTarget(unitId, StakeoutDB.markerIndex)
 end
 
 -------------------------------------------------------------------------------
@@ -289,8 +289,8 @@ local function CheckNameplate(unitId)
     if isNew and not announcedUnits[name] then
         announcedUnits[name] = true
         Print("Detected: %s", name)
-        if NPCScannerDB.flashOnFind then FlashClientIcon() end
-        if NPCScannerDB.soundOnFind then PlaySound(SOUNDKIT.RAID_WARNING or 8959) end
+        if StakeoutDB.flashOnFind then FlashClientIcon() end
+        if StakeoutDB.soundOnFind then PlaySound(SOUNDKIT.RAID_WARNING or 8959) end
     end
 end
 
@@ -309,10 +309,10 @@ local proxTicker
 
 local function ProximityPoll()
     if InCombatLockdown() then return end
-    if not NPCScannerDB.enableProximity then return end
-    if not NPCScannerDB.npcList or #NPCScannerDB.npcList == 0 then return end
+    if not StakeoutDB.enableProximity then return end
+    if not StakeoutDB.npcList or #StakeoutDB.npcList == 0 then return end
 
-    for _, name in ipairs(NPCScannerDB.npcList) do
+    for _, name in ipairs(StakeoutDB.npcList) do
         proxScanData = name
         TargetUnit(name, true)
     end
@@ -372,7 +372,7 @@ local function RefreshNPCList()
     local parent = configFrame.scrollContent
     local yOff = 0
 
-    for i, npcName in ipairs(NPCScannerDB.npcList) do
+    for i, npcName in ipairs(StakeoutDB.npcList) do
         local row = npcScrollRows[i]
         if not row then
             row = CreateFrame("Frame", nil, parent,
@@ -394,9 +394,9 @@ local function RefreshNPCList()
             row.deleteBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
             row.deleteBtn:SetScript("OnClick", function()
                 local idx = row.npcIndex
-                if idx and NPCScannerDB.npcList[idx] then
-                    local removed = NPCScannerDB.npcList[idx]
-                    tremove(NPCScannerDB.npcList, idx)
+                if idx and StakeoutDB.npcList[idx] then
+                    local removed = StakeoutDB.npcList[idx]
+                    tremove(StakeoutDB.npcList, idx)
                     detectedUnits[removed] = nil
                     announcedUnits[removed] = nil
                     if not InCombatLockdown() then RefreshTargetFrame() end
@@ -421,7 +421,7 @@ local function RefreshNPCList()
     parent:SetHeight(math.max(yOff, 1))
 
     if configFrame.countLabel then
-        configFrame.countLabel:SetText(fmt("Tracked: |cffffffff%d|r", #NPCScannerDB.npcList))
+        configFrame.countLabel:SetText(fmt("Tracked: |cffffffff%d|r", #StakeoutDB.npcList))
     end
 end
 
@@ -436,10 +436,10 @@ local function MakeCheckbox(parent, x, y, label, dbKey, onChange)
         text:SetFontObject("GameFontNormalSmall")
     end
 
-    cb:SetChecked(NPCScannerDB[dbKey])
+    cb:SetChecked(StakeoutDB[dbKey])
     cb:SetScript("OnClick", function(self)
-        NPCScannerDB[dbKey] = self:GetChecked() and true or false
-        if onChange then onChange(NPCScannerDB[dbKey]) end
+        StakeoutDB[dbKey] = self:GetChecked() and true or false
+        if onChange then onChange(StakeoutDB[dbKey]) end
     end)
 
     return cb
@@ -452,7 +452,7 @@ local function CreateConfigFrame()
         return
     end
 
-    local f = CreateFrame("Frame", "NPCScannerConfigFrame", UIParent,
+    local f = CreateFrame("Frame", "StakeoutConfigFrame", UIParent,
         BackdropTemplateMixin and "BackdropTemplate" or nil)
     configFrame = f
 
@@ -485,7 +485,7 @@ local function CreateConfigFrame()
     -- Title
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOP", f, "TOP", 0, -12)
-    title:SetText("|cff33ccffNPC Scanner|r")
+    title:SetText("|cff33ccffStakeout|r")
 
     ---------------------------------------------------------------------------
     -- Section: NPC List
@@ -494,14 +494,14 @@ local function CreateConfigFrame()
 
     local npcHeader = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     npcHeader:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
-    npcHeader:SetText("NPC Watch List")
+    npcHeader:SetText("Watch List")
 
     f.countLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     f.countLabel:SetPoint("TOPRIGHT", f, "TOPRIGHT", -40, sectionY - 1)
 
     -- Add NPC input row
     sectionY = sectionY - 20
-    local addBox = CreateFrame("EditBox", "NPCScannerAddBox", f,
+    local addBox = CreateFrame("EditBox", "StakeoutAddBox", f,
         BackdropTemplateMixin and "BackdropTemplate" or nil)
     addBox:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
     addBox:SetSize(272, 24)
@@ -537,13 +537,13 @@ local function CreateConfigFrame()
     local function DoAddNPC()
         local name = addBox:GetText():trim()
         if name == "" then return end
-        for _, npc in ipairs(NPCScannerDB.npcList) do
+        for _, npc in ipairs(StakeoutDB.npcList) do
             if npc == name then
                 Print("|cffff6666%s|r is already in the list.", name)
                 return
             end
         end
-        tinsert(NPCScannerDB.npcList, name)
+        tinsert(StakeoutDB.npcList, name)
         Print("|cff00ff00Added:|r %s", name)
         addBox:SetText("")
         addBox:ClearFocus()
@@ -570,7 +570,7 @@ local function CreateConfigFrame()
     scrollParent:SetBackdropColor(0.04, 0.04, 0.06, 0.8)
     scrollParent:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
 
-    local scrollFrame = CreateFrame("ScrollFrame", "NPCScannerScrollFrame",
+    local scrollFrame = CreateFrame("ScrollFrame", "StakeoutScrollFrame",
         scrollParent, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", scrollParent, "TOPLEFT", 4, -4)
     scrollFrame:SetPoint("BOTTOMRIGHT", scrollParent, "BOTTOMRIGHT", -24, 4)
@@ -587,12 +587,12 @@ local function CreateConfigFrame()
     clearBtn:SetSize(100, 22)
     clearBtn:SetText("Clear All")
     clearBtn:SetScript("OnClick", function()
-        StaticPopupDialogs["NPCSCANNER_CLEAR_CONFIRM"] = {
+        StaticPopupDialogs["STAKEOUT_CLEAR_CONFIRM"] = {
             text = "Remove all NPCs from the watch list?",
             button1 = "Yes",
             button2 = "No",
             OnAccept = function()
-                wipe(NPCScannerDB.npcList)
+                wipe(StakeoutDB.npcList)
                 wipe(detectedUnits)
                 wipe(announcedUnits)
                 if not InCombatLockdown() then RefreshTargetFrame() end
@@ -601,7 +601,7 @@ local function CreateConfigFrame()
             end,
             timeout = 0, whileDead = true, hideOnEscape = true,
         }
-        StaticPopup_Show("NPCSCANNER_CLEAR_CONFIRM")
+        StaticPopup_Show("STAKEOUT_CLEAR_CONFIRM")
     end)
 
     local resetBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -700,7 +700,7 @@ local function CreateConfigFrame()
         mb.ht:SetColorTexture(1, 1, 1, 0.15)
 
         mb:SetScript("OnClick", function()
-            NPCScannerDB.markerIndex = idx
+            StakeoutDB.markerIndex = idx
             for _, b in ipairs(markerButtons) do b.selected:Hide() end
             mb.selected:Show()
             Print("Marker set to: %s", MARKER_NAMES[idx])
@@ -713,7 +713,7 @@ local function CreateConfigFrame()
         end)
         mb:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-        if NPCScannerDB.markerIndex == idx then mb.selected:Show() end
+        if StakeoutDB.markerIndex == idx then mb.selected:Show() end
         markerButtons[idx] = mb
     end
 
@@ -756,7 +756,7 @@ local function CreateConfigFrame()
         ib.ht:SetColorTexture(1, 1, 1, 0.15)
 
         ib:SetScript("OnClick", function()
-            NPCScannerDB.buttonIcon = idx
+            StakeoutDB.buttonIcon = idx
             for _, b in ipairs(iconButtons) do b.selected:Hide() end
             ib.selected:Show()
             -- Refresh existing buttons to show new icon
@@ -771,7 +771,7 @@ local function CreateConfigFrame()
         end)
         ib:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-        if (NPCScannerDB.buttonIcon or 1) == idx then ib.selected:Show() end
+        if (StakeoutDB.buttonIcon or 1) == idx then ib.selected:Show() end
         iconButtons[idx] = ib
     end
 
@@ -780,13 +780,13 @@ local function CreateConfigFrame()
     local scaleLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     scaleLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY)
 
-    local slider = CreateFrame("Slider", "NPCScannerScaleSlider", f, "OptionsSliderTemplate")
+    local slider = CreateFrame("Slider", "StakeoutScaleSlider", f, "OptionsSliderTemplate")
     slider:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY - 18)
     slider:SetWidth(220)
     slider:SetMinMaxValues(50, 300)
     slider:SetValueStep(10)
     slider:SetObeyStepOnDrag(true)
-    slider:SetValue((NPCScannerDB.frameScale or 1.0) * 100)
+    slider:SetValue((StakeoutDB.frameScale or 1.0) * 100)
 
     slider.Low  = slider.Low  or _G[slider:GetName() .. "Low"]
     slider.High = slider.High or _G[slider:GetName() .. "High"]
@@ -802,13 +802,13 @@ local function CreateConfigFrame()
 
     slider:SetScript("OnValueChanged", function(self, val)
         val = math.floor(val / 10 + 0.5) * 10
-        NPCScannerDB.frameScale = val / 100
-        if targetFrame then targetFrame:SetScale(NPCScannerDB.frameScale) end
+        StakeoutDB.frameScale = val / 100
+        if targetFrame then targetFrame:SetScale(StakeoutDB.frameScale) end
         UpdateScaleLabel(val)
     end)
 
     -- ESC closes config
-    tinsert(UISpecialFrames, "NPCScannerConfigFrame")
+    tinsert(UISpecialFrames, "StakeoutConfigFrame")
 
     RefreshNPCList()
     f:Show()
@@ -836,7 +836,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         self:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
         self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 
-        if NPCScannerDB.maxNameplateDist then
+        if StakeoutDB.maxNameplateDist then
             local version = select(4, GetBuildInfo()) or 0
             if version > 40000 then
                 SetCVar("nameplateMaxDistance", "100")
@@ -845,8 +845,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
 
-        if NPCScannerDB.enableProximity then
-            proxTicker = C_Timer.NewTicker(NPCScannerDB.pollInterval, ProximityPoll)
+        if StakeoutDB.enableProximity then
+            proxTicker = C_Timer.NewTicker(StakeoutDB.pollInterval, ProximityPoll)
             self:RegisterEvent("ADDON_ACTION_FORBIDDEN")
             UIParent:UnregisterEvent("ADDON_ACTION_FORBIDDEN")
 
@@ -861,7 +861,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
         ScanAllNameplates()
-        Print("Loaded. |cff00ff00/npcs|r to open config. Tracking %d NPCs.", #NPCScannerDB.npcList)
+        Print("Loaded. |cff00ff00/stakeout|r to open config. Tracking %d NPCs.", #StakeoutDB.npcList)
 
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         CheckNameplate(...)
@@ -874,7 +874,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             local data = detectedUnits[name]
             if data.unitId == unitId then
                 data.unitId = nil
-                if not NPCScannerDB.enableProximity then
+                if not StakeoutDB.enableProximity then
                     detectedUnits[name] = nil
                     if not InCombatLockdown() then RefreshTargetFrame() end
                 end
@@ -899,8 +899,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             if isNew and not announcedUnits[name] then
                 announcedUnits[name] = true
                 Print("Detected: %s", name)
-                if NPCScannerDB.flashOnFind then FlashClientIcon() end
-                if NPCScannerDB.soundOnFind then PlaySound(SOUNDKIT.RAID_WARNING or 8959) end
+                if StakeoutDB.flashOnFind then FlashClientIcon() end
+                if StakeoutDB.soundOnFind then PlaySound(SOUNDKIT.RAID_WARNING or 8959) end
             end
         end
 
@@ -921,8 +921,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         if isNew and not announcedUnits[name] then
             announcedUnits[name] = true
             Print("Nearby: %s (proximity)", name)
-            if NPCScannerDB.flashOnFind then FlashClientIcon() end
-            if NPCScannerDB.soundOnFind then PlaySound(SOUNDKIT.RAID_WARNING or 8959) end
+            if StakeoutDB.flashOnFind then FlashClientIcon() end
+            if StakeoutDB.soundOnFind then PlaySound(SOUNDKIT.RAID_WARNING or 8959) end
         end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -941,10 +941,10 @@ end)
 -------------------------------------------------------------------------------
 -- Slash commands
 -------------------------------------------------------------------------------
-SLASH_NPCSCANNER1 = "/npcs"
-SLASH_NPCSCANNER2 = "/npcscanner"
+SLASH_STAKEOUT1 = "/stakeout"
+SLASH_STAKEOUT2 = "/stake"
 
-SlashCmdList["NPCSCANNER"] = function(input)
+SlashCmdList["STAKEOUT"] = function(input)
     input = (input or ""):trim()
     local cmd, rest = input:match("^(%S+)%s*(.*)")
     cmd  = cmd  and cmd:lower() or ""
@@ -954,22 +954,22 @@ SlashCmdList["NPCSCANNER"] = function(input)
         CreateConfigFrame()
 
     elseif cmd == "add" and rest ~= "" then
-        for _, npc in ipairs(NPCScannerDB.npcList) do
+        for _, npc in ipairs(StakeoutDB.npcList) do
             if npc == rest then
                 Print("|cffff6666%s|r is already in the list.", rest)
                 return
             end
         end
-        tinsert(NPCScannerDB.npcList, rest)
-        Print("|cff00ff00Added:|r %s  (total: %d)", rest, #NPCScannerDB.npcList)
+        tinsert(StakeoutDB.npcList, rest)
+        Print("|cff00ff00Added:|r %s  (total: %d)", rest, #StakeoutDB.npcList)
         ScanAllNameplates()
         RefreshNPCList()
 
     elseif cmd == "remove" or cmd == "del" then
-        if rest == "" then Print("Usage: /npcs remove <Exact NPC Name>") return end
-        for i, npc in ipairs(NPCScannerDB.npcList) do
+        if rest == "" then Print("Usage: /stakeout remove <Exact NPC Name>") return end
+        for i, npc in ipairs(StakeoutDB.npcList) do
             if npc == rest then
-                tremove(NPCScannerDB.npcList, i)
+                tremove(StakeoutDB.npcList, i)
                 detectedUnits[rest] = nil
                 announcedUnits[rest] = nil
                 if not InCombatLockdown() then RefreshTargetFrame() end
@@ -981,17 +981,17 @@ SlashCmdList["NPCSCANNER"] = function(input)
         Print("'%s' not found in list.", rest)
 
     elseif cmd == "list" then
-        if #NPCScannerDB.npcList == 0 then
-            Print("NPC list is empty. Use |cff00ff00/npcs add <n>|r or open config.")
+        if #StakeoutDB.npcList == 0 then
+            Print("NPC list is empty. Use |cff00ff00/stakeout add <n>|r or open config.")
         else
-            Print("Tracked NPCs (%d):", #NPCScannerDB.npcList)
-            for i, npc in ipairs(NPCScannerDB.npcList) do
+            Print("Tracked NPCs (%d):", #StakeoutDB.npcList)
+            for i, npc in ipairs(StakeoutDB.npcList) do
                 Print("  %d. %s", i, npc)
             end
         end
 
     elseif cmd == "clear" then
-        wipe(NPCScannerDB.npcList)
+        wipe(StakeoutDB.npcList)
         wipe(detectedUnits)
         wipe(announcedUnits)
         Print("NPC list cleared.")
@@ -1005,12 +1005,12 @@ SlashCmdList["NPCSCANNER"] = function(input)
         ScanAllNameplates()
 
     else
-        Print("|cff33ccff--- NPC Scanner ---|r")
-        Print("  /npcs                    — Open config panel")
-        Print("  /npcs add <NPC Name>     — Quick-add an NPC")
-        Print("  /npcs remove <NPC Name>  — Quick-remove an NPC")
-        Print("  /npcs list               — List tracked NPCs in chat")
-        Print("  /npcs clear              — Remove all NPCs")
-        Print("  /npcs reset              — Clear detections & rescan")
+        Print("|cff33ccff--- Stakeout ---|r")
+        Print("  /stakeout                — Open config panel")
+        Print("  /stakeout add <NPC Name> — Quick-add an NPC")
+        Print("  /stakeout remove <NPC Name> — Quick-remove an NPC")
+        Print("  /stakeout list          — List tracked NPCs in chat")
+        Print("  /stakeout clear         — Remove all NPCs")
+        Print("  /stakeout reset         — Clear detections & rescan")
     end
 end

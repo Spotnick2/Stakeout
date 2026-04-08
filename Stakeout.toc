@@ -1,0 +1,8 @@
+## Interface: 20504
+## Title: Stakeout
+## Notes: Watch configurable NPCs via nameplates and proximity. Click target buttons to target and mark them.
+## Author: Spotnick
+## Version: @project-version@
+## SavedVariablesPerCharacter: StakeoutDB
+
+Stakeout.lua
