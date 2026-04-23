@@ -19,6 +19,7 @@ local defaults = {
     pollInterval    = 0.25,     -- proximity poll rate in seconds
     flashOnFind     = true,     -- flash taskbar icon on detection
     soundOnFind     = true,     -- play sound on first detection
+    soundChoice     = "Raid Warning",  -- alert sound name (see GetAlertSounds)
     maxNameplateDist= true,     -- push nameplate range to max
     frameScale      = 1.0,
     lockFrame       = false,
@@ -49,6 +50,77 @@ local PROX_TIMEOUT    = 5
 local targetFrame
 local targetButtons   = {}
 local configFrame     -- config GUI
+
+-- Alert sound choices
+-- numeric = SoundKit ID → PlaySound(); string = game file path → PlaySoundFile()
+-- IMPORTANT (TBC Classic 2.5.x): PlaySound() ONLY accepts real SoundKit IDs from
+-- SoundKitEntry.db2. Many IDs shown on Wowhead are actually FileDataIDs. Our
+-- SafePlaySound helper tries PlaySound first, then PlaySoundFile for the same
+-- number (which accepts FileDataIDs on modern Classic clients), then falls back
+-- to Raid Warning — so numeric entries that look broken get two chances before
+-- the failsafe kicks in. File-path strings go straight to PlaySoundFile.
+local ALERT_SOUNDS_BASE = {
+    -- Standard UI — verified SoundKit IDs
+    { name = "Raid Warning",          id = SOUNDKIT.RAID_WARNING      or 8959 },
+    { name = "Ready Check",           id = SOUNDKIT.READY_CHECK       or 8960 },
+    { name = "Whisper",               id = SOUNDKIT.TELL_MESSAGE      or 3081 },
+    { name = "Murloc Aggro",          id = SOUNDKIT.MURLOC_AGGRO      or 416  },
+    { name = "Alarm Clock",           id = SOUNDKIT.ALARM_CLOCK_WARNING_3 or 12889 },
+    { name = "Loatheb: I See You",    id = 8826  },
+
+    -- Horns (original numeric IDs; safe-play has FileDataID fallback)
+    { name = "Horn of Awakening",     id = 7034  },
+    { name = "Horn of Cenarius",      id = 10843 },
+    { name = "Horn: Dwarf",           id = 10966 },
+
+    -- Nautical
+    { name = "Foghorn",               id = 11630 },
+    { name = "Boat Warning",          id = 10170 },
+
+    -- PvP cluster (8458/8459 verified in SOUNDKIT; 8455-8457 are adjacent IDs
+    -- in the same cluster, strong evidence they're real SoundKit entries too)
+    { name = "PvP Warning: Alliance", id = 8455 },
+    { name = "PvP Warning: Horde",    id = 8456 },
+    { name = "PvP: Flag Taken",       id = 8457 },
+    { name = "PvP: Enter Queue",      id = SOUNDKIT.PVP_ENTER_QUEUE   or 8458 },
+    { name = "PvP: Through Queue",    id = SOUNDKIT.PVP_THROUGH_QUEUE or 8459 },
+
+    -- Bells (confirmed SOUNDKIT ID; file-path variants below use .ogg extension)
+    { name = "Bell: Dwarf/Gnome",     id = 7234  },
+    { name = "Bell: Alliance",        id = "Sound\\Doodad\\BellTollAlliance.ogg"  },
+    { name = "Bell: Horde",           id = "Sound\\Doodad\\BellTollHorde.ogg"     },
+    { name = "Bell: Night Elf",       id = "Sound\\Doodad\\BellTollNightElf.ogg"  },
+    { name = "Bell: Karazhan",        id = "Sound\\Doodad\\KharazahnBellToll.ogg" },
+
+    -- Atmospheric / event (file paths — LFG Broker verified)
+    { name = "Ogre War Drums",        id = "Sound\\Event Sounds\\Event_wardrum_ogre.ogg" },
+    { name = "Troll Drums",           id = "Sound\\Doodad\\TrollDrumLoop1.ogg"           },
+    { name = "Fireworks",             id = "Sound\\Doodad\\G_FireworkLauncher02Custom0.ogg" },
+    { name = "Goblin Spring",         id = "Sound\\Doodad\\Goblin_Lottery_Open03.ogg"    },
+    { name = "Gnome Yell",            id = "Sound\\Character\\Gnome\\GnomeVocalFemale\\GnomeFemalePissed01.ogg" },
+}
+-- Requires DBM-Core to be installed; string paths always use PlaySoundFile()
+local ALERT_SOUNDS_DBM_CORE = {
+    { name = "Algalon: Beware!",        id = "Interface\\AddOns\\DBM-Core\\sounds\\ClassicSupport\\UR_Algalon_BHole01.ogg" },
+    { name = "BB Wolf: Run Away",       id = "Interface\\AddOns\\DBM-Core\\sounds\\ClassicSupport\\HoodWolfTransformPlayer01.ogg" },
+    { name = "Illidan: Not Prepared",   id = "Interface\\AddOns\\DBM-Core\\sounds\\ClassicSupport\\BLACK_Illidan_04.ogg" },
+    { name = "Illidan: Not Prepared2",  id = "Interface\\AddOns\\DBM-Core\\sounds\\ClassicSupport\\VO_703_Illidan_Stormrage_03.ogg" },
+    { name = "Kil'Jaeden: Destruction", id = "Interface\\AddOns\\DBM-Core\\sounds\\ClassicSupport\\KILJAEDEN02.ogg" },
+    { name = "Air Horn",                id = "Interface\\AddOns\\DBM-Core\\sounds\\AirHorn.ogg" },
+    { name = "Alarm Clock (DBM)",       id = "Interface\\AddOns\\DBM-Core\\sounds\\alarmclockbeeps.ogg" },
+}
+
+local function GetAlertSounds()
+    local list = {}
+    for _, v in ipairs(ALERT_SOUNDS_BASE) do tinsert(list, v) end
+    -- C_AddOns.IsAddOnLoaded is a modern API; fall back to the legacy global on
+    -- older Classic builds so DBM-Core sounds still show up everywhere.
+    local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+    if isLoaded and isLoaded("DBM-Core") then
+        for _, v in ipairs(ALERT_SOUNDS_DBM_CORE) do tinsert(list, v) end
+    end
+    return list
+end
 
 -- Button icon choices for the target frame
 local BUTTON_ICONS = {
@@ -82,8 +154,45 @@ local SetRaidTarget   = SetRaidTarget
 local GetNamePlates   = C_NamePlate.GetNamePlates
 local FlashClientIcon = FlashClientIcon
 local PlaySound       = PlaySound
+local PlaySoundFile   = PlaySoundFile
 local wipe            = wipe
 local CreateFrame     = CreateFrame
+
+-- Play a sound entry. Both PlaySound and PlaySoundFile return `willPlay` as
+-- their first value — nil means the engine refused (bad SoundKit ID, missing
+-- file, muted channel). For numeric IDs we try PlaySound (SoundKit) first; if
+-- that fails we try PlaySoundFile (which on modern Classic clients also
+-- accepts FileDataIDs) so IDs that turned out to be FileDataIDs still play.
+-- If both paths fail, the caller falls back to Raid Warning.
+local function SafePlaySound(entry)
+    if not entry then return false end
+    local id = entry.id
+    if type(id) == "string" then
+        return PlaySoundFile(id, "Master") and true or false
+    elseif type(id) == "number" then
+        if PlaySound(id, "Master") then return true end
+        return PlaySoundFile(id, "Master") and true or false
+    end
+    return false
+end
+
+local function PlayAlertSound()
+    local choice = StakeoutDB and StakeoutDB.soundChoice or "Raid Warning"
+    if type(choice) == "number" then choice = "Raid Warning" end  -- legacy migration
+    local sounds = GetAlertSounds()
+    local entry
+    for _, s in ipairs(sounds) do
+        if s.name == choice then entry = s; break end
+    end
+    entry = entry or ALERT_SOUNDS_BASE[1]
+    if not SafePlaySound(entry) then
+        -- Chosen sound didn't play (missing file / invalid SoundKit on this
+        -- client). Fall back to Raid Warning, which is guaranteed to exist.
+        if entry ~= ALERT_SOUNDS_BASE[1] then
+            SafePlaySound(ALERT_SOUNDS_BASE[1])
+        end
+    end
+end
 
 -------------------------------------------------------------------------------
 -- Helpers
@@ -290,7 +399,7 @@ local function CheckNameplate(unitId)
         announcedUnits[name] = true
         Print("Detected: %s", name)
         if StakeoutDB.flashOnFind then FlashClientIcon() end
-        if StakeoutDB.soundOnFind then PlaySound(SOUNDKIT.RAID_WARNING or 8959) end
+        if StakeoutDB.soundOnFind then PlayAlertSound() end
     end
 end
 
@@ -456,7 +565,7 @@ local function CreateConfigFrame()
         BackdropTemplateMixin and "BackdropTemplate" or nil)
     configFrame = f
 
-    f:SetSize(400, 690)
+    f:SetSize(400, 720)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetMovable(true)
     f:EnableMouse(true)
@@ -661,10 +770,46 @@ local function CreateConfigFrame()
     MakeCheckbox(f, 10, sectionY - 20, "Flash taskbar on detection", "flashOnFind")
     MakeCheckbox(f, 10, sectionY - 44, "Play sound on detection", "soundOnFind")
 
+    -- Sound selector dropdown
+    sectionY = sectionY - 68
+    local soundLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    soundLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY)
+    soundLabel:SetText("Sound:")
+
+    local soundDropdown = CreateFrame("Frame", "StakeoutSoundDropdown", f, "UIDropDownMenuTemplate")
+    soundDropdown:SetPoint("TOPLEFT", f, "TOPLEFT", 46, sectionY + 7)
+    UIDropDownMenu_SetWidth(soundDropdown, 190)
+
+    UIDropDownMenu_Initialize(soundDropdown, function()
+        local sounds  = GetAlertSounds()
+        local current = StakeoutDB.soundChoice or "Raid Warning"
+        for _, entry in ipairs(sounds) do
+            local entryName = entry.name
+            local info      = UIDropDownMenu_CreateInfo()
+            info.text    = entryName
+            info.value   = entryName
+            info.checked = (current == entryName)
+            info.func = function()
+                UIDropDownMenu_SetText(soundDropdown, entryName)
+                StakeoutDB.soundChoice = entryName
+                -- Preview with the same safe-play logic used at runtime so the
+                -- user gets an honest answer about whether the sound works.
+                if not SafePlaySound(entry) then
+                    Print("|cffff6666Couldn't play '%s' on this client.|r Falling back to Raid Warning.", entryName)
+                    SafePlaySound(ALERT_SOUNDS_BASE[1])
+                else
+                    Print("Alert sound set to: %s", entryName)
+                end
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    UIDropDownMenu_SetText(soundDropdown, StakeoutDB.soundChoice or "Raid Warning")
+
     ---------------------------------------------------------------------------
     -- Section: Raid Marking
     ---------------------------------------------------------------------------
-    sectionY = sectionY - 76
+    sectionY = sectionY - 32
 
     local markHeader = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     markHeader:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
@@ -900,7 +1045,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
                 announcedUnits[name] = true
                 Print("Detected: %s", name)
                 if StakeoutDB.flashOnFind then FlashClientIcon() end
-                if StakeoutDB.soundOnFind then PlaySound(SOUNDKIT.RAID_WARNING or 8959) end
+                if StakeoutDB.soundOnFind then PlayAlertSound() end
             end
         end
 
@@ -922,7 +1067,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             announcedUnits[name] = true
             Print("Nearby: %s (proximity)", name)
             if StakeoutDB.flashOnFind then FlashClientIcon() end
-            if StakeoutDB.soundOnFind then PlaySound(SOUNDKIT.RAID_WARNING or 8959) end
+            if StakeoutDB.soundOnFind then PlayAlertSound() end
         end
 
     elseif event == "PLAYER_REGEN_ENABLED" then

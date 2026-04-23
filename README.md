@@ -132,6 +132,7 @@ Stakeout includes options for:
 
 - Flash taskbar icon on detection
 - Play sound on detection
+- Choose alert sound from 30+ options (UI sounds, bells, horns, PvP, atmospheric, and DBM-Core sounds if installed)
 
 ### Raid marking
 
