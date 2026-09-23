@@ -178,8 +178,25 @@ local SOUNDS = {
     { "Gnome Yell", "Sound\\Character\\Gnome\\GnomeVocalFemale\\GnomeFemalePissed01.ogg" },
 }
 
+-- Offered only when DBM-Core is loaded; string paths always use PlaySoundFile.
+local DBM_SOUNDS = {
+    { "Algalon: Beware!", "Interface\\AddOns\\DBM-Core\\sounds\\ClassicSupport\\UR_Algalon_BHole01.ogg" },
+    { "BB Wolf: Run Away", "Interface\\AddOns\\DBM-Core\\sounds\\ClassicSupport\\HoodWolfTransformPlayer01.ogg" },
+    { "Illidan: Not Prepared", "Interface\\AddOns\\DBM-Core\\sounds\\ClassicSupport\\BLACK_Illidan_04.ogg" },
+    { "Illidan: Not Prepared2", "Interface\\AddOns\\DBM-Core\\sounds\\ClassicSupport\\VO_703_Illidan_Stormrage_03.ogg" },
+    { "Kil'Jaeden: Destruction", "Interface\\AddOns\\DBM-Core\\sounds\\ClassicSupport\\KILJAEDEN02.ogg" },
+    { "Air Horn", "Interface\\AddOns\\DBM-Core\\sounds\\AirHorn.ogg" },
+    { "Alarm Clock (DBM)", "Interface\\AddOns\\DBM-Core\\sounds\\alarmclockbeeps.ogg" },
+}
+
 function P.sounds()
     head("sounds")
+    local dbm = C_AddOns.IsAddOnLoaded("DBM-Core")
+    rec("DBM-Core loaded", tostring(dbm) .. (dbm and "" or " - DBM entries UNMEASURED"))
+    if dbm and not SOUNDS.withDBM then
+        for _, s in ipairs(DBM_SOUNDS) do SOUNDS[#SOUNDS + 1] = s end
+        SOUNDS.withDBM = true
+    end
     local i = 0
     -- Spaced out so each result can be heard, and stopped so they do not pile up.
     C_Timer.NewTicker(1.2, function()
@@ -239,15 +256,21 @@ end
 local probeTargetName     -- set only for the duration of the TargetUnit call
 local forbiddenDuringCall
 
+-- Name AND GUID: a re-target of the same-named NPC must not read as "no change".
 local function targetName()
-    local ok, n = pcall(UnitName, "target")
-    return ok and fmt(n) or "<err>"
+    if not UnitExists("target") then return "<none>" end
+    local okN, n = pcall(UnitName, "target")
+    local okG, g = pcall(UnitGUID, "target")
+    return (okN and fmt(n) or "<err>") .. " " .. (okG and fmt(g) or "<err>")
 end
 
 function P.target(arg)
     if arg == "" then say("usage: /soprobe target <exact NPC name>") return end
     head("target " .. arg)
     local before = targetName()
+    if before ~= "<none>" then
+        say("|cffffcc00note:|r you already have a target; /cleartarget first or the result is ambiguous")
+    end
     forbiddenDuringCall = nil
     probeTargetName = arg
     local ok, err = pcall(TargetUnit, arg, true)
@@ -285,25 +308,37 @@ watch:SetScript("OnEvent", function(_, event, ...)
         rec("ADDON_ACTION_FORBIDDEN", fmt(packed) .. (probeTargetName and " (during TargetUnit)" or ""))
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         local token = ...
-        local okN, name = pcall(UnitName, token)
-        local okG, guid = pcall(UnitGUID, token)
-        if okG and guid and not isSecret(guid) then
-            plateGUIDs[guid] = (okN and fmt(name) or "?") .. " (" .. token .. ")"
-        end
+        -- Every touch of a possibly-secret value, the truth test included,
+        -- stays inside the pcall: a secret throws when it is tested.
+        local ok, line = pcall(function()
+            local okN, name = pcall(UnitName, token)
+            local okG, guid = pcall(UnitGUID, token)
+            if okG and not isSecret(guid) and guid then
+                plateGUIDs[guid] = (okN and fmt(name) or "?") .. " (" .. token .. ")"
+            end
+            return "name=" .. (okN and fmt(name) or "ERR") .. " guid=" .. (okG and fmt(guid) or "ERR")
+        end)
         section = "event"
-        rec("plate+ " .. token, "name=" .. (okN and fmt(name) or "ERR") ..
-            " guid=" .. (okG and fmt(guid) or "ERR") .. (InCombatLockdown() and " IN COMBAT" or ""))
+        rec("plate+ " .. tostring(token), (ok and line or ("THREW " .. tostring(line))) ..
+            (InCombatLockdown() and " IN COMBAT" or ""))
     elseif event == "UNIT_DIED" then
         local guid = ...
         section = "event"
-        rec("UNIT_DIED", fmt(guid) .. " -> plate match: " ..
-            tostring(not isSecret(guid) and plateGUIDs[guid] or "none"))
+        local ok, match = pcall(function()
+            return not isSecret(guid) and plateGUIDs[guid] or "none"
+        end)
+        rec("UNIT_DIED", fmt(guid) .. " -> plate match: " .. tostring(ok and match or "THREW"))
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-        if cleuSamples >= 5 then return end
+        -- A fight produces far more events than a death, so keep the first
+        -- few to show the shape, then only the deaths.
+        local internal = try(C_CombatLogInternal and C_CombatLogInternal.GetCurrentEventInfo)
+        local secure = try(C_CombatLogSecure and C_CombatLogSecure.GetCurrentEventInfo)
+        local isDeath = (internal .. secure):find("UNIT_DIED") or (internal .. secure):find("PARTY_KILL")
+        if cleuSamples >= 3 and not isDeath then return end
         cleuSamples = cleuSamples + 1
         section = "event"
-        rec("CLEU Internal", try(C_CombatLogInternal and C_CombatLogInternal.GetCurrentEventInfo))
-        rec("CLEU Secure", try(C_CombatLogSecure and C_CombatLogSecure.GetCurrentEventInfo))
+        rec("CLEU Internal" .. (isDeath and " DEATH" or ""), internal)
+        rec("CLEU Secure" .. (isDeath and " DEATH" or ""), secure)
     else
         section = "event"
         rec(event, fmt({ ... }))

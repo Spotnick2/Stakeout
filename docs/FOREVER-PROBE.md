@@ -8,13 +8,15 @@ regenerate the API dump before trusting anything here).
 
 ## Runbook
 
-Deploy only the probe. The unported TBC addon would get in the way:
+Deploy only the probe. The unported TBC addon would get in the way, so the script refuses to deploy it,
+and if a copy is already installed, disable it in the AddOn list:
 
 ```powershell
 pwsh Tools\deploy.ps1 -ProbeOnly
 ```
 
-In game, `/console scriptErrors 1`, then:
+In game, `/console scriptErrors 1`, then run the steps below. Before **each** `target` trial, `/cleartarget`
+(the probe warns if you forget), so a success can't look like "no change".
 
 | # | Where | Command | What to do |
 |---|---|---|---|

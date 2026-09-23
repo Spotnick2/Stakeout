@@ -71,7 +71,18 @@ function Get-TocFiles {
         Select-Object -ExpandProperty Name)
 }
 
-if (-not $ProbeOnly) { Deploy-Folder "Stakeout" $RepoRoot (Get-TocFiles $RepoRoot) }
+if (-not $ProbeOnly) {
+    # An unported manifest would load against the wrong client and muddy any
+    # measurement taken alongside it.
+    if ((Get-Content -LiteralPath (Join-Path $RepoRoot "Stakeout.toc") -Raw) -notmatch '(?m)^## Interface: 16001\s*$') {
+        Write-Error "Stakeout.toc is not '## Interface: 16001' yet (not ported, #4). Use -ProbeOnly."
+        exit 1
+    }
+    Deploy-Folder "Stakeout" $RepoRoot (Get-TocFiles $RepoRoot)
+}
+if ($ProbeOnly -and (Test-Path (Join-Path $AddOnsPath "Stakeout"))) {
+    Write-Warning "An installed Stakeout is still in AddOns. Disable it in the AddOn list so it cannot affect the probe."
+}
 if ($Probe -or $ProbeOnly) {
     $src = Join-Path $RepoRoot "Tools\StakeoutProbe"
     Deploy-Folder "StakeoutProbe" $src (Get-TocFiles $src)
