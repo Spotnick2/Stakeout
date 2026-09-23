@@ -157,6 +157,22 @@ WoW.units.mouseover.dead = true
 WoW.fire("UNIT_DIED", "Creature-B")
 H.eq(detected["Twin Mob"], nil, "both died: gone")
 
+-- Same-name pair: A walks out of range (no death), B dies (PR #9 follow-up).
+-- A's GUID keeps the entry until it expires; the alert must re-arm then.
+clean()
+WoW.SetUnit("nameplate1", { name = "Twin Mob", guid = "Creature-A", plate = true })
+WoW.SetUnit("nameplate2", { name = "Twin Mob", guid = "Creature-B", plate = true })
+WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate2")
+WoW.units.nameplate1 = nil
+WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+WoW.units.nameplate2 = nil
+WoW.fire("UNIT_DIED", "Creature-B")
+WoW.advance(T.LINGER + 1)
+T.Sweep()
+H.eq(detected["Twin Mob"], nil, "the entry expires once nothing shows it")
+H.eq(announced["Twin Mob"], nil, "and a death on the way out re-arms the alert")
+
 ------------------------------------------------------------
 -- Combat: detect and alert, but never touch the protected frame
 ------------------------------------------------------------

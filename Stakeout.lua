@@ -481,6 +481,9 @@ local function Sweep()
                 entry.lastSeen = now
             elseif now - (entry.lastSeen or 0) > LINGER then
                 detected[name] = nil
+                -- Leaving range keeps the alert spent; a death seen on the way
+                -- out re-arms it, as UnitDied does, so a respawn alerts again.
+                if entry.sawDeath then announced[name] = nil end
                 changed = true
             end
         end
@@ -508,6 +511,7 @@ local function UnitDied(guid)
     for name, entry in pairs(detected) do
         if entry.guids[guid] then
             entry.guids[guid] = nil
+            entry.sawDeath = true
             for token, g in pairs(entry.plates) do
                 if g == guid then entry.plates[token] = nil end
             end
