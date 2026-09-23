@@ -27,21 +27,25 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $RepoRoot
 try {
     # Syntax-check everything that ships, and any Lua under Tools (the probe).
+    # A missing luac must fail the run: no test loads every file, so skipping
+    # this would let a syntax error through behind a green result.
     $luac = Join-Path (Split-Path -Parent $Lua) "luac.exe"
-    if (Test-Path $luac) {
-        $sources = @("Stakeout.lua")
-        if (Test-Path "Tools") {
-            $sources += Get-ChildItem "Tools" -Recurse -Filter "*.lua" |
-                ForEach-Object { Resolve-Path -Relative $_.FullName }
-        }
-        & $luac -p @sources
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "luac -p FAILED" -ForegroundColor Red
-            exit 1
-        }
-        Remove-Item -LiteralPath (Join-Path $RepoRoot "luac.out") -ErrorAction SilentlyContinue
-        Write-Host "luac -p: ok" -ForegroundColor DarkGray
+    if (-not (Test-Path $luac)) {
+        Write-Error "luac.exe not found next to $Lua; the syntax check cannot run."
+        exit 1
     }
+    $sources = @("Stakeout.lua")
+    if (Test-Path "Tools") {
+        $sources += Get-ChildItem "Tools" -Recurse -Filter "*.lua" |
+            ForEach-Object { Resolve-Path -Relative $_.FullName }
+    }
+    & $luac -p @sources
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "luac -p FAILED" -ForegroundColor Red
+        exit 1
+    }
+    Remove-Item -LiteralPath (Join-Path $RepoRoot "luac.out") -ErrorAction SilentlyContinue
+    Write-Host "luac -p: ok" -ForegroundColor DarkGray
 
     $failed = 0
     Get-ChildItem (Join-Path $PSScriptRoot "test_*.lua") | Sort-Object Name | ForEach-Object {

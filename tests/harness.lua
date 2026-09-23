@@ -54,11 +54,12 @@ function H.directive(name)
     return nil
 end
 
--- The Lua files the TOC loads, in order.
+-- Every file the TOC loads, in order: each line that is neither blank nor a
+-- `#` comment/directive. Any extension, so a stray XML entry can't hide.
 function H.tocFiles()
     local files = {}
     for _, line in ipairs(H.tocLines()) do
-        local file = line:match("^%s*([^#%s][^%s]*%.lua)$")
+        local file = line:match("^%s*([^#%s].-)%s*$")
         if file then files[#files + 1] = file end
     end
     return files

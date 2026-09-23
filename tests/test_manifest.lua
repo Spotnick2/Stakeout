@@ -35,9 +35,14 @@ H.eq(H.directive("X-Curse-Project-ID"), "1508654",
 H.eq(H.directive("SavedVariablesPerCharacter"), "StakeoutDB",
     "settings are per character")
 
+-- Every load line, whatever its extension: the client would try to load a
+-- referenced file that the package doesn't carry.
 local files = H.tocFiles()
-H.eq(#files, 1, "the addon is a single file")
+H.eq(#files, 1, "the TOC loads exactly one file (the addon is a single file)")
 H.eq(files[1], "Stakeout.lua", "the TOC loads Stakeout.lua")
+for _, file in ipairs(files) do
+    H.check(H.readFile(file) ~= nil, "the TOC loads " .. file .. ", which does not exist")
+end
 
 ------------------------------------------------------------
 -- .pkgmeta: what the release zip must leave out
@@ -47,9 +52,17 @@ local pkgmeta = assert(H.readFile(".pkgmeta"), ".pkgmeta is missing")
 H.check(pkgmeta:find("\npackage%-as: Stakeout\n") or pkgmeta:find("^package%-as: Stakeout\n"),
     ".pkgmeta packages the addon as Stakeout")
 
+-- Only the `ignore:` block: it ends at the next line that isn't indented, so
+-- an entry under a later key (`plain-copy:`) can't count as ignored.
 local ignored = {}
-for entry in pkgmeta:match("\nignore:\n(.*)$"):gmatch("\n?%s+%-%s+(%S+)") do
-    ignored[entry] = true
+local inIgnore = false
+for line in (pkgmeta .. "\n"):gmatch("([^\n]*)\n") do
+    if line:match("^%S") then
+        inIgnore = (line:match("^ignore:%s*$") ~= nil)
+    elseif inIgnore then
+        local entry = line:match("^%s+%-%s+(%S+)%s*$")
+        if entry then ignored[entry] = true end
+    end
 end
 for _, path in ipairs({ ".github", ".claude", "tests", "Tools", "docs", "AGENTS.md", "CLAUDE.md",
                         "README.md", "CHANGELOG.md" }) do
