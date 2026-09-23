@@ -420,10 +420,14 @@ end
 -------------------------------------------------------------------------------
 -- Detection
 --
--- A watched NPC is "detected" while one of its nameplates is up, or for
--- LINGER seconds after it was last the target or under the mouse. Deaths come
--- from UNIT_DIED (the combat log is closed to addons on this client), matched
--- by GUID, so two NPCs with the same name keep their button until both die.
+-- A watched NPC is "detected" while one of its nameplates is up, while the
+-- target or mouseover shows it, or for LINGER seconds after it was last seen.
+-- Deaths come from UNIT_DIED (the combat log is closed to addons on this
+-- client), matched by GUID: an entry holds every GUID seen under its name, so
+-- one death never ends the detection of a second NPC with the same name.
+--
+-- entry.unitId is only the last token it was seen on (for the portrait). It is
+-- never evidence of presence: a later sighting overwrites it.
 -------------------------------------------------------------------------------
 local LINGER = 10
 
@@ -462,13 +466,18 @@ local function ScanAllNameplates()
     end
 end
 
--- Drop entries with no plate whose last target/mouseover sighting is older
--- than LINGER, unless that unit still shows the NPC.
+-- The target or mouseover shows a live NPC of this name right now.
+local function StillVisible(name)
+    return ReadNPC("target") == name or ReadNPC("mouseover") == name
+end
+
+-- Drop entries with no plate that neither the target nor the mouseover shows
+-- and that were last seen more than LINGER seconds ago.
 local function Sweep()
     local now, changed = GetTime(), false
     for name, entry in pairs(detected) do
         if not next(entry.plates) then
-            if entry.unitId and ReadNPC(entry.unitId) == name then
+            if StillVisible(name) then
                 entry.lastSeen = now
             elseif now - (entry.lastSeen or 0) > LINGER then
                 detected[name] = nil
@@ -484,7 +493,8 @@ local function PlateRemoved(token)
         if entry.plates[token] then
             entry.plates[token] = nil
             if entry.unitId == token then entry.unitId = nil end
-            -- Out of plate range: gone at once, unless it is still targeted.
+            -- Out of plate range: gone at once, unless the target or the
+            -- mouseover still shows it (Sweep checks).
             if not next(entry.plates) then entry.lastSeen = 0 end
         end
     end
@@ -501,7 +511,9 @@ local function UnitDied(guid)
             for token, g in pairs(entry.plates) do
                 if g == guid then entry.plates[token] = nil end
             end
-            if not next(entry.plates) then
+            -- Another NPC of this name was seen and hasn't died: keep the
+            -- entry and let Sweep decide whether it is still around.
+            if not next(entry.plates) and not next(entry.guids) then
                 detected[name] = nil
                 announced[name] = nil   -- a respawn alerts again
                 changed = true

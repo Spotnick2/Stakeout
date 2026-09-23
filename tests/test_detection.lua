@@ -127,6 +127,36 @@ WoW.units.nameplate1 = nil
 WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
 H.check(detected["Rare Mob"] ~= nil, "plate gone but still the target: it stays")
 
+-- The other order (PR #9 review, P1): targeted first, then its plate shows
+-- and leaves. The later plate sighting must not make the target forgotten.
+clean()
+WoW.SetUnit("target", { name = "Rare Mob", guid = "Creature-1" })
+WoW.fire("PLAYER_TARGET_CHANGED")
+WoW.SetUnit("nameplate1", { name = "Rare Mob", guid = "Creature-1", plate = true })
+WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+WoW.units.nameplate1 = nil
+WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+H.check(detected["Rare Mob"] ~= nil, "targeted, then plate came and went: it stays while targeted")
+WoW.units.target = nil
+WoW.advance(T.LINGER + 1)
+T.Sweep()
+H.eq(detected["Rare Mob"], nil, "and goes once it is neither targeted nor recent")
+
+-- Same-name NPCs without plates (PR #9 review, P2): target A, mouseover B.
+clean()
+WoW.SetUnit("target", { name = "Twin Mob", guid = "Creature-A" })
+WoW.fire("PLAYER_TARGET_CHANGED")
+WoW.SetUnit("mouseover", { name = "Twin Mob", guid = "Creature-B" })
+WoW.fire("UPDATE_MOUSEOVER_UNIT")
+WoW.units.target.dead = true
+WoW.fire("UNIT_DIED", "Creature-A")
+H.check(detected["Twin Mob"] ~= nil, "A died; B (seen on mouseover) keeps the button")
+T.Sweep()
+H.check(detected["Twin Mob"] ~= nil, "the mouseover still shows B: it stays")
+WoW.units.mouseover.dead = true
+WoW.fire("UNIT_DIED", "Creature-B")
+H.eq(detected["Twin Mob"], nil, "both died: gone")
+
 ------------------------------------------------------------
 -- Combat: detect and alert, but never touch the protected frame
 ------------------------------------------------------------
