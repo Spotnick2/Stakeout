@@ -33,7 +33,7 @@ function WoW.reset()
     WoW.time         = 1000
     WoW.inCombat     = false
     WoW.build        = "69977"
-    WoW.units        = {}   -- [token] = { name, guid, dead, player, plate, secretName, secretGuid, throws }
+    WoW.units        = {}   -- [token] = { name, guid, dead, player, controlled, plate, secretName, secretGuid, throws }
     WoW.cvars        = { nameplateMaxDistance = "45.000000" }
     WoW.addonsLoaded = {}
     WoW.messages     = {}
@@ -158,8 +158,9 @@ end
 function Widget:UnregisterEvent(event)
     if WoW.events[self] then WoW.events[self][event] = nil end
 end
--- Secure attributes: silently ignored in combat, like the client.
-function Widget:SetAttribute(k, v) if not WoW.inCombat then self.attrs[k] = v end end
+-- Secure attributes on a protected frame in combat are blocked. Raising here
+-- (rather than silently dropping the write) makes such a call fail the suite.
+function Widget:SetAttribute(k, v) guardProtected(self, "SetAttribute") self.attrs[k] = v end
 function Widget:GetAttribute(k) return self.attrs[k] end
 function Widget:RegisterForClicks(...) guardProtected(self, "RegisterForClicks") self.clicks = { ... } end
 -- Text, check buttons, sliders, edit boxes
@@ -260,6 +261,7 @@ function UnitGUID(token)
 end
 function UnitIsDead(token) local u = unit(token) return u and u.dead or false end
 function UnitIsPlayer(token) local u = unit(token) return u and u.player or false end
+function UnitPlayerControlled(token) local u = unit(token) return u and (u.player or u.controlled) or false end
 
 C_NamePlate = {}
 function C_NamePlate.GetNamePlates()

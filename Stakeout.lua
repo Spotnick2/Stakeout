@@ -218,16 +218,19 @@ end
 -- secret throws when it is compared or truth-tested, not only when read - so
 -- every touch happens inside the pcall. An unreadable unit is never treated
 -- as "not on the list"; it simply isn't a sighting.
+local function ReadNPCUnsafe(unit)
+    if not UnitExists(unit) then return nil end
+    local n = UnitName(unit)
+    if IsSecret(n) or n == nil then return nil end
+    -- Players, and anything a player controls (a pet named like a rare).
+    if UnitIsPlayer(unit) or UnitPlayerControlled(unit) or UnitIsDead(unit) then return nil end
+    local g = UnitGUID(unit)
+    if IsSecret(g) then g = nil end
+    return n, g
+end
+
 local function ReadNPC(unit)
-    local ok, name, guid = pcall(function()
-        if not UnitExists(unit) then return nil end
-        local n = UnitName(unit)
-        if IsSecret(n) or n == nil then return nil end
-        if UnitIsPlayer(unit) or UnitIsDead(unit) then return nil end
-        local g = UnitGUID(unit)
-        if IsSecret(g) then g = nil end
-        return n, g
-    end)
+    local ok, name, guid = pcall(ReadNPCUnsafe, unit)
     if ok then return name, guid end
     return nil
 end
@@ -325,7 +328,7 @@ local function BtnOnEnter(self)
     GameTooltip:AddLine(self.npcName, 1, 0.2, 0.2)
     GameTooltip:AddLine("Left-click: target", 0.7, 0.7, 0.7)
     if StakeoutDB.enableMarking then
-        GameTooltip:AddLine("Right-click: target and mark", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine("Right-click: target and mark (again: clear the mark)", 0.7, 0.7, 0.7)
     end
     GameTooltip:Show()
 end
@@ -430,27 +433,54 @@ end
 -- never evidence of presence: a later sighting overwrites it.
 -------------------------------------------------------------------------------
 local LINGER = 10
+-- An NPC that left stays quiet this long before it can alert again, so a
+-- plate flickering at the edge of range doesn't alert over and over. A death
+-- re-arms it at once.
+local REARM = 60
 
+-- GUID -> name for every watched NPC seen this session. Outlives the entry,
+-- so a UNIT_DIED that arrives after the plate is gone still re-arms the alert.
+local seenGUIDs = {}
+
+-- announced[name]: nil = armed; a number = quiet until that time; true = the
+-- alert for the current detection has played.
 local function Alert(name)
-    if announced[name] then return end
+    local quiet = announced[name]
+    if quiet == true or (quiet and GetTime() < quiet) then return end
     announced[name] = true
     Print("Detected: %s", name)
     if StakeoutDB.flashOnFind then FlashClientIcon() end
     if StakeoutDB.soundOnFind then PlayAlertSound() end
 end
 
+-- A detection ends: quiet for REARM, then the next sighting alerts again.
+-- One that saw a death re-arms at once instead.
+local function EndDetection(name)
+    local entry = detected[name]
+    detected[name] = nil
+    announced[name] = not (entry and entry.sawDeath) and (GetTime() + REARM) or nil
+end
+
 local function Sighted(name, guid, unit, isPlate)
     local entry = detected[name]
-    if not entry then
+    local isNew = not entry
+    if isNew then
         entry = { plates = {}, guids = {} }
         detected[name] = entry
     end
-    if guid then entry.guids[guid] = true end
+    if guid then
+        entry.guids[guid] = true
+        seenGUIDs[guid] = name
+    end
     if isPlate then entry.plates[unit] = guid or true end
     entry.unitId = unit
     entry.lastSeen = GetTime()
-    RefreshTargetFrame()
-    Alert(name)
+    -- Only a new name changes the buttons; rebuilding on every mouseover
+    -- would also hide the tooltip of a hovered button.
+    if isNew then
+        RefreshTargetFrame()
+        Alert(name)
+    end
 end
 
 local function CheckUnit(unit, isPlate)
@@ -460,10 +490,13 @@ local function CheckUnit(unit, isPlate)
     end
 end
 
-local function ScanAllNameplates()
+-- Everything that counts as presence: the plates, the target, the mouseover.
+local function Rescan()
     for _, plate in ipairs(GetNamePlates() or {}) do
         if plate.namePlateUnitToken then CheckUnit(plate.namePlateUnitToken, true) end
     end
+    CheckUnit("target", false)
+    CheckUnit("mouseover", false)
 end
 
 -- The target or mouseover shows a live NPC of this name right now.
@@ -471,19 +504,23 @@ local function StillVisible(name)
     return ReadNPC("target") == name or ReadNPC("mouseover") == name
 end
 
--- Drop entries with no plate that neither the target nor the mouseover shows
--- and that were last seen more than LINGER seconds ago.
+-- Drop plate tokens that no longer show the NPC (a missed
+-- NAME_PLATE_UNIT_REMOVED must not keep a button forever), then entries with
+-- no plate that neither the target nor the mouseover shows and that were last
+-- seen more than LINGER seconds ago.
 local function Sweep()
     local now, changed = GetTime(), false
     for name, entry in pairs(detected) do
+        local hadPlates = next(entry.plates) ~= nil
+        for token in pairs(entry.plates) do
+            if ReadNPC(token) ~= name then entry.plates[token] = nil end
+        end
+        if hadPlates and not next(entry.plates) then entry.lastSeen = 0 end
         if not next(entry.plates) then
             if StillVisible(name) then
                 entry.lastSeen = now
             elseif now - (entry.lastSeen or 0) > LINGER then
-                detected[name] = nil
-                -- Leaving range keeps the alert spent; a death seen on the way
-                -- out re-arms it, as UnitDied does, so a respawn alerts again.
-                if entry.sawDeath then announced[name] = nil end
+                EndDetection(name)
                 changed = true
             end
         end
@@ -507,6 +544,13 @@ end
 local function UnitDied(guid)
     -- IsSecret first: comparing a secret, even to nil, throws.
     if IsSecret(guid) or guid == nil then return end
+    -- A watched NPC died, whether or not it is still detected: its respawn
+    -- should alert.
+    local diedName = seenGUIDs[guid]
+    if diedName then
+        seenGUIDs[guid] = nil
+        if not detected[diedName] then announced[diedName] = nil end
+    end
     local changed = false
     for name, entry in pairs(detected) do
         if entry.guids[guid] then
@@ -537,13 +581,21 @@ local function ResetDetections()
     wipe(detected)
     wipe(announced)
     RefreshTargetFrame()
-    ScanAllNameplates()
+    Rescan()
 end
 
--- The nameplate range defaults to 45 on this client; only ever raise it.
+-- The nameplate range defaults to 45 on this client; only ever raise it. The
+-- CVar is secure (measured), so it can't be set in combat: that waits for
+-- combat to end.
 local NAMEPLATE_DISTANCE = 100
+local nameplateDistancePending = false
 local function ApplyNameplateDistance()
     if not StakeoutDB.maxNameplateDist then return end
+    if InCombatLockdown() then
+        nameplateDistancePending = true
+        return
+    end
+    nameplateDistancePending = false
     local current = tonumber(C_CVar.GetCVar("nameplateMaxDistance"))
     if current and current < NAMEPLATE_DISTANCE then
         C_CVar.SetCVar("nameplateMaxDistance", tostring(NAMEPLATE_DISTANCE))
@@ -596,7 +648,7 @@ local function AddNames(text)
     end
     if #added > 0 then
         Print("|cff00ff00Added:|r %s  (total: %d)", table.concat(added, ", "), #StakeoutDB.npcList)
-        ScanAllNameplates()
+        Rescan()
         RefreshNPCList()
     end
     if #already > 0 then
@@ -605,8 +657,24 @@ local function AddNames(text)
     return #added
 end
 
+-- One flow each for the slash commands and the config buttons.
+local function RemoveWatched(name)
+    if not RemoveNPC(name) then return false end
+    ForgetNPC(name)
+    RefreshNPCList()
+    Print("|cffff6666Removed:|r %s", name)
+    return true
+end
+
+local function ClearWatchList()
+    ClearNPCs()
+    ResetDetections()
+    RefreshNPCList()
+    Print("NPC list cleared.")
+end
+
 -- The beta's chat frame cannot be copied from, so exports go into a
--- selectable box: click in it, Ctrl+A, Ctrl+C.
+-- selectable box: select one line, Ctrl+C, paste it into its own macro.
 local exportFrame
 local function ShowExport()
     local lines = ExportLines(StakeoutDB.npcList)
@@ -633,7 +701,7 @@ local function ShowExport()
         })
         local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         title:SetPoint("TOPLEFT", 14, -12)
-        title:SetText("Stakeout watch list - Ctrl+A, Ctrl+C, then paste into a macro")
+        title:SetText("Stakeout watch list - one macro per line (each fits 255 characters)")
         local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
         close:SetPoint("TOPRIGHT", 2, 2)
         local scroll = CreateFrame("ScrollFrame", "StakeoutExportScroll", f, "UIPanelScrollFrameTemplate")
@@ -649,7 +717,9 @@ local function ShowExport()
         f.eb = eb
         if UISpecialFrames then tinsert(UISpecialFrames, "StakeoutExportFrame") end
     end
-    exportFrame.eb:SetText(table.concat(lines, "\n"))
+    -- A macro holds 255 characters, so each line is its own macro; the blank
+    -- lines make the boundaries obvious when selecting one.
+    exportFrame.eb:SetText(table.concat(lines, "\n\n"))
     exportFrame:Show()
     exportFrame.eb:SetFocus()
     exportFrame.eb:HighlightText()
@@ -694,12 +764,7 @@ function RefreshNPCList()
             row.deleteBtn:SetSize(20, 20)
             row.deleteBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
             row.deleteBtn:SetScript("OnClick", function()
-                local name = row.npcName
-                if name and RemoveNPC(name) then
-                    ForgetNPC(name)
-                    RefreshNPCList()
-                    Print("|cffff6666Removed:|r %s", name)
-                end
+                if row.npcName then RemoveWatched(row.npcName) end
             end)
 
             npcScrollRows[i] = row
@@ -860,12 +925,7 @@ local function CreateConfigFrame()
             text = "Remove all NPCs from the watch list?",
             button1 = "Yes",
             button2 = "No",
-            OnAccept = function()
-                ClearNPCs()
-                ResetDetections()
-                RefreshNPCList()
-                Print("NPC list cleared.")
-            end,
+            OnAccept = ClearWatchList,
             timeout = 0, whileDead = true, hideOnEscape = true,
         }
         StaticPopup_Show("STAKEOUT_CLEAR_CONFIRM")
@@ -1114,7 +1174,6 @@ end
 -- Event frame
 -------------------------------------------------------------------------------
 local eventFrame = CreateFrame("Frame")
-local sweepTicker
 
 local function OnLogin()
     local build = select(2, GetBuildInfo())
@@ -1139,7 +1198,30 @@ local function OnCombatEnd()
         end
         targetFrame:SetScale(StakeoutDB.frameScale or 1.0)
     end
+    if nameplateDistancePending then ApplyNameplateDistance() end
     RefreshTargetFrame()
+end
+
+-- PLAYER_REGEN_DISABLED arrives before lockdown: the last moment a drag on the
+-- protected frame can still be stopped, instead of following the cursor for
+-- the whole fight.
+local function OnCombatStart()
+    if targetFrame and targetFrame.isMoving and not InCombatLockdown() then
+        targetFrame.isMoving = nil
+        targetFrame:StopMovingOrSizing()
+        SaveFramePosition(targetFrame)
+    end
+end
+
+-- UNIT_NAME_UPDATE: a creature not yet in the client's cache shows up as
+-- "Unknown" and gets its real name a moment later.
+local function NameUpdated(unit)
+    if IsSecret(unit) or type(unit) ~= "string" then return end
+    if unit:match("^nameplate%d+$") then
+        CheckUnit(unit, true)
+    elseif unit == "target" or unit == "mouseover" then
+        CheckUnit(unit, false)
+    end
 end
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
@@ -1151,11 +1233,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         CreateTargetFrame()
         ApplyNameplateDistance()
 
-        RegisterEvents(self, "PLAYER_LOGIN", "PLAYER_REGEN_ENABLED", "NAME_PLATE_UNIT_ADDED",
-            "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "UNIT_DIED")
-        sweepTicker = C_Timer.NewTicker(1, Sweep)
+        RegisterEvents(self, "PLAYER_LOGIN", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
+            "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
+            "UPDATE_MOUSEOVER_UNIT", "UNIT_NAME_UPDATE", "UNIT_DIED")
+        C_Timer.NewTicker(1, Sweep)
 
-        ScanAllNameplates()
+        Rescan()
 
     elseif event == "PLAYER_LOGIN" then
         OnLogin()
@@ -1174,6 +1257,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "UNIT_DIED" then
         UnitDied(...)
+
+    elseif event == "UNIT_NAME_UPDATE" then
+        NameUpdated(...)
+
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        OnCombatStart()
 
     elseif event == "PLAYER_REGEN_ENABLED" then
         OnCombatEnd()
@@ -1201,13 +1290,7 @@ SlashCmdList["STAKEOUT"] = function(input)
 
     elseif cmd == "remove" or cmd == "del" then
         if rest == "" then Print("Usage: /stakeout remove <Exact NPC Name>") return end
-        if RemoveNPC(rest) then
-            ForgetNPC(rest)
-            RefreshNPCList()
-            Print("|cffff6666Removed:|r %s", rest)
-        else
-            Print("'%s' not found in list.", rest)
-        end
+        if not RemoveWatched(rest) then Print("'%s' not found in list.", rest) end
 
     elseif cmd == "list" then
         if #StakeoutDB.npcList == 0 then
@@ -1223,10 +1306,7 @@ SlashCmdList["STAKEOUT"] = function(input)
         ShowExport()
 
     elseif cmd == "clear" then
-        ClearNPCs()
-        ResetDetections()
-        RefreshNPCList()
-        Print("NPC list cleared.")
+        ClearWatchList()
 
     elseif cmd == "reset" then
         ResetDetections()
@@ -1252,6 +1332,7 @@ Stakeout._test = {
     ReadNPC = ReadNPC, CheckUnit = CheckUnit, PlateRemoved = PlateRemoved,
     UnitDied = UnitDied, Sweep = Sweep, ParseNames = ParseNames, ExportLines = ExportLines,
     AddNames = AddNames, RefreshTargetFrame = RefreshTargetFrame, OnCombatEnd = OnCombatEnd,
+    REARM = REARM, seenGUIDs = seenGUIDs,
     CreateConfigFrame = CreateConfigFrame, ShowExport = ShowExport,
     ApplyNameplateDistance = ApplyNameplateDistance, RegisterEvents = RegisterEvents,
     buttons = targetButtons, frame = function() return targetFrame end,

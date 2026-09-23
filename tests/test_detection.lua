@@ -201,8 +201,90 @@ clean()
 StakeoutDB.enableMarking = false
 WoW.SetUnit("nameplate1", { name = "Rare Mob", guid = "Creature-1", plate = true })
 WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
-H.eq(T.buttons[1]:GetAttribute("type2"), nil, "marking off: right-click does nothing")
+-- With type2 unset, the secure handler falls back to "type": right-click
+-- targets like left-click, and never marks.
+H.eq(T.buttons[1]:GetAttribute("type2"), nil, "marking off: right-click falls back to the targeting macro")
 H.eq(T.buttons[1]:GetAttribute("macrotext2"), nil, "marking off: no mark macro")
 StakeoutDB.enableMarking = true
+
+------------------------------------------------------------
+-- /code-review findings on PR #9
+------------------------------------------------------------
+
+-- 1. The plate goes before UNIT_DIED arrives: the death still re-arms.
+clean()
+WoW.SetUnit("nameplate1", { name = "Rare Mob", guid = "Creature-1", plate = true })
+WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+WoW.units.nameplate1 = nil
+WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+H.eq(detected["Rare Mob"], nil, "plate removed first: the entry is gone")
+WoW.fire("UNIT_DIED", "Creature-1")
+H.eq(announced["Rare Mob"], nil, "a late UNIT_DIED still re-arms the alert")
+
+-- 2 + 5. No matchable death (secret GUID, or killed out of range): the alert
+-- re-arms REARM seconds after the detection ends, and not before.
+clean()
+WoW.SetUnit("nameplate1", { name = "Rare Mob", guid = "Creature-1", plate = true, secretGuid = true })
+WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+WoW.units.nameplate1 = nil
+WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+WoW.sounds = {}
+WoW.advance((T.REARM or 60) - 5)
+WoW.SetUnit("nameplate1", { name = "Rare Mob", guid = "Creature-1", plate = true })
+WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+H.eq(#WoW.sounds, 0, "back within REARM (range-edge flicker): no second alert")
+WoW.units.nameplate1 = nil
+WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+WoW.advance((T.REARM or 60) + 1)
+WoW.SetUnit("nameplate1", { name = "Rare Mob", guid = "Creature-1", plate = true })
+WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+H.eq(#WoW.sounds, 1, "back after REARM (a respawn nobody saw die): it alerts again")
+
+-- 7. A plate token that no longer shows the NPC (a missed REMOVED) is pruned.
+clean()
+WoW.SetUnit("nameplate1", { name = "Rare Mob", guid = "Creature-1", plate = true })
+WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+WoW.SetUnit("nameplate1", { name = "Boar", guid = "Creature-9", plate = true })   -- token reused
+T.Sweep()
+H.eq(detected["Rare Mob"], nil, "a stale plate token can't keep a button forever")
+
+-- 8. Reset and add rescan the target and mouseover too.
+clean()
+WoW.SetUnit("target", { name = "Rare Mob", guid = "Creature-1" })
+SlashCmdList.STAKEOUT("reset")
+H.check(detected["Rare Mob"] ~= nil, "reset keeps a targeted NPC that has no plate")
+clean()
+SlashCmdList.STAKEOUT("remove Rare Mob")
+WoW.SetUnit("target", { name = "Rare Mob", guid = "Creature-1" })
+SlashCmdList.STAKEOUT("add Rare Mob")
+H.check(detected["Rare Mob"] ~= nil, "adding the current target's name detects it at once")
+
+-- 10. A creature whose name arrives late (UNIT_NAME_UPDATE).
+clean()
+WoW.SetUnit("nameplate1", { name = "Unknown", guid = "Creature-1", plate = true })
+WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+H.eq(detected["Rare Mob"], nil, "not yet cached: no match")
+WoW.units.nameplate1.name = "Rare Mob"
+WoW.fire("UNIT_NAME_UPDATE", "nameplate1")
+H.check(detected["Rare Mob"] ~= nil, "UNIT_NAME_UPDATE catches it")
+H.check(pcall(WoW.fire, "UNIT_NAME_UPDATE", WoW.SECRET), "a secret unit token is ignored")
+
+-- 11. A player's pet named like a rare is not a sighting.
+clean()
+WoW.SetUnit("mouseover", { name = "Rare Mob", guid = "Pet-1", controlled = true })
+WoW.fire("UPDATE_MOUSEOVER_UNIT")
+H.eq(detected["Rare Mob"], nil, "player-controlled units are not sightings")
+
+-- 14. Seeing a detected NPC again doesn't rebuild the buttons.
+clean()
+WoW.SetUnit("nameplate1", { name = "Rare Mob", guid = "Creature-1", plate = true })
+WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+local rebuilt = 0
+local realSetAttribute = T.buttons[1].SetAttribute
+T.buttons[1].SetAttribute = function(...) rebuilt = rebuilt + 1 return realSetAttribute(...) end
+WoW.SetUnit("mouseover", { name = "Rare Mob", guid = "Creature-1" })
+WoW.fire("UPDATE_MOUSEOVER_UNIT")
+H.eq(rebuilt, 0, "a repeat sighting leaves the buttons (and a hovered tooltip) alone")
+T.buttons[1].SetAttribute = nil
 
 H.done("test_detection")

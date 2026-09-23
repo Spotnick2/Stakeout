@@ -86,7 +86,15 @@ end
 WoW.inCombat = false
 H.check(pcall(WoW.fire, "PLAYER_REGEN_ENABLED"), "combat end")
 
--- A drag that combat interrupts is finished and saved when combat ends.
+-- A drag held as combat starts is stopped at PLAYER_REGEN_DISABLED, before
+-- lockdown, so the frame doesn't follow the cursor all fight.
+frame.scripts.OnMouseDown(frame, "LeftButton")
+StakeoutDB.framePos = nil
+WoW.fire("PLAYER_REGEN_DISABLED")
+H.check(not frame.moving, "combat start stops a drag in progress")
+H.check(StakeoutDB.framePos ~= nil, "and saves where it was")
+
+-- If lockdown won the race, the drag is finished when combat ends.
 frame.scripts.OnMouseDown(frame, "LeftButton")
 H.check(frame.moving, "a drag starts out of combat")
 WoW.inCombat = true
@@ -100,7 +108,8 @@ H.check(StakeoutDB.framePos ~= nil, "and saves the position")
 
 -- The event handler for every event the addon registers
 for _, event in ipairs({ "PLAYER_LOGIN", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED",
-                          "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "UNIT_DIED", "PLAYER_REGEN_ENABLED" }) do
+                          "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "UNIT_NAME_UPDATE", "UNIT_DIED",
+                          "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
     local registered = false
     for _, evs in pairs(WoW.events) do if evs[event] then registered = true end end
     H.check(registered, event .. " is registered")

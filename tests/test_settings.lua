@@ -55,6 +55,14 @@ H.eq(WoW.cvars.nameplateMaxDistance, "100", "the 45 default is raised")
 WoW.cvars.nameplateMaxDistance = "120"
 T.ApplyNameplateDistance()
 H.eq(WoW.cvars.nameplateMaxDistance, "120", "a higher range is left alone")
+-- The CVar is secure: in combat it waits for combat to end.
+WoW.cvars.nameplateMaxDistance = "45"
+WoW.inCombat = true
+T.ApplyNameplateDistance()
+H.eq(WoW.cvars.nameplateMaxDistance, "45", "not set in combat (secure CVar)")
+WoW.inCombat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+H.eq(WoW.cvars.nameplateMaxDistance, "100", "set when combat ends")
 StakeoutDB.maxNameplateDist = false
 WoW.cvars.nameplateMaxDistance = "45"
 T.ApplyNameplateDistance()
