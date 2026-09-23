@@ -70,8 +70,16 @@ forbidden fired DURING the call   true
   `proxScanData` is set" is therefore enough, and it's more robust than matching a function string that already changed once.
 - !BugGrabber captures every forbidden call as an error ("AddOn 'StakeoutProbe' tried to call the protected function
   'UNKNOWN()'"). A 0.25 s poll across a watch list would flood it. **This needs a decision in #4.**
-- _Pending:_ trials after `/cleartarget` with a distant NPC, a dead one and a made-up name. The made-up name is the
-  control: if the event fires for it too, the trick can't tell presence from absence on this client.
+- **Control, measured:** after `/cleartarget`, `/soprobe target Zzzfake Name` (an NPC that doesn't exist):
+
+  ```
+  event.ADDON_ACTION_FORBIDDEN   {1="StakeoutProbe", 2="UNKNOWN()"} (during TargetUnit)
+  forbidden fired DURING the call   true
+  target before -> after            <none> -> <none>
+  ```
+
+  **The event fires for a name that doesn't exist.** It carries no information about whether the NPC is present, so the proximity
+  trick is dead on this client. That agrees with RXPGuides' Forever build. The distant and dead trials are moot. **Settled: #4 removes proximity mode.**
 
 ### 2. Forbidden-action popup
 No popup 0.5 s later, but this is **confounded**: !BugGrabber takes over `ADDON_ACTION_FORBIDDEN` itself. _Pending:_
