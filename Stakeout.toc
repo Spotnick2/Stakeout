@@ -1,6 +1,6 @@
-## Interface: 20505
+## Interface: 16001
 ## Title: Stakeout
-## Notes: Watch configurable NPCs via nameplates and proximity. Click target buttons to target and mark them.
+## Notes: Watch a list of NPCs via nameplates, target and mouseover. Click a button to target one; right-click to mark it. WoW: Forever.
 ## Author: Spotnick
 ## Version: @project-version@
 ## SavedVariablesPerCharacter: StakeoutDB

@@ -21,7 +21,9 @@ for _, suffix in ipairs({ "_Forever", "_Camelot", "_Vanilla", "_TBC", "_Classic"
         "Stakeout" .. suffix .. ".toc must not exist: the client reads only Stakeout.toc")
 end
 
--- The interface number is asserted by the port (#4), which is what changes it.
+H.eq(H.directive("Interface"), "16001",
+    "WoW: Forever 1.60.1 is interface 16001 - the %d%02d%02d form, not the transposed 11601 "
+    .. "that circulates in the wild")
 
 H.eq(H.directive("Version"), "@project-version@",
     "the packager substitutes @project-version@; deploy.ps1 rewrites it to 'dev' in the deployed copy only")
