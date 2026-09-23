@@ -1,0 +1,64 @@
+name: Package check
+
+# Dry run only. -d is the real no-upload switch: merely leaving CF_API_KEY out
+# still lets the packager cut a GitHub release. Releases are published by
+# CurseForge's own packager from the tag webhook, never from here.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.1
+
+      - name: Syntax-check the Lua
+        run: |
+          luac5.1 -p Stakeout.lua $(find Tools -name '*.lua' 2>/dev/null)
+
+      - name: Unit tests
+        run: |
+          for f in tests/test_*.lua; do
+            echo "-- $f"
+            lua5.1 "$f" || exit 1
+          done
+
+      - name: Package (dry run)
+        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0
+        with:
+          args: -d
+
+      # Players get exactly the TOC and the Lua. Anything else in the zip means
+      # .pkgmeta's ignore list missed something (tests, tools, notes).
+      - name: The package contains only the addon
+        run: |
+          zip=$(ls .release/*.zip | head -1)
+          printf 'Stakeout/Stakeout.lua\nStakeout/Stakeout.toc\n' > expected.txt
+          unzip -Z1 "$zip" | grep -v '/$' | sort > actual.txt
+          if ! diff -u expected.txt actual.txt; then
+            echo "The package differs from Stakeout.toc + Stakeout.lua (- missing, + extra)"
+            exit 1
+          fi
+
+      # .release is a hidden directory, and upload-artifact@v4 skips hidden
+      # content by default; without include-hidden-files it uploads nothing
+      # and `warn` would leave the job green.
+      - name: Keep the zip for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: stakeout-package
+          path: .release/*.zip
+          include-hidden-files: true
+          if-no-files-found: error
