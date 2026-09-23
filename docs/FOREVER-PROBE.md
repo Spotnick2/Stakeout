@@ -36,6 +36,22 @@ Never use `/reload` for items 10–11. It keeps the client process alive and pro
 
 ## Results
 
+### What RXPGuides does on Forever (v4.11.9-18, `Interface: …, 16001`)
+
+Stakeout copied its targeting from RXPGuides, and RXP ships a Forever build. Its choices there are strong evidence:
+
+- **Proximity scanning is force-disabled** (`SettingsPanel.lua`, `unitscanEnabled`; `DB/forever/rares.lua`):
+  *"As of 1.15.8 TargetUnit now fires ADDON_ACTION_FORBIDDEN at execution, rather than target matches."* So the
+  event fires on **every** call, whether the NPC is there or not. The trick can't detect anything on this client.
+  RXP's handler still matches `"TargetUnit()"`, which is dead code once the feature is off. Our `"UNKNOWN()"` agrees.
+- **Addon code does not auto-mark on Forever** (`Targeting.lua` `UpdateMarker`: `if addon.game == "FOREVER" … return`).
+  Instead, a right-click on the target button runs a secure `type2=macro`, `macrotext2="/tm <index>"`, so the player's click places the mark.
+- **Secret names are treated as absent** (`libs/compatibility.lua` `addon.GetUnitName`: `issecretvalue(n)` → `nil`).
+- **The secure `/cleartarget\n/targetexact <name>` button is unchanged** and ships on Forever.
+- It still sets `nameplateMaxDistance` through the same `> 40000` ladder (so `"41"` on Forever). That's unmeasured there too.
+- It creates and edits its own macros on Forever (`CreateMacro`/`EditMacro`, cap check `GetNumMacros() < 119`). That shows the calls
+  work; it doesn't show they persist.
+
 Session 1: 2026-09-23, build 1.60.1.69977, with !BugGrabber and DBM-Core loaded. Sections still marked _pending_ need more runs.
 
 ### 1. TargetUnit proximity trick
