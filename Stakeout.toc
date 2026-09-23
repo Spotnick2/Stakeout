@@ -4,5 +4,6 @@
 ## Author: Spotnick
 ## Version: @project-version@
 ## SavedVariablesPerCharacter: StakeoutDB
+## X-Curse-Project-ID: 1508654
 
 Stakeout.lua
