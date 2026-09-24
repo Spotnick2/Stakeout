@@ -28,8 +28,8 @@ login while this is happening.
 **The easy way:** type `/stakeout macro on`, or tick *Keep the list in a character macro* in the config.
 Stakeout then keeps your watch list in a character macro called **Stakeout List** (plus *Stakeout List 2*
 and *3* for long lists), updates it whenever the list changes, and reads your list back from it at every
-login, with nothing to click. It uses one of your character macro slots. `/stakeout macro off` deletes the
-macro. Stakeout only touches a macro with that name if it wrote it, so one of yours is safe.
+login, with nothing to click. It uses one character macro slot, or up to three for a long list
+(roughly 30-40 names of typical length fit; Stakeout tells you if some don't). `/stakeout macro off` deletes them. Stakeout only touches a macro with that name if it wrote it, so one of yours is safe.
 
 **By hand**, if you'd rather not use a macro slot:
 

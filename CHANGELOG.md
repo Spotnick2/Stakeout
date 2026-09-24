@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.1.0 - 2026-09-24
+
+### Your watch list can now come back by itself
+
+The Forever beta still doesn't reload addon settings (a Blizzard bug), but character macros do survive.
+Type `/stakeout macro on`, or tick **Keep the list in a character macro** in the settings, once.
+From then on:
+
+- Stakeout keeps your watch list in a character macro called **Stakeout List** (plus *Stakeout List 2* and *3*
+  for long lists) and updates it whenever the list changes.
+- At every login, your list is restored from it automatically, with nothing to click.
+- Three macros hold roughly 30-40 names of typical length. If your list is longer, Stakeout tells you which names won't
+  fit and so won't come back after a restart.
+- It uses one character macro slot, or up to three for a long list. `/stakeout macro off` deletes them.
+- Stakeout only ever touches its own macros. They start with a `#stakeout` line, so your own macros are never
+  changed, even one you named "Stakeout List" or filled with `/stakeout add` lines from Export.
+
+If you turn it on right after logging in, before your macros have loaded, Stakeout waits a moment and then turns it
+on. Changes made in combat are written to the macro when combat ends.
+
+### Also
+
+- Very long NPC names (over 100 bytes of text, which is 100 letters in English and fewer in some other alphabets)
+  are refused. No NPC has a name that long, and the limit keeps every name small enough for a macro.
+
 ## 2.0.0 - 2026-09-24
 
 **Stakeout now runs on World of Warcraft: Forever.** This version is for Forever only. TBC Classic Anniversary
