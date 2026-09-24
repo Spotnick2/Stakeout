@@ -42,8 +42,8 @@ and the combat log. See below. Don't reintroduce them.
 - `Stakeout.lua`: the whole addon, in labelled sections (defaults and settings, target frame,
   detection, config GUI, events, slash commands). It stays a single file.
 - `tests/`: Lua 5.1 unit tests, no game client. `pwsh tests/run.ps1`.
-- `Tools/deploy.ps1`: deploys to the local Forever AddOns folder. `Tools/StakeoutProbe/` is the
-  throwaway in-game probe (`/soprobe`); keep it until `docs/FOREVER-PROBE.md` is settled.
+- `Tools/deploy.ps1`: deploys to the local Forever AddOns folder. The in-game probe (`/soprobe`) that
+  measured this client was removed once `docs/FOREVER-PROBE.md` was settled. That file says how to restore it.
 - `docs/FOREVER-PROBE.md`: what was measured on the live client, and how.
 - `.github/workflows/package-check.yml`: syntax check, tests, and a dry-run package on every PR.
 - `.pkgmeta`, `README.md`, `CHANGELOG.md`: packaging and user-facing material.
@@ -52,8 +52,8 @@ No dependencies, no libraries, no build step.
 
 ## What the Client Allows (measured, build 1.60.1.69977)
 
-Details and raw captures are in `docs/FOREVER-PROBE.md`. Don't re-derive these; re-measure with the probe
-if the build changes.
+Details and raw captures are in `docs/FOREVER-PROBE.md`. Don't re-derive these. If the build changes,
+restore the probe from history (see that file) and re-measure.
 
 - **No proximity scanning.** `TargetUnit(name, true)` raises `ADDON_ACTION_FORBIDDEN` (`"UNKNOWN()"`) on
   *every* call, for names that don't exist too, so it can't detect anything. RXPGuides disables it on Forever
@@ -142,8 +142,7 @@ pwsh tests\run.ps1        # luac -p + all unit tests (Lua 5.1)
 In game:
 
 ```powershell
-pwsh Tools\deploy.ps1            # the addon (refuses until the TOC says 16001)
-pwsh Tools\deploy.ps1 -Probe     # plus the probe
+pwsh Tools\deploy.ps1            # refuses a TOC that isn't 16001
 ```
 ```
 /console scriptErrors 1

@@ -1,6 +1,5 @@
 <#
-    deploy.ps1 - Deploy Stakeout (and optionally the throwaway API probe) into
-    the WoW: Forever AddOns folder.
+    deploy.ps1 - Deploy Stakeout into the WoW: Forever AddOns folder.
 
     The repo keeps `## Version: @project-version@` because the CurseForge/BigWigs
     packager substitutes it at release time. The client would display that literal
@@ -8,16 +7,12 @@
     never modified.
 
     Usage:
-        pwsh Tools/deploy.ps1                # addon only
-        pwsh Tools/deploy.ps1 -Probe         # addon + StakeoutProbe
-        pwsh Tools/deploy.ps1 -ProbeOnly     # just StakeoutProbe
+        pwsh Tools/deploy.ps1
         pwsh Tools/deploy.ps1 -AddOnsPath "D:\...\_classic_beta_\Interface\AddOns"
 #>
 
 param(
-    [string]$AddOnsPath = "C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns",
-    [switch]$Probe,
-    [switch]$ProbeOnly
+    [string]$AddOnsPath = "C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns"
 )
 
 $ErrorActionPreference = "Stop"
@@ -71,22 +66,12 @@ function Get-TocFiles {
         Select-Object -ExpandProperty Name)
 }
 
-if (-not $ProbeOnly) {
-    # An unported manifest would load against the wrong client and muddy any
-    # measurement taken alongside it.
-    if ((Get-Content -LiteralPath (Join-Path $RepoRoot "Stakeout.toc") -Raw) -notmatch '(?m)^## Interface: 16001\s*$') {
-        Write-Error "Stakeout.toc is not '## Interface: 16001' yet (not ported, #4). Use -ProbeOnly."
-        exit 1
-    }
-    Deploy-Folder "Stakeout" $RepoRoot (Get-TocFiles $RepoRoot)
+# A manifest for another client would load against the wrong API here.
+if ((Get-Content -LiteralPath (Join-Path $RepoRoot "Stakeout.toc") -Raw) -notmatch '(?m)^## Interface: 16001\s*$') {
+    Write-Error "Stakeout.toc is not '## Interface: 16001'; this script deploys to WoW: Forever."
+    exit 1
 }
-if ($ProbeOnly -and (Test-Path (Join-Path $AddOnsPath "Stakeout"))) {
-    Write-Warning "An installed Stakeout is still in AddOns. Disable it in the AddOn list so it cannot affect the probe."
-}
-if ($Probe -or $ProbeOnly) {
-    $src = Join-Path $RepoRoot "Tools\StakeoutProbe"
-    Deploy-Folder "StakeoutProbe" $src (Get-TocFiles $src)
-}
+Deploy-Folder "Stakeout" $RepoRoot (Get-TocFiles $RepoRoot)
 
 Write-Host ""
 Write-Host "Done. In game:  /console scriptErrors 1  then  /reload" -ForegroundColor Green
