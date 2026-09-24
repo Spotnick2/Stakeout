@@ -24,6 +24,9 @@ local function body(line) return MARK .. "\n" .. line end
 H.eq(T.macroMode(), false, "off until the player turns it on")
 slash("add Mother Fang")
 H.eq(#WoW.macros, 0, "adding a name while off creates no macro")
+-- No macros at all: nothing says they've loaded, so the notice comes from
+-- the timer fallback.
+WoW.flushTimers()
 H.check(WoW.chat():find("/stakeout macro on", 1, true), "the login notice offers the macro option")
 
 ------------------------------------------------------------
@@ -144,6 +147,51 @@ H.check(WoW.chat():find("Too long to be an NPC name", 1, true), "a longer one is
 H.check(not WoW.macroBody(LIST):find("yyyy", 1, true), "and never reaches the macro")
 slash("macro off")
 slash("clear")
+
+------------------------------------------------------------
+-- /code-review findings on PR #12
+------------------------------------------------------------
+
+-- 3. Stakeout List can't be written (a player's macro has the name): no
+--    orphan Stakeout List 2/3 are left behind, even for a long list.
+slash("add " .. table.concat(long, "; "))
+WoW.SetMacro(LIST, "/cast Hunter's Mark")
+slash("macro on")
+H.eq(T.macroMode(), false, "Stakeout List blocked: off")
+H.eq(WoW.macroBody(LIST2), nil, "and no Stakeout List 2 left behind")
+H.eq(#WoW.macros, 1, "only the player's macro")
+WoW.macros = {}
+slash("clear")
+
+-- 4. A change in combat says it waits for combat to end (a session that
+--    ends before then loses it) - once, not per change.
+slash("macro on")
+WoW.inCombat = true
+WoW.messages = {}
+slash("add Mother Fang")
+slash("add Fedfennel")
+local _, waits = WoW.chat():gsub("will be updated when combat ends", "")
+H.eq(waits, 1, "the wait is said once")
+WoW.inCombat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+slash("clear")
+
+-- 6. A warning is said when it changes, not on every list change.
+slash("add " .. table.concat(huge, "; "))
+WoW.messages = {}
+slash("add One More")
+slash("add Another One")
+H.check(not WoW.chat():find("won't come back after a restart", 1, true),
+    "the overflow warning isn't repeated on every add")
+slash("macro off")
+slash("clear")
+
+-- 10. The too-long message never cuts a UTF-8 character in half.
+WoW.messages = {}
+slash("add a" .. string.rep("\208\150", 60))     -- "a" + 60 x "Ж": byte 40 falls mid-character
+local msg = WoW.messages[#WoW.messages] or ""
+local clipped = msg:match("characters%):|r (.-)%.%.%.$") or ""
+H.check(clipped ~= "" and not clipped:find("[\192-\255]$"), "the clipped name ends on a whole character")
 
 ------------------------------------------------------------
 -- Full character macro slots

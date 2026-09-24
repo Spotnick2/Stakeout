@@ -113,9 +113,12 @@ macros of their own, and two macros can share a name (measured). Character macro
 without the marker, or an account macro, is never edited or deleted. The marker must stay a `#` line: those are
 ignored when a macro runs, while any other text line would be said in chat.
 
-The list is restored at `PLAYER_LOGIN`, then at each `UPDATE_MACROS` until Stakeout's macro has been found (an
-early update can come before macros load). After that the event is unregistered: later ones echo Stakeout's own
-writes, and a restore then could bring back a name removed in combat, whose write is still pending.
+The list is restored at `PLAYER_LOGIN`, then at each `UPDATE_MACROS` until Stakeout's macro has been found, or
+the macros are known to be loaded without it (an early update can come before macros load). After that the event is
+unregistered: later ones echo Stakeout's own writes, and a restore then could bring back a name removed in combat,
+whose write is still pending. A restore writes the merged list back (names added before it are kept), and two
+copies of Stakeout's macro are merged before they're folded into one. The login settings notice waits until the
+macros are known, so it never offers `/stakeout macro on` for a macro that is about to load.
 
 ## Workflow
 

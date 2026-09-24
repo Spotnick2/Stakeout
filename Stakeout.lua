@@ -615,6 +615,11 @@ local EXPORT_PREFIX  = "/stakeout add "
 -- macro line, the "#stakeout" marker line included.
 local NAME_MAX = 100
 
+-- The first `bytes` bytes of a UTF-8 string, never cutting a character.
+local function Clip(text, bytes)
+    return (text:sub(1, bytes):gsub("[\192-\255][\128-\191]*$", ""))
+end
+
 -- "A; B ;; C" -> { "A", "B", "C" }, trimmed, blanks and repeats dropped.
 local function ParseNames(text)
     local names, seen = {}, {}
@@ -632,12 +637,16 @@ local function ExportLines(list, maxLen)
     maxLen = maxLen or MACRO_LINE_MAX
     local lines, current = {}, nil
     for _, name in ipairs(list) do
-        local candidate = current and (current .. "; " .. name) or (EXPORT_PREFIX .. name)
-        if current and #candidate > maxLen then
-            lines[#lines + 1] = current
-            candidate = EXPORT_PREFIX .. name
+        -- A longer name can't fit a line at all. AddNames refuses them; this
+        -- covers lists that arrive another way (a macro, SavedVariables).
+        if #name <= NAME_MAX then
+            local candidate = current and (current .. "; " .. name) or (EXPORT_PREFIX .. name)
+            if current and #candidate > maxLen then
+                lines[#lines + 1] = current
+                candidate = EXPORT_PREFIX .. name
+            end
+            current = candidate
         end
-        current = candidate
     end
     if current then lines[#lines + 1] = current end
     return lines
@@ -714,44 +723,18 @@ local function DeleteOurMacros(name)
     for k = #ours, 1, -1 do pcall(DeleteMacro, ours[k]) end
 end
 
-local function SyncMacros()
-    if not macroMode then return end
-    -- Macros can't be written in combat; the change is written when it ends.
-    if InCombatLockdown() then
-        macroSyncPending = true
-        return
-    end
-    macroSyncPending = false
-
-    local lines = ExportLines(StakeoutDB.npcList, MACRO_ADD_MAX)
-    local failed = false
-    for i, name in ipairs(MACRO_NAMES) do
-        local body = lines[i] and (MACRO_MARK .. "\n" .. lines[i]) or (i == 1 and MACRO_EMPTY) or nil
-        if body then
-            if not WriteMacro(name, body) then failed = true end
-        else
-            DeleteOurMacros(name)
-        end
-    end
-    if failed then
-        Print("|cffff6666Couldn't write the Stakeout List macro.|r Your character macro slots may be full, " ..
-            "or one of yours already uses that name.")
-    end
-    if #lines > #MACRO_NAMES then
-        local left = {}
-        for i = #MACRO_NAMES + 1, #lines do
-            for _, n in ipairs(ParseNames(lines[i]:sub(#EXPORT_PREFIX + 1))) do left[#left + 1] = n end
-        end
-        Print("|cffffcc00Too many NPCs for %d macros; these won't come back after a restart:|r %s",
-            #MACRO_NAMES, table.concat(left, ", "))
-    end
+-- Macro warnings are printed when their kind changes, not on every list
+-- change (the overflow text names the left-out NPCs, so it changes on
+-- every add).
+local lastMacroWarning
+local function MacroWarning(kind, text)
+    if kind and kind ~= lastMacroWarning then Print(text) end
+    lastMacroWarning = kind
 end
 
--- Merge the names in our macros into the list. Idempotent: it runs at login
--- and at each UPDATE_MACROS until it has found our macro.
-local function RestoreFromMacros()
-    if not FindMacros(MACRO_NAMES[1])[1] then return false end
-    macroMode = true
+-- Merge the names in every copy of our macros into the list; returns how many
+-- were new. Reading every copy matters: the client allows duplicate names.
+local function MergeMacroNames()
     local added = 0
     for _, name in ipairs(MACRO_NAMES) do
         for _, idx in ipairs((FindMacros(name))) do
@@ -761,18 +744,86 @@ local function RestoreFromMacros()
                     local rest = line:match("^%s*/stakeout add%s+(.+)$")
                     if rest then
                         for _, n in ipairs(ParseNames(rest)) do
-                            if AddNPC(n) then added = added + 1 end
+                            if #n <= NAME_MAX and AddNPC(n) then added = added + 1 end
                         end
                     end
                 end
             end
         end
     end
+    return added
+end
+
+-- Write the list into the macros. Returns true when Stakeout List holds it.
+local function SyncMacros()
+    if not macroMode then return false end
+    -- Macros can't be written in combat; the change is written when it ends.
+    -- Said once, because a session that ends before combat does loses it.
+    if InCombatLockdown() then
+        if not macroSyncPending then
+            Print("The Stakeout List macro will be updated when combat ends.")
+        end
+        macroSyncPending = true
+        return false
+    end
+    macroSyncPending = false
+
+    -- Two copies of ours (e.g. one made before the real one loaded): merge
+    -- their names before WriteMacro folds them into one, so none is lost.
+    local copies = FindMacros(MACRO_NAMES[1])
+    if #copies > 1 and MergeMacroNames() > 0 then RefreshNPCList() end
+
+    local lines = ExportLines(StakeoutDB.npcList, MACRO_ADD_MAX)
+    -- The first macro is the setting. If it can't be written, write none: a
+    -- "Stakeout List 2" alone would take a slot and never be read or updated.
+    local first = lines[1] and (MACRO_MARK .. "\n" .. lines[1]) or MACRO_EMPTY
+    if not WriteMacro(MACRO_NAMES[1], first) then
+        for i = 2, #MACRO_NAMES do DeleteOurMacros(MACRO_NAMES[i]) end
+        MacroWarning("blocked", "|cffff6666Couldn't write the Stakeout List macro.|r Your character macro slots may be " ..
+            "full, or one of yours already uses that name.")
+        return false
+    end
+    local failed = false
+    for i = 2, #MACRO_NAMES do
+        if lines[i] then
+            if not WriteMacro(MACRO_NAMES[i], MACRO_MARK .. "\n" .. lines[i]) then failed = true end
+        else
+            DeleteOurMacros(MACRO_NAMES[i])
+        end
+    end
+
+    local kind, warning
+    if failed then
+        kind = "partial"
+        warning = "|cffff6666Couldn't write all the Stakeout List macros|r (character macro slots full?); " ..
+            "part of the list won't come back after a restart."
+    elseif #lines > #MACRO_NAMES then
+        local left = {}
+        for i = #MACRO_NAMES + 1, #lines do
+            for _, n in ipairs(ParseNames(lines[i]:sub(#EXPORT_PREFIX + 1))) do left[#left + 1] = n end
+        end
+        kind = "overflow"
+        warning = fmt("|cffffcc00Too many NPCs for %d macros; these won't come back after a restart:|r %s",
+            #MACRO_NAMES, table.concat(left, ", "))
+    end
+    MacroWarning(kind, warning)
+    return true
+end
+
+-- Adopt our macro if it is there: merge its names into the list, turn macro
+-- mode on, and write back any names added before it was found (macros can
+-- load after login). Returns whether it was there.
+local function RestoreFromMacros()
+    if not FindMacros(MACRO_NAMES[1])[1] then return false end
+    macroMode = true
+    macrosRestored = true
+    local added = MergeMacroNames()
     if added > 0 then
         Print("Restored %d NPC%s from your Stakeout List macro.", added, added == 1 and "" or "s")
         Rescan()
-        RefreshNPCList()
     end
+    RefreshNPCList()
+    SyncMacros()
     return true
 end
 
@@ -783,17 +834,20 @@ local function SetMacroMode(on)
         return macroMode
     end
     if on then
-        macroMode = true
-        SyncMacros()
-        macroMode = FindMacros(MACRO_NAMES[1])[1] ~= nil
+        -- A macro of ours may already be there (it can load after login):
+        -- adopt it and merge, rather than write over it.
+        if not RestoreFromMacros() then
+            macroMode = true
+            macroMode = SyncMacros()
+            macrosRestored = macroMode
+        end
         if macroMode then
-            -- The list in memory is now the one the macro holds.
-            macrosRestored = true
             Print("Your watch list is now kept in the character macro |cff00ff00Stakeout List|r and " ..
                 "comes back by itself at login.")
         end
     else
         macroMode = false
+        lastMacroWarning = nil
         for _, name in ipairs(MACRO_NAMES) do DeleteOurMacros(name) end
         Print("Stopped keeping the watch list in a macro; the Stakeout List macros were deleted.")
     end
@@ -805,7 +859,7 @@ local function AddNames(text)
     local added, already = {}, {}
     for _, name in ipairs(ParseNames(text)) do
         if #name > NAME_MAX then
-            Print("|cffff6666Too long to be an NPC name (over %d characters):|r %s...", NAME_MAX, name:sub(1, 40))
+            Print("|cffff6666Too long to be an NPC name (over %d characters):|r %s...", NAME_MAX, Clip(name, 40))
         elseif AddNPC(name) then
             added[#added + 1] = name
         else
@@ -1359,14 +1413,34 @@ end
 -------------------------------------------------------------------------------
 local eventFrame = CreateFrame("Frame")
 
+-- Character macros can load after PLAYER_LOGIN. The client has loaded them
+-- once it reports any (a player with none at all gets the timer fallback).
+local function MacrosLoaded()
+    local ok, account, character = pcall(GetNumMacros)
+    return ok and ((tonumber(account) or 0) + (tonumber(character) or 0)) > 0
+end
+
+-- Said once, and only once the macros are known: before that, a macro that
+-- is about to load would be reported missing, and `/stakeout macro on` typed
+-- in answer would race it.
+local settingsNoticeShown = false
+local function ShowSettingsNotice()
+    if settingsNoticeShown then return end
+    settingsNoticeShown = true
+    if settingsLoaded or macroMode then return end
+    Print("|cffffcc00This beta client doesn't reload saved settings (a Blizzard bug), so the watch " ..
+        "list starts empty.|r Type |cff00ff00/stakeout macro on|r to keep it in a character macro " ..
+        "that brings it back at every login.")
+end
+
 local function OnLogin()
     local build = select(2, GetBuildInfo())
-    if RestoreFromMacros() then macrosRestored = true end
+    RestoreFromMacros()
     Print("Loaded. |cff00ff00/stakeout|r to open config. Tracking %d NPCs.", #StakeoutDB.npcList)
-    if not settingsLoaded and not macroMode then
-        Print("|cffffcc00This beta client doesn't reload saved settings (a Blizzard bug), so the watch " ..
-            "list starts empty.|r Type |cff00ff00/stakeout macro on|r to keep it in a character macro " ..
-            "that brings it back at every login.")
+    if macrosRestored or MacrosLoaded() then
+        ShowSettingsNotice()
+    else
+        C_Timer.After(15, ShowSettingsNotice)
     end
     if build ~= MEASURED_ON_BUILD then
         Print("Tested on client build %s; this is %s. Report anything that behaves oddly.",
@@ -1435,8 +1509,13 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         -- before they have: keep trying until our macro is found. After that
         -- this event only echoes our own writes, and a restore then could
         -- bring back a name removed in combat (its write still pending).
-        if not macrosRestored and RestoreFromMacros() then macrosRestored = true end
-        if macrosRestored then self:UnregisterEvent("UPDATE_MACROS") end
+        if not macrosRestored then RestoreFromMacros() end
+        -- Done once our macro was found, or once the macros are loaded without
+        -- one (turning the mode on later adopts or creates it directly).
+        if macrosRestored or MacrosLoaded() then
+            self:UnregisterEvent("UPDATE_MACROS")
+            ShowSettingsNotice()
+        end
 
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         CheckUnit(..., true)

@@ -33,7 +33,9 @@ H.check(not WoW.chat():find("doesn't reload saved settings", 1, true),
 
 WoW.fire("UPDATE_MACROS")
 H.eq(#StakeoutDB.npcList, 3, "another restore attempt adds nothing twice")
-H.eq(#WoW.macros, 2, "and writes no new macros")
+H.eq(#WoW.macros, 1, "the restore writes the list back: three names fit one macro, so Stakeout List 2 goes")
+H.eq(WoW.macroBody("Stakeout List"), MARK .. "\n/stakeout add Mother Fang; Fedfennel; Gruff Swiftbite",
+    "and Stakeout List holds all of it")
 
 SlashCmdList.STAKEOUT("remove Fedfennel")
 H.eq(WoW.macroBody("Stakeout List"), MARK .. "\n/stakeout add Mother Fang; Gruff Swiftbite", "the macro follows the change")
@@ -88,5 +90,52 @@ WoW.SetMacro("Stakeout List", "/stakeout add Pasted By Hand")
 local T4 = WoW.loadAddon()
 H.eq(#StakeoutDB.npcList, 0, "a player's export macro isn't restored as ours")
 H.eq(T4.macroMode(), false, "and doesn't turn macro mode on")
+
+------------------------------------------------------------
+-- /code-review findings on PR #12
+------------------------------------------------------------
+
+-- 1. Macros load late: no misleading notice before they arrive, and a
+--    `/stakeout macro on` typed before they load doesn't lose the list.
+fresh()
+WoW.loadAddon()
+H.check(not WoW.chat():find("/stakeout macro on", 1, true),
+    "macros not loaded yet: the notice waits instead of offering a macro that may be on its way")
+SlashCmdList.STAKEOUT("macro on")                 -- typed before the real macro loads: an empty copy
+WoW.SetMacro("Stakeout List", MARK .. "\n/stakeout add Mother Fang; Fedfennel")   -- the real one arrives
+WoW.fire("UPDATE_MACROS")
+SlashCmdList.STAKEOUT("add Gruff Swiftbite")      -- the next write folds the two copies
+H.eq(WoW.macroCount("Stakeout List"), 1, "the two copies are folded into one")
+local folded = WoW.macroBody("Stakeout List") or ""
+for _, n in ipairs({ "Mother Fang", "Fedfennel", "Gruff Swiftbite" }) do
+    H.check(folded:find(n, 1, true), "no name from either copy is lost: " .. n)
+end
+
+-- A player who has macros, none of them ours: the notice comes once macros
+-- are known loaded, and the listening stops.
+fresh()
+WoW.SetMacro("Heal", "/cast Heal")
+WoW.loadAddon()
+H.check(WoW.chat():find("/stakeout macro on", 1, true), "macros loaded, none ours: the notice is shown at login")
+WoW.messages = {}
+WoW.fire("UPDATE_MACROS")
+H.check(not WoW.chat():find("/stakeout macro on", 1, true), "only once")
+
+-- 2. Names added before a late restore are written into the macro.
+fresh()
+WoW.loadAddon()
+SlashCmdList.STAKEOUT("add Pasted Rare")          -- before the macros load: macro mode still off
+WoW.SetMacro("Stakeout List", MARK .. "\n/stakeout add Mother Fang")
+WoW.fire("UPDATE_MACROS")
+H.eq(WoW.macroBody("Stakeout List"), MARK .. "\n/stakeout add Pasted Rare; Mother Fang",
+    "the restore writes back names added before it")
+
+-- 5. A too-long name in a macro isn't restored (it could never fit back).
+fresh()
+WoW.SetMacro("Stakeout List", MARK .. "\n/stakeout add " .. string.rep("z", 150) .. "; Mother Fang")
+WoW.loadAddon()
+H.eq(#StakeoutDB.npcList, 1, "an over-long name from a macro is skipped")
+H.eq(StakeoutDB.npcList[1], "Mother Fang", "the rest is restored")
+H.check(#WoW.macroBody("Stakeout List") <= 255, "and the macro written back fits")
 
 H.done("test_macros_login")

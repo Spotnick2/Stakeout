@@ -39,6 +39,7 @@ local T = WoW.loadAddon()
 H.eq(T.settingsLoaded(), false, "nothing came back from disk")
 H.eq(StakeoutDB.svLoadCheck, 1, "the sentinel is written")
 H.eq(#StakeoutDB.npcList, 0, "defaults: empty watch list")
+WoW.flushTimers()   -- no macros at all: the notice waits for the fallback timer
 H.check(WoW.chat():find("doesn't reload saved settings", 1, true), "the settings bug is said at login")
 H.check(not WoW.chat():find("Tested on client build", 1, true), "no build note on the measured build")
 
