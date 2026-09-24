@@ -25,6 +25,10 @@ Use the Lua **5.1** interpreter, not a newer Lua that may be first on `PATH`.
 - `test_settings.lua`: the one write path (a source scan), the sentinel, the nameplate range, event reporting,
   and that the forbidden APIs are never called.
 - `test_login.lua`: a session where settings *did* load, on another build.
+- `test_macros.lua`: the watch list in character macros: on/off, following every change, spilling into
+  more macros, combat deferral, a player's own same-named macro, full slots.
+- `test_macros_login.lua`: restoring from the macros at login and at the first `UPDATE_MACROS`, without duplicates,
+  and without bringing back a name removed in combat.
 - `test_frames.lua`: executes every script handler, in and out of combat.
 - `test_manifest.lua`: `Stakeout.toc` and `.pkgmeta`.
 - A new test is `tests/test_<area>.lua`; `run.ps1` and CI pick it up automatically.

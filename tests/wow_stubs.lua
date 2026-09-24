@@ -45,6 +45,31 @@ function WoW.reset()
     WoW.refusedEvents = { COMBAT_LOG_EVENT_UNFILTERED = true }   -- measured: returns false
     WoW.altDown      = false
     WoW.popups       = {}
+    WoW.macros       = {}   -- character macros: { name, icon, body }, index = 120 + position
+    WoW.accountMacros = {}  -- account macros, index = position (1..120)
+    WoW.macroSlots   = 18   -- character slots; CreateMacro fails beyond this
+end
+
+-- A macro as the client would hold it (for tests that start with one).
+function WoW.SetMacro(name, body)
+    WoW.macros[#WoW.macros + 1] = { name = name, icon = "INV_MISC_QUESTIONMARK", body = body }
+end
+
+function WoW.SetAccountMacro(name, body)
+    WoW.accountMacros[#WoW.accountMacros + 1] = { name = name, icon = "INV_MISC_QUESTIONMARK", body = body }
+end
+
+-- The body of the first character macro with this name, or nil.
+function WoW.macroBody(name)
+    for _, m in ipairs(WoW.macros) do if m.name == name then return m.body end end
+    return nil
+end
+
+-- How many character macros have this name.
+function WoW.macroCount(name)
+    local n = 0
+    for _, m in ipairs(WoW.macros) do if m.name == name then n = n + 1 end end
+    return n
 end
 
 function WoW.SetUnit(token, info)
@@ -262,6 +287,59 @@ end
 function UnitIsDead(token) local u = unit(token) return u and u.dead or false end
 function UnitIsPlayer(token) local u = unit(token) return u and u.player or false end
 function UnitPlayerControlled(token) local u = unit(token) return u and (u.player or u.controlled) or false end
+
+------------------------------------------------------------
+-- Macros. Measured on 69977 (docs/FOREVER-PROBE.md, 10): character macros
+-- start at index 121, and two macros may share a name. Writes in combat are
+-- modelled as blocked (a macro change is a protected action there).
+------------------------------------------------------------
+
+local MACRO_BASE = 120
+local function macroCombatGuard(what)
+    if WoW.inCombat then error("MACRO_ACTION_FORBIDDEN: " .. what .. " in combat", 3) end
+end
+local function macroAt(index)
+    index = index or 0
+    if index >= 1 and index <= MACRO_BASE then return WoW.accountMacros[index] end
+    return WoW.macros[index - MACRO_BASE]
+end
+-- Returns ONE match: the first, account macros first. With duplicate names
+-- that may not be the one a caller wants - which is the point.
+function GetMacroIndexByName(name)
+    for i, m in ipairs(WoW.accountMacros) do if m.name == name then return i end end
+    for i, m in ipairs(WoW.macros) do if m.name == name then return MACRO_BASE + i end end
+    return 0
+end
+function GetNumMacros() return #WoW.accountMacros, #WoW.macros end
+function GetMacroInfo(index)
+    local m = macroAt(index)
+    if not m then return nil end
+    return m.name, m.icon, m.body
+end
+function GetMacroBody(index)
+    local m = macroAt(index)
+    return m and m.body or nil
+end
+function CreateMacro(name, icon, body, perCharacter)
+    macroCombatGuard("CreateMacro")
+    assert(perCharacter, "Stakeout only creates character macros")
+    if #WoW.macros >= WoW.macroSlots then error("Too many macros") end
+    WoW.macros[#WoW.macros + 1] = { name = name, icon = icon, body = body }
+    return MACRO_BASE + #WoW.macros
+end
+function EditMacro(index, name, icon, body)
+    macroCombatGuard("EditMacro")
+    local m = WoW.macros[index - MACRO_BASE]
+    if not m then error("no macro at " .. tostring(index)) end
+    if name then m.name = name end
+    if icon then m.icon = icon end
+    if body then m.body = body end
+    return index
+end
+function DeleteMacro(index)
+    macroCombatGuard("DeleteMacro")
+    table.remove(WoW.macros, index - MACRO_BASE)
+end
 
 C_NamePlate = {}
 function C_NamePlate.GetNamePlates()
