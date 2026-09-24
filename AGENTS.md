@@ -104,11 +104,18 @@ Don't add it to the defaults.
 
 The watch list can also live in character macros ("Stakeout List", "Stakeout List 2"/"3"), which do survive a
 restart (#2, #5). Whether the macro exists *is* that setting, because nothing else survives, so it's never stored in
-`StakeoutDB`. Macros are written only in the macro section of `Stakeout.lua`, never in combat (deferred to
-`PLAYER_REGEN_ENABLED`), and only when the existing body is Stakeout's own (`/stakeout add ...` or the empty marker).
-A player's macro with the same name is never edited or deleted. The list is restored at `PLAYER_LOGIN` and at the
-*first* `UPDATE_MACROS`. After that the event is unregistered: later ones echo Stakeout's own writes, and a restore
-then could bring back a name removed in combat.
+`StakeoutDB`. Macros are written only in the macro section of `Stakeout.lua`, and never in combat (deferred to
+`PLAYER_REGEN_ENABLED`).
+
+**Ownership is the `#stakeout` first line**, never the name or a `/stakeout add` body: players paste export lines into
+macros of their own, and two macros can share a name (measured). Character macros are scanned one by one
+(`GetNumMacros`/`GetMacroInfo`), never trusted to `GetMacroIndexByName`, which returns only one match. A macro
+without the marker, or an account macro, is never edited or deleted. The marker must stay a `#` line: those are
+ignored when a macro runs, while any other text line would be said in chat.
+
+The list is restored at `PLAYER_LOGIN`, then at each `UPDATE_MACROS` until Stakeout's macro has been found (an
+early update can come before macros load). After that the event is unregistered: later ones echo Stakeout's own
+writes, and a restore then could bring back a name removed in combat, whose write is still pending.
 
 ## Workflow
 

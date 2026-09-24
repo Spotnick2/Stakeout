@@ -625,11 +625,12 @@ local function ParseNames(text)
     return names
 end
 
-local function ExportLines(list)
+local function ExportLines(list, maxLen)
+    maxLen = maxLen or MACRO_LINE_MAX
     local lines, current = {}, nil
     for _, name in ipairs(list) do
         local candidate = current and (current .. "; " .. name) or (EXPORT_PREFIX .. name)
-        if current and #candidate > MACRO_LINE_MAX then
+        if current and #candidate > maxLen then
             lines[#lines + 1] = current
             candidate = EXPORT_PREFIX .. name
         end
@@ -647,54 +648,67 @@ local RefreshNPCList   -- defined with the config GUI
 -- SavedVariables never load back on this client, but character macros survive
 -- a restart (#2). Once the player turns this on (/stakeout macro on, or the
 -- config checkbox), every change to the list is written into character macros
--- named "Stakeout List", "Stakeout List 2", ... - each body one `/stakeout add`
--- line, so clicking one works too - and the list is read back from them at
--- login.
+-- named "Stakeout List", "Stakeout List 2", ... and read back at login. Each
+-- body is the marker line, then one `/stakeout add` line, so clicking one
+-- works too: macro lines starting with "#" are ignored when it runs.
 --
 -- Whether the macro exists IS the setting: it is the only state that survives
--- a restart, so turning this off deletes the macros. A macro with one of these
--- names is only ever touched if its body is ours, so a player's own macro that
--- happens to share the name is left alone.
+-- a restart, so turning this off deletes the macros.
+--
+-- Ownership is the MACRO_MARK first line, never the name or a `/stakeout add`
+-- body: players are told to paste export lines into macros of their own, and
+-- the client allows two macros with one name (measured). Character macros are
+-- scanned one by one rather than trusting GetMacroIndexByName, which returns
+-- only one of several same-named macros. A macro that isn't ours is never
+-- edited or deleted.
 -------------------------------------------------------------------------------
 local MACRO_NAMES = { "Stakeout List", "Stakeout List 2", "Stakeout List 3" }
 local MACRO_ICON  = "INV_MISC_QUESTIONMARK"
-local MACRO_EMPTY = "-- Stakeout watch list (empty)"
-local macroMode = false          -- mirror the list into the macros
-local macroSyncPending = false   -- a change made in combat, written when it ends
+local MACRO_MARK  = "#stakeout"
+local MACRO_EMPTY = MACRO_MARK      -- an empty list keeps the macro (the setting)
+local MACRO_ADD_MAX = MACRO_LINE_MAX - #MACRO_MARK - 1
+local CHARACTER_MACRO_FIRST = 121   -- measured: character macros follow 120 account slots
+local macroMode = false             -- mirror the list into the macros
+local macroSyncPending = false      -- a change made in combat, written when it ends
+local macrosRestored = false        -- the login restore found our macro (or we own it now)
 
 local function IsOurBody(body)
-    return type(body) == "string" and (body == MACRO_EMPTY or body:find("^/stakeout add ") ~= nil)
+    return type(body) == "string" and
+        (body == MACRO_MARK or body:sub(1, #MACRO_MARK + 1) == MACRO_MARK .. "\n")
 end
 
--- The index of the macro with this name if it is ours; nil if there is none.
--- The second return is true when a macro has the name but isn't ours.
-local function OurMacro(name)
-    local ok, idx = pcall(GetMacroIndexByName, name)
-    if not ok or not idx or idx == 0 then return nil, false end
-    local okBody, body = pcall(GetMacroBody, idx)
-    if okBody and IsOurBody(body) then return idx, false end
-    return nil, true
+-- Every character macro with this name: the indices of ours (ascending), and
+-- whether one that isn't ours has it too.
+local function FindMacros(name)
+    local ours, foreign = {}, false
+    local ok, _, numCharacter = pcall(GetNumMacros)
+    if not ok or type(numCharacter) ~= "number" then return ours, foreign end
+    for idx = CHARACTER_MACRO_FIRST, CHARACTER_MACRO_FIRST + numCharacter - 1 do
+        local okInfo, macroName = pcall(GetMacroInfo, idx)
+        if okInfo and macroName == name then
+            local okBody, body = pcall(GetMacroBody, idx)
+            if okBody and IsOurBody(body) then ours[#ours + 1] = idx else foreign = true end
+        end
+    end
+    return ours, foreign
 end
 
 local function WriteMacro(name, body)
-    local idx, foreign = OurMacro(name)
-    if foreign then return false end
-    if idx then
-        local ok = pcall(EditMacro, idx, nil, nil, body)
-        return ok
+    local ours, foreign = FindMacros(name)
+    if ours[1] then
+        -- Extra copies of ours go, highest index first so ours[1] stays valid.
+        for k = #ours, 2, -1 do pcall(DeleteMacro, ours[k]) end
+        return (pcall(EditMacro, ours[1], nil, nil, body))
     end
+    -- One of the player's own holds the name: don't add a confusing twin.
+    if foreign then return false end
     local ok, created = pcall(CreateMacro, name, MACRO_ICON, body, true)
     return ok and created ~= nil and created ~= 0
 end
 
-local function DeleteOurMacro(name)
-    -- The client allows two macros with one name (measured), so delete
-    -- until none of ours is left.
-    for _ = 1, 5 do
-        local idx = OurMacro(name)
-        if not idx then return end
-        pcall(DeleteMacro, idx)
-    end
+local function DeleteOurMacros(name)
+    local ours = FindMacros(name)
+    for k = #ours, 1, -1 do pcall(DeleteMacro, ours[k]) end
 end
 
 local function SyncMacros()
@@ -706,14 +720,14 @@ local function SyncMacros()
     end
     macroSyncPending = false
 
-    local lines = ExportLines(StakeoutDB.npcList)
+    local lines = ExportLines(StakeoutDB.npcList, MACRO_ADD_MAX)
     local failed = false
     for i, name in ipairs(MACRO_NAMES) do
-        local body = lines[i] or (i == 1 and MACRO_EMPTY) or nil
+        local body = lines[i] and (MACRO_MARK .. "\n" .. lines[i]) or (i == 1 and MACRO_EMPTY) or nil
         if body then
             if not WriteMacro(name, body) then failed = true end
         else
-            DeleteOurMacro(name)
+            DeleteOurMacros(name)
         end
     end
     if failed then
@@ -731,20 +745,21 @@ local function SyncMacros()
 end
 
 -- Merge the names in our macros into the list. Idempotent: it runs at login
--- and again when the client first reports its macros loaded.
+-- and at each UPDATE_MACROS until it has found our macro.
 local function RestoreFromMacros()
-    if not OurMacro(MACRO_NAMES[1]) then return false end
+    if not FindMacros(MACRO_NAMES[1])[1] then return false end
     macroMode = true
     local added = 0
     for _, name in ipairs(MACRO_NAMES) do
-        local idx = OurMacro(name)
-        local ok, body = pcall(GetMacroBody, idx or 0)
-        if idx and ok and type(body) == "string" then
-            for line in (body .. "\n"):gmatch("([^\n]*)\n") do
-                local rest = line:match("^%s*/stakeout add%s+(.+)$")
-                if rest then
-                    for _, n in ipairs(ParseNames(rest)) do
-                        if AddNPC(n) then added = added + 1 end
+        for _, idx in ipairs((FindMacros(name))) do
+            local ok, body = pcall(GetMacroBody, idx)
+            if ok and type(body) == "string" then
+                for line in (body .. "\n"):gmatch("([^\n]*)\n") do
+                    local rest = line:match("^%s*/stakeout add%s+(.+)$")
+                    if rest then
+                        for _, n in ipairs(ParseNames(rest)) do
+                            if AddNPC(n) then added = added + 1 end
+                        end
                     end
                 end
             end
@@ -767,14 +782,16 @@ local function SetMacroMode(on)
     if on then
         macroMode = true
         SyncMacros()
-        macroMode = OurMacro(MACRO_NAMES[1]) ~= nil
+        macroMode = FindMacros(MACRO_NAMES[1])[1] ~= nil
         if macroMode then
+            -- The list in memory is now the one the macro holds.
+            macrosRestored = true
             Print("Your watch list is now kept in the character macro |cff00ff00Stakeout List|r and " ..
                 "comes back by itself at login.")
         end
     else
         macroMode = false
-        for _, name in ipairs(MACRO_NAMES) do DeleteOurMacro(name) end
+        for _, name in ipairs(MACRO_NAMES) do DeleteOurMacros(name) end
         Print("Stopped keeping the watch list in a macro; the Stakeout List macros were deleted.")
     end
     RefreshNPCList()
@@ -1335,7 +1352,7 @@ local eventFrame = CreateFrame("Frame")
 
 local function OnLogin()
     local build = select(2, GetBuildInfo())
-    RestoreFromMacros()
+    if RestoreFromMacros() then macrosRestored = true end
     Print("Loaded. |cff00ff00/stakeout|r to open config. Tracking %d NPCs.", #StakeoutDB.npcList)
     if not settingsLoaded and not macroMode then
         Print("|cffffcc00This beta client doesn't reload saved settings (a Blizzard bug), so the watch " ..
@@ -1405,10 +1422,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         OnLogin()
 
     elseif event == "UPDATE_MACROS" then
-        -- Macros may load after PLAYER_LOGIN. The first report restores; after
-        -- that, UPDATE_MACROS only echoes our own writes.
-        self:UnregisterEvent("UPDATE_MACROS")
-        RestoreFromMacros()
+        -- Macros may load after PLAYER_LOGIN, and an early update can arrive
+        -- before they have: keep trying until our macro is found. After that
+        -- this event only echoes our own writes, and a restore then could
+        -- bring back a name removed in combat (its write still pending).
+        if not macrosRestored and RestoreFromMacros() then macrosRestored = true end
+        if macrosRestored then self:UnregisterEvent("UPDATE_MACROS") end
 
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         CheckUnit(..., true)
@@ -1512,7 +1531,7 @@ Stakeout._test = {
     UnitDied = UnitDied, Sweep = Sweep, ParseNames = ParseNames, ExportLines = ExportLines,
     AddNames = AddNames, RefreshTargetFrame = RefreshTargetFrame, OnCombatEnd = OnCombatEnd,
     REARM = REARM, seenGUIDs = seenGUIDs,
-    MACRO_NAMES = MACRO_NAMES, MACRO_EMPTY = MACRO_EMPTY, SetMacroMode = SetMacroMode,
+    MACRO_NAMES = MACRO_NAMES, MACRO_EMPTY = MACRO_EMPTY, MACRO_MARK = MACRO_MARK, SetMacroMode = SetMacroMode,
     macroMode = function() return macroMode end,
     CreateConfigFrame = CreateConfigFrame, ShowExport = ShowExport,
     ApplyNameplateDistance = ApplyNameplateDistance, RegisterEvents = RegisterEvents,

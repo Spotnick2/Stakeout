@@ -3,8 +3,10 @@
 --
 -- SavedVariables never load back on this client; character macros survive a
 -- restart. Once turned on, every list change is written to "Stakeout List"
--- (and "Stakeout List 2"/"3" when it doesn't fit), each body a working
--- `/stakeout add` line. The macro's existence is the setting.
+-- (and "Stakeout List 2"/"3" when it doesn't fit). Each body is the
+-- "#stakeout" marker, then a working `/stakeout add` line. The marker is what
+-- makes a macro Stakeout's: a player's own macro, even one with the same name
+-- and a `/stakeout add` body pasted from Export, is never edited or deleted.
 ------------------------------------------------------------
 
 dofile("tests/wow_stubs.lua")
@@ -13,6 +15,8 @@ local H = dofile("tests/harness.lua")
 local T = WoW.loadAddon()
 local slash = SlashCmdList.STAKEOUT
 local LIST, LIST2, LIST3 = T.MACRO_NAMES[1], T.MACRO_NAMES[2], T.MACRO_NAMES[3]
+local MARK = T.MACRO_MARK
+local function body(line) return MARK .. "\n" .. line end
 
 ------------------------------------------------------------
 -- Off by default: nothing is written to the player's macros
@@ -27,13 +31,14 @@ H.check(WoW.chat():find("/stakeout macro on", 1, true), "the login notice offers
 ------------------------------------------------------------
 slash("macro on")
 H.eq(T.macroMode(), true, "on")
-H.eq(WoW.macroBody(LIST), "/stakeout add Mother Fang", "the current list is written at once")
+H.eq(WoW.macroBody(LIST), body("/stakeout add Mother Fang"), "the current list is written at once, under the marker")
 slash("add Fedfennel; Gruff Swiftbite")
-H.eq(WoW.macroBody(LIST), "/stakeout add Mother Fang; Fedfennel; Gruff Swiftbite", "adds are written")
+H.eq(WoW.macroBody(LIST), body("/stakeout add Mother Fang; Fedfennel; Gruff Swiftbite"), "adds are written")
 slash("remove Fedfennel")
-H.eq(WoW.macroBody(LIST), "/stakeout add Mother Fang; Gruff Swiftbite", "removes are written")
+H.eq(WoW.macroBody(LIST), body("/stakeout add Mother Fang; Gruff Swiftbite"), "removes are written")
 slash("clear")
-H.eq(WoW.macroBody(LIST), T.MACRO_EMPTY, "an empty list keeps the macro (the setting) with a comment body")
+H.eq(WoW.macroBody(LIST), MARK, "an empty list keeps the macro (the setting): just the marker")
+H.check(MARK:sub(1, 1) == "#", "the marker is a '#' line, ignored when the macro runs (a '--' line would be said in chat)")
 H.eq(#WoW.macros, 1, "one macro, never a duplicate")
 
 ------------------------------------------------------------
@@ -42,10 +47,10 @@ H.eq(#WoW.macros, 1, "one macro, never a duplicate")
 local long = {}
 for i = 1, 20 do long[i] = string.format("Some Long Named Rare Number %02d", i) end
 slash("add " .. table.concat(long, "; "))
-H.check(WoW.macroBody(LIST2) ~= nil, "a list over 255 characters uses Stakeout List 2")
+H.check(WoW.macroBody(LIST2) ~= nil, "a list over one macro uses Stakeout List 2")
 for _, name in ipairs({ LIST, LIST2 }) do
-    local body = WoW.macroBody(name)
-    H.check(#body <= 255, name .. " fits a macro (" .. #body .. ")")
+    local b = WoW.macroBody(name)
+    H.check(#b <= 255, name .. " fits a macro, marker included (" .. #b .. ")")
 end
 slash("clear")
 H.eq(WoW.macroBody(LIST2), nil, "shrinking deletes the macros no longer needed")
@@ -66,10 +71,10 @@ slash("clear")
 WoW.inCombat = true
 local ok, err = pcall(slash, "add Mother Fang")
 H.check(ok, "adding in combat doesn't touch macros (" .. tostring(err) .. ")")
-H.eq(WoW.macroBody(LIST), T.MACRO_EMPTY, "not yet written")
+H.eq(WoW.macroBody(LIST), MARK, "not yet written")
 WoW.inCombat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
-H.eq(WoW.macroBody(LIST), "/stakeout add Mother Fang", "written when combat ends")
+H.eq(WoW.macroBody(LIST), body("/stakeout add Mother Fang"), "written when combat ends")
 
 WoW.inCombat = true
 WoW.messages = {}
@@ -86,17 +91,45 @@ H.eq(T.macroMode(), false, "off")
 H.eq(#WoW.macros, 0, "the Stakeout List macros are deleted")
 
 ------------------------------------------------------------
--- A player's own macro with the same name is never touched
+-- Player macros are never touched (PR #12 review, P1)
 ------------------------------------------------------------
+-- An unrelated macro that happens to have the name.
 WoW.SetMacro(LIST, "/cast Hunter's Mark")
 WoW.messages = {}
 slash("macro on")
 H.eq(WoW.macroBody(LIST), "/cast Hunter's Mark", "a foreign macro named Stakeout List is left alone")
-H.eq(T.macroMode(), false, "and macro mode doesn't claim it")
+H.eq(WoW.macroCount(LIST), 1, "and gets no confusing twin")
+H.eq(T.macroMode(), false, "macro mode doesn't claim it")
 H.check(WoW.chat():find("Couldn't write the Stakeout List macro", 1, true), "the player is told why")
 slash("macro off")
 H.eq(WoW.macroBody(LIST), "/cast Hunter's Mark", "turning it off doesn't delete the player's macro")
 WoW.macros = {}
+
+-- The player's own macro made from Export: same name, a `/stakeout add` body,
+-- but no marker. Not ours.
+WoW.SetMacro(LIST, "/stakeout add Mother Fang")
+slash("macro on")
+H.eq(WoW.macroBody(LIST), "/stakeout add Mother Fang", "a player's export macro isn't overwritten")
+slash("macro off")
+H.eq(WoW.macroBody(LIST), "/stakeout add Mother Fang", "or deleted")
+WoW.macros = {}
+
+-- An account macro with the name is not a character macro and not ours.
+WoW.SetAccountMacro(LIST, body("/stakeout add Account Rare"))
+slash("macro on")
+H.eq(WoW.accountMacros[1].body, body("/stakeout add Account Rare"), "account macros are never written")
+H.eq(WoW.macroCount(LIST), 1, "ours is a character macro")
+slash("macro off")
+H.eq(#WoW.accountMacros, 1, "account macros are never deleted")
+WoW.accountMacros = {}
+
+-- Two of ours with one name (duplicates are allowed): writing keeps one.
+WoW.SetMacro(LIST, body("/stakeout add Old"))
+WoW.SetMacro(LIST, body("/stakeout add Older"))
+slash("macro on")
+H.eq(WoW.macroCount(LIST), 1, "duplicate copies of ours are folded into one")
+slash("macro off")
+H.eq(#WoW.macros, 0, "and off deletes every copy of ours")
 
 ------------------------------------------------------------
 -- Full character macro slots
