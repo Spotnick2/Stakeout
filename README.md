@@ -1,177 +1,68 @@
 # Stakeout
 
-**Stakeout** is a lightweight World of Warcraft Classic addon that watches for NPCs you choose and helps you react quickly when they appear.
+**Stakeout** is a lightweight World of Warcraft: Forever addon that watches for the NPCs you choose.
+When one appears, it tells you and gives you a button that targets it in one click.
 
-It can detect tracked NPCs through nearby nameplates, mouseover, and a proximity-based targeting check, then surface them in a clickable target frame so you can target them instantly.
+It's useful for rare hunting, patrol watching, event NPCs, or any time you want to react fast when a
+specific NPC shows up. The target button was inspired by RestedXP's targeting system.
+
+> **Forever only.** Stakeout 2.0 targets WoW: Forever (1.60.1). TBC Classic Anniversary players can use
+> Stakeout 1.0.2, which stays available on CurseForge.
 
 ## Features
 
-- Track a custom list of NPCs by exact name
-- Detect NPCs through:
-  - nameplates
-  - mouseover
-  - proximity polling
-- Show a clickable target frame for detected NPCs
-- Auto-mark detected NPCs with a raid marker
-- Optional taskbar flash on detection
-- Optional sound alert on detection
-- Configurable target frame scale
-- Lockable / movable target frame
-- Optional max nameplate distance support
-- Per-character saved settings
+- Watch a list of NPCs by exact name
+- Detects them on **nameplates**, as your **target**, or under your **mouse**
+- A small frame with one button per NPC found: **left-click** targets it, **right-click** targets and raid-marks it
+- Chat message, taskbar flash and sound alert (17 sounds, plus 7 more with DBM-Core)
+- Raises your nameplate range so plates reach further (Forever's default is 45 yards)
+- Two NPCs with the same name keep their button until both are dead
+- Movable, lockable, scalable frame
 
-## How it works
+## The Forever beta and your settings
 
-Stakeout keeps a watch list of NPC names that you define.
+The Forever beta client currently **doesn't load addon settings back** after you log out. It's a Blizzard bug
+that affects every addon. Your watch list and options start empty each session. Stakeout tells you at
+login while this is happening. To get your list back quickly:
 
-When one of those NPCs is detected, the addon can:
-
-- announce it in chat
-- flash the client icon
-- play a sound
-- add a raid marker
-- show a clickable button that targets the NPC by exact name
-
-This makes it useful for rare hunting, patrol watching, event NPCs, or any situation where you want fast reaction to a specific NPC appearing nearby.
-
-## Installation
-
-1. Download or package the addon.
-2. Extract the folder so it sits here:
-
-```text
-World of Warcraft\_classic_era_\Interface\AddOns\Stakeout
-```
-
-3. Make sure the folder contains:
-   - `Stakeout.toc`
-   - `Stakeout.lua`
-
-4. Launch the game and enable **Stakeout** from the AddOns list.
+1. Open the config (`/stakeout`) and click **Export**, or type `/stakeout export`.
+2. Each line in the box is a complete `/stakeout add ...` command that fits in one macro. Put each line in
+   its own macro.
+3. After logging in, click the macro(s). Your whole list is back.
 
 ## Usage
 
-### Open the config
-
-Use:
-
 ```text
-/stakeout
+/stakeout                        Open the config panel (also /stake)
+/stakeout add <Name>             Add an NPC
+/stakeout add <Name>; <Name>     Add several at once
+/stakeout remove <Name>          Remove an NPC
+/stakeout list                   List the watch list in chat
+/stakeout export                 Copy the list as /stakeout add lines
+/stakeout clear                  Remove every NPC
+/stakeout reset                  Clear current detections and rescan
 ```
 
-or
+NPC names must match exactly, spaces included (`/stakeout add Captain Flat Tusk`).
 
-```text
-/stake
-```
+## Configuration
 
-This opens the configuration panel.
+- **Detection:** raise the nameplate range.
+- **Alerts:** taskbar flash, sound on/off, and which sound (it previews when you pick it).
+- **Raid marking:** turn the right-click mark on or off, and pick the marker. Right-clicking again clears the mark.
+- **Target frame:** lock the position (Alt+drag still moves it), the button icon, and the scale.
 
-### Add NPCs to track
+## What changed from the TBC version
 
-You can add NPCs from the config window, or by slash command:
+Blizzard's Forever client doesn't allow some of what Stakeout did on TBC:
 
-```text
-/stakeout add NPC Name
-```
-
-Example:
-
-```text
-/stakeout add Doomwalker
-```
-
-NPC names must match exactly.
-
-### Remove NPCs
-
-```text
-/stakeout remove NPC Name
-```
-
-### List tracked NPCs
-
-```text
-/stakeout list
-```
-
-### Clear the watch list
-
-```text
-/stakeout clear
-```
-
-### Reset current detections and rescan
-
-```text
-/stakeout reset
-```
-
-## Commands
-
-```text
-/stakeout                Open config panel
-/stake                   Alias for /stakeout
-/stakeout add <NPC Name> Add an NPC to the watch list
-/stakeout remove <NPC Name> Remove an NPC from the watch list
-/stakeout list           List tracked NPCs in chat
-/stakeout clear          Remove all tracked NPCs
-/stakeout reset          Clear detections and rescan
-```
-
-## Configuration options
-
-Stakeout includes options for:
-
-### Detection
-
-- Enable or disable proximity scanning
-- Increase nameplate distance to maximum supported range
-
-### Alerts
-
-- Flash taskbar icon on detection
-- Play sound on detection
-- Choose alert sound from 30+ options (UI sounds, bells, horns, PvP, atmospheric, and DBM-Core sounds if installed)
-
-### Raid marking
-
-- Enable automatic raid marking
-- Choose which raid marker to apply
-
-### Target frame
-
-- Lock or unlock frame position
-- Change the button icon style
-- Adjust frame scale
-
-### Watch list management
-
-- Add NPCs
-- Remove NPCs
-- Clear all tracked NPCs
-- Reset current detections
-
-## Target frame
-
-When a tracked NPC is detected, Stakeout can show a small clickable frame with one button per detected NPC.
-
-Clicking a button targets that NPC by exact name.
-
-If the addon has a live unit reference available, it will try to show that NPC’s portrait on the button. Otherwise it falls back to the configured icon.
+- **No proximity scanning.** The targeting trick that sensed NPCs outside nameplate range fires for every
+  name on Forever, so it can't detect anything. Nameplates, target and mouseover do the detecting now.
+- **Marks come from your click.** Addons can't place raid marks by themselves any more, so right-click
+  a button to mark.
+- **The combat log is closed to addons.** Deaths are tracked another way, with the same result for you.
 
 ## Notes
 
-- NPC names must be entered exactly.
-- This addon is designed for user-defined NPC tracking, not a preloaded rare database.
-- Proximity detection is a fallback and may behave differently depending on game restrictions and client behavior.
-- Detection handling is conservative in combat when secure UI restrictions apply.
-- Saved settings are stored per character.
-
-## Compatibility
-
-Designed for WoW Classic-era clients using the addon interface version in the TOC.
-
-## Credits
-
-Stakeout is a standalone NPC detection addon built around a configurable watch list and a fast clickable targeting workflow. It was inspired by the target system of Rested XP.
+- Stakeout never moves, shows or hides its frame during combat. Changes wait for the fight to end.
+- It's designed for your own list, not a built-in rare database.
