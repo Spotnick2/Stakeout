@@ -869,6 +869,14 @@ local function SetMacroMode(on)
     return macroMode
 end
 
+-- Carry out a `macro on` that waited for the macros to load - and, if they
+-- loaded in combat, for combat to end: it stays pending until it can run.
+local function ApplyPendingMacroOn()
+    if not macroOnPending or not macrosKnown or InCombatLockdown() then return end
+    macroOnPending = false
+    SetMacroMode(true)
+end
+
 local function AddNames(text)
     local added, already = {}, {}
     for _, name in ipairs(ParseNames(text)) do
@@ -1455,10 +1463,7 @@ local function OnMacrosKnown()
     macrosKnown = true
     if not macrosRestored then RestoreFromMacros() end
     ShowSettingsNotice()
-    if macroOnPending then
-        macroOnPending = false
-        SetMacroMode(true)
-    end
+    ApplyPendingMacroOn()
 end
 
 local function OnLogin()
@@ -1488,6 +1493,7 @@ local function OnCombatEnd()
     end
     if nameplateDistancePending then ApplyNameplateDistance() end
     if macroSyncPending then SyncMacros() end
+    ApplyPendingMacroOn()
     RefreshTargetFrame()
 end
 

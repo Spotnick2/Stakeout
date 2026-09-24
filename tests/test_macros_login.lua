@@ -121,6 +121,18 @@ H.eq(#WoW.macros, 0, "no macros reported yet: waiting")
 WoW.flushTimers()
 H.eq(WoW.macroBody("Stakeout List"), MARK, "the fallback turns it on")
 
+-- Follow-up review on e32d859: the macros become known during combat. The
+-- waiting `macro on` must survive combat, not be refused and dropped.
+fresh()
+WoW.loadAddon()
+SlashCmdList.STAKEOUT("macro on")
+WoW.inCombat = true
+WoW.flushTimers()                                 -- macros known, but in combat
+H.eq(#WoW.macros, 0, "in combat: still waiting")
+WoW.inCombat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+H.eq(WoW.macroBody("Stakeout List"), MARK, "combat ends: the waiting macro on is carried out")
+
 -- A player who has macros, none of them ours: the notice comes once macros
 -- are known loaded, and the listening stops.
 fresh()
