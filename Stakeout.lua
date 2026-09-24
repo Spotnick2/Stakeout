@@ -611,6 +611,9 @@ end
 -------------------------------------------------------------------------------
 local MACRO_LINE_MAX = 255
 local EXPORT_PREFIX  = "/stakeout add "
+-- Longer than any NPC name, and short enough that one name always fits a
+-- macro line, the "#stakeout" marker line included.
+local NAME_MAX = 100
 
 -- "A; B ;; C" -> { "A", "B", "C" }, trimmed, blanks and repeats dropped.
 local function ParseNames(text)
@@ -801,7 +804,13 @@ end
 local function AddNames(text)
     local added, already = {}, {}
     for _, name in ipairs(ParseNames(text)) do
-        if AddNPC(name) then added[#added + 1] = name else already[#already + 1] = name end
+        if #name > NAME_MAX then
+            Print("|cffff6666Too long to be an NPC name (over %d characters):|r %s...", NAME_MAX, name:sub(1, 40))
+        elseif AddNPC(name) then
+            added[#added + 1] = name
+        else
+            already[#already + 1] = name
+        end
     end
     if #added > 0 then
         Print("|cff00ff00Added:|r %s  (total: %d)", table.concat(added, ", "), #StakeoutDB.npcList)
@@ -1531,7 +1540,7 @@ Stakeout._test = {
     UnitDied = UnitDied, Sweep = Sweep, ParseNames = ParseNames, ExportLines = ExportLines,
     AddNames = AddNames, RefreshTargetFrame = RefreshTargetFrame, OnCombatEnd = OnCombatEnd,
     REARM = REARM, seenGUIDs = seenGUIDs,
-    MACRO_NAMES = MACRO_NAMES, MACRO_EMPTY = MACRO_EMPTY, MACRO_MARK = MACRO_MARK, SetMacroMode = SetMacroMode,
+    NAME_MAX = NAME_MAX, MACRO_NAMES = MACRO_NAMES, MACRO_EMPTY = MACRO_EMPTY, MACRO_MARK = MACRO_MARK, SetMacroMode = SetMacroMode,
     macroMode = function() return macroMode end,
     CreateConfigFrame = CreateConfigFrame, ShowExport = ShowExport,
     ApplyNameplateDistance = ApplyNameplateDistance, RegisterEvents = RegisterEvents,

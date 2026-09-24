@@ -132,6 +132,20 @@ slash("macro off")
 H.eq(#WoW.macros, 0, "and off deletes every copy of ours")
 
 ------------------------------------------------------------
+-- The longest name accepted still fits one marked macro (PR #12 follow-up)
+------------------------------------------------------------
+slash("macro on")
+local longest = string.rep("x", T.NAME_MAX)
+slash("add " .. longest)
+H.check(#WoW.macroBody(LIST) <= 255, "a NAME_MAX-long name fits with the marker (" .. #WoW.macroBody(LIST) .. ")")
+WoW.messages = {}
+slash("add " .. string.rep("y", 232))
+H.check(WoW.chat():find("Too long to be an NPC name", 1, true), "a longer one is refused, with a reason")
+H.check(not WoW.macroBody(LIST):find("yyyy", 1, true), "and never reaches the macro")
+slash("macro off")
+slash("clear")
+
+------------------------------------------------------------
 -- Full character macro slots
 ------------------------------------------------------------
 WoW.macroSlots = 0
