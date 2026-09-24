@@ -11,7 +11,9 @@ From then on:
 - Stakeout keeps your watch list in a character macro called **Stakeout List** (plus *Stakeout List 2* and *3*
   for long lists) and updates it whenever the list changes.
 - At every login, your list is restored from it automatically, with nothing to click.
-- It uses one of your character macro slots. `/stakeout macro off` deletes the macro.
+- Three macros hold roughly 30-40 names of typical length. If your list is longer, Stakeout tells you which names won't
+  fit and so won't come back after a restart.
+- It uses one character macro slot, or up to three for a long list. `/stakeout macro off` deletes them.
 - Stakeout only ever touches its own macros. They start with a `#stakeout` line, so your own macros are never
   changed, even one you named "Stakeout List" or filled with `/stakeout add` lines from Export.
 
@@ -20,7 +22,8 @@ on. Changes made in combat are written to the macro when combat ends.
 
 ### Also
 
-- NPC names longer than 100 characters are refused (no NPC has one); this keeps every name small enough for a macro.
+- Very long NPC names (over 100 bytes of text, which is 100 letters in English and fewer in some other alphabets)
+  are refused. No NPC has a name that long, and the limit keeps every name small enough for a macro.
 
 ## 2.0.0 - 2026-09-24
 
