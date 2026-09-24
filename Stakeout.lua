@@ -641,6 +641,146 @@ end
 
 local RefreshNPCList   -- defined with the config GUI
 
+-------------------------------------------------------------------------------
+-- The watch list in character macros
+--
+-- SavedVariables never load back on this client, but character macros survive
+-- a restart (#2). Once the player turns this on (/stakeout macro on, or the
+-- config checkbox), every change to the list is written into character macros
+-- named "Stakeout List", "Stakeout List 2", ... - each body one `/stakeout add`
+-- line, so clicking one works too - and the list is read back from them at
+-- login.
+--
+-- Whether the macro exists IS the setting: it is the only state that survives
+-- a restart, so turning this off deletes the macros. A macro with one of these
+-- names is only ever touched if its body is ours, so a player's own macro that
+-- happens to share the name is left alone.
+-------------------------------------------------------------------------------
+local MACRO_NAMES = { "Stakeout List", "Stakeout List 2", "Stakeout List 3" }
+local MACRO_ICON  = "INV_MISC_QUESTIONMARK"
+local MACRO_EMPTY = "-- Stakeout watch list (empty)"
+local macroMode = false          -- mirror the list into the macros
+local macroSyncPending = false   -- a change made in combat, written when it ends
+
+local function IsOurBody(body)
+    return type(body) == "string" and (body == MACRO_EMPTY or body:find("^/stakeout add ") ~= nil)
+end
+
+-- The index of the macro with this name if it is ours; nil if there is none.
+-- The second return is true when a macro has the name but isn't ours.
+local function OurMacro(name)
+    local ok, idx = pcall(GetMacroIndexByName, name)
+    if not ok or not idx or idx == 0 then return nil, false end
+    local okBody, body = pcall(GetMacroBody, idx)
+    if okBody and IsOurBody(body) then return idx, false end
+    return nil, true
+end
+
+local function WriteMacro(name, body)
+    local idx, foreign = OurMacro(name)
+    if foreign then return false end
+    if idx then
+        local ok = pcall(EditMacro, idx, nil, nil, body)
+        return ok
+    end
+    local ok, created = pcall(CreateMacro, name, MACRO_ICON, body, true)
+    return ok and created ~= nil and created ~= 0
+end
+
+local function DeleteOurMacro(name)
+    -- The client allows two macros with one name (measured), so delete
+    -- until none of ours is left.
+    for _ = 1, 5 do
+        local idx = OurMacro(name)
+        if not idx then return end
+        pcall(DeleteMacro, idx)
+    end
+end
+
+local function SyncMacros()
+    if not macroMode then return end
+    -- Macros can't be written in combat; the change is written when it ends.
+    if InCombatLockdown() then
+        macroSyncPending = true
+        return
+    end
+    macroSyncPending = false
+
+    local lines = ExportLines(StakeoutDB.npcList)
+    local failed = false
+    for i, name in ipairs(MACRO_NAMES) do
+        local body = lines[i] or (i == 1 and MACRO_EMPTY) or nil
+        if body then
+            if not WriteMacro(name, body) then failed = true end
+        else
+            DeleteOurMacro(name)
+        end
+    end
+    if failed then
+        Print("|cffff6666Couldn't write the Stakeout List macro.|r Your character macro slots may be full, " ..
+            "or one of yours already uses that name.")
+    end
+    if #lines > #MACRO_NAMES then
+        local left = {}
+        for i = #MACRO_NAMES + 1, #lines do
+            for _, n in ipairs(ParseNames(lines[i]:sub(#EXPORT_PREFIX + 1))) do left[#left + 1] = n end
+        end
+        Print("|cffffcc00Too many NPCs for %d macros; these won't come back after a restart:|r %s",
+            #MACRO_NAMES, table.concat(left, ", "))
+    end
+end
+
+-- Merge the names in our macros into the list. Idempotent: it runs at login
+-- and again when the client first reports its macros loaded.
+local function RestoreFromMacros()
+    if not OurMacro(MACRO_NAMES[1]) then return false end
+    macroMode = true
+    local added = 0
+    for _, name in ipairs(MACRO_NAMES) do
+        local idx = OurMacro(name)
+        local ok, body = pcall(GetMacroBody, idx or 0)
+        if idx and ok and type(body) == "string" then
+            for line in (body .. "\n"):gmatch("([^\n]*)\n") do
+                local rest = line:match("^%s*/stakeout add%s+(.+)$")
+                if rest then
+                    for _, n in ipairs(ParseNames(rest)) do
+                        if AddNPC(n) then added = added + 1 end
+                    end
+                end
+            end
+        end
+    end
+    if added > 0 then
+        Print("Restored %d NPC%s from your Stakeout List macro.", added, added == 1 and "" or "s")
+        Rescan()
+        RefreshNPCList()
+    end
+    return true
+end
+
+-- Returns whether macro mode is on afterwards.
+local function SetMacroMode(on)
+    if InCombatLockdown() then
+        Print("Macros can't be changed in combat; try again when it ends.")
+        return macroMode
+    end
+    if on then
+        macroMode = true
+        SyncMacros()
+        macroMode = OurMacro(MACRO_NAMES[1]) ~= nil
+        if macroMode then
+            Print("Your watch list is now kept in the character macro |cff00ff00Stakeout List|r and " ..
+                "comes back by itself at login.")
+        end
+    else
+        macroMode = false
+        for _, name in ipairs(MACRO_NAMES) do DeleteOurMacro(name) end
+        Print("Stopped keeping the watch list in a macro; the Stakeout List macros were deleted.")
+    end
+    RefreshNPCList()
+    return macroMode
+end
+
 local function AddNames(text)
     local added, already = {}, {}
     for _, name in ipairs(ParseNames(text)) do
@@ -650,6 +790,7 @@ local function AddNames(text)
         Print("|cff00ff00Added:|r %s  (total: %d)", table.concat(added, ", "), #StakeoutDB.npcList)
         Rescan()
         RefreshNPCList()
+        SyncMacros()
     end
     if #already > 0 then
         Print("|cffff6666Already listed:|r %s", table.concat(already, ", "))
@@ -662,6 +803,7 @@ local function RemoveWatched(name)
     if not RemoveNPC(name) then return false end
     ForgetNPC(name)
     RefreshNPCList()
+    SyncMacros()
     Print("|cffff6666Removed:|r %s", name)
     return true
 end
@@ -670,6 +812,7 @@ local function ClearWatchList()
     ClearNPCs()
     ResetDetections()
     RefreshNPCList()
+    SyncMacros()
     Print("NPC list cleared.")
 end
 
@@ -785,6 +928,7 @@ function RefreshNPCList()
     if configFrame.countLabel then
         configFrame.countLabel:SetText(fmt("Tracked: |cffffffff%d|r", #StakeoutDB.npcList))
     end
+    if configFrame.macroCheck then configFrame.macroCheck:SetChecked(macroMode) end
 end
 
 -- Helper: create a labeled checkbox bound to a setting
@@ -828,7 +972,7 @@ local function CreateConfigFrame()
     local f = CreateFrame("Frame", "StakeoutConfigFrame", UIParent, "BackdropTemplate")
     configFrame = f
 
-    f:SetSize(400, 696)
+    f:SetSize(400, 722)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetMovable(true)
     f:EnableMouse(true)
@@ -945,6 +1089,20 @@ local function CreateConfigFrame()
     exportBtn:SetSize(90, 22)
     exportBtn:SetText("Export")
     exportBtn:SetScript("OnClick", ShowExport)
+
+    -- Not a StakeoutDB setting: the macro's existence is the setting.
+    sectionY = sectionY - 26
+    local macroCheck = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+    macroCheck:SetPoint("TOPLEFT", f, "TOPLEFT", 10, sectionY)
+    local macroText = macroCheck.text or macroCheck.Text
+    if macroText then
+        macroText:SetText("Keep the list in a character macro  |cff888888(comes back at login)|r")
+        macroText:SetFontObject("GameFontNormalSmall")
+    end
+    macroCheck:SetScript("OnClick", function(self)
+        self:SetChecked(SetMacroMode(self:GetChecked() and true or false))
+    end)
+    f.macroCheck = macroCheck
 
     ---------------------------------------------------------------------------
     -- Divider
@@ -1177,10 +1335,12 @@ local eventFrame = CreateFrame("Frame")
 
 local function OnLogin()
     local build = select(2, GetBuildInfo())
+    RestoreFromMacros()
     Print("Loaded. |cff00ff00/stakeout|r to open config. Tracking %d NPCs.", #StakeoutDB.npcList)
-    if not settingsLoaded then
+    if not settingsLoaded and not macroMode then
         Print("|cffffcc00This beta client doesn't reload saved settings (a Blizzard bug), so the watch " ..
-            "list starts empty.|r Keep a copy with |cff00ff00/stakeout export|r and paste it back in one go.")
+            "list starts empty.|r Type |cff00ff00/stakeout macro on|r to keep it in a character macro " ..
+            "that brings it back at every login.")
     end
     if build ~= MEASURED_ON_BUILD then
         Print("Tested on client build %s; this is %s. Report anything that behaves oddly.",
@@ -1199,6 +1359,7 @@ local function OnCombatEnd()
         targetFrame:SetScale(StakeoutDB.frameScale or 1.0)
     end
     if nameplateDistancePending then ApplyNameplateDistance() end
+    if macroSyncPending then SyncMacros() end
     RefreshTargetFrame()
 end
 
@@ -1235,13 +1396,19 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
         RegisterEvents(self, "PLAYER_LOGIN", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
             "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
-            "UPDATE_MOUSEOVER_UNIT", "UNIT_NAME_UPDATE", "UNIT_DIED")
+            "UPDATE_MOUSEOVER_UNIT", "UNIT_NAME_UPDATE", "UNIT_DIED", "UPDATE_MACROS")
         C_Timer.NewTicker(1, Sweep)
 
         Rescan()
 
     elseif event == "PLAYER_LOGIN" then
         OnLogin()
+
+    elseif event == "UPDATE_MACROS" then
+        -- Macros may load after PLAYER_LOGIN. The first report restores; after
+        -- that, UPDATE_MACROS only echoes our own writes.
+        self:UnregisterEvent("UPDATE_MACROS")
+        RestoreFromMacros()
 
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         CheckUnit(..., true)
@@ -1302,6 +1469,17 @@ SlashCmdList["STAKEOUT"] = function(input)
             end
         end
 
+    elseif cmd == "macro" then
+        local arg = rest:lower()
+        if arg == "on" then
+            SetMacroMode(true)
+        elseif arg == "off" then
+            SetMacroMode(false)
+        else
+            Print("Keeping the list in a character macro: %s. Use |cff00ff00/stakeout macro on|r or |cff00ff00off|r.",
+                macroMode and "|cff00ff00on|r" or "|cffff6666off|r")
+        end
+
     elseif cmd == "export" then
         ShowExport()
 
@@ -1319,6 +1497,7 @@ SlashCmdList["STAKEOUT"] = function(input)
         Print("  /stakeout remove <Name>       — Remove an NPC")
         Print("  /stakeout list                — List tracked NPCs in chat")
         Print("  /stakeout export              — Copy the list as /stakeout add lines")
+        Print("  /stakeout macro on / off      — Keep the list in a character macro")
         Print("  /stakeout clear               — Remove all NPCs")
         Print("  /stakeout reset               — Clear detections & rescan")
     end
@@ -1333,6 +1512,8 @@ Stakeout._test = {
     UnitDied = UnitDied, Sweep = Sweep, ParseNames = ParseNames, ExportLines = ExportLines,
     AddNames = AddNames, RefreshTargetFrame = RefreshTargetFrame, OnCombatEnd = OnCombatEnd,
     REARM = REARM, seenGUIDs = seenGUIDs,
+    MACRO_NAMES = MACRO_NAMES, MACRO_EMPTY = MACRO_EMPTY, SetMacroMode = SetMacroMode,
+    macroMode = function() return macroMode end,
     CreateConfigFrame = CreateConfigFrame, ShowExport = ShowExport,
     ApplyNameplateDistance = ApplyNameplateDistance, RegisterEvents = RegisterEvents,
     buttons = targetButtons, frame = function() return targetFrame end,

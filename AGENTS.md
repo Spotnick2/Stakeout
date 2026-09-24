@@ -102,6 +102,14 @@ so Blizzard's SavedVariables fix or a migration lands in one place). `svLoadChec
 session and never defaulted; it is how the addon notices the client started loading settings again.
 Don't add it to the defaults.
 
+The watch list can also live in character macros ("Stakeout List", "Stakeout List 2"/"3"), which do survive a
+restart (#2, #5). Whether the macro exists *is* that setting, because nothing else survives, so it's never stored in
+`StakeoutDB`. Macros are written only in the macro section of `Stakeout.lua`, never in combat (deferred to
+`PLAYER_REGEN_ENABLED`), and only when the existing body is Stakeout's own (`/stakeout add ...` or the empty marker).
+A player's macro with the same name is never edited or deleted. The list is restored at `PLAYER_LOGIN` and at the
+*first* `UPDATE_MACROS`. After that the event is unregistered: later ones echo Stakeout's own writes, and a restore
+then could bring back a name removed in combat.
+
 ## Workflow
 
 Work is tracked on GitHub (`Spotnick2/Stakeout`) and lands through pull requests.
