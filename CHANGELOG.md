@@ -14,8 +14,10 @@ The Forever beta client saves addon settings but never loads them back, for any 
 login starts with an empty watch list and default options. Until Blizzard fixes it:
 
 - Add several NPCs at once: `/stakeout add Mother Fang; Gruff Swiftbite; Fedfennel`
-- Open **Export** in the config (or type `/stakeout export`) to get your list as ready-made
-  `/stakeout add ...` lines. Put each line in its own macro, and click it after you log in.
+- **Before you log out**, while your list is still there, open **Export** in the config (or type
+  `/stakeout export`). It gives your list as ready-made `/stakeout add ...` lines. Put each line in its
+  own macro, or keep them in a text file, and use them after you log in. Export can only copy the
+  list you have now, so it can't recover a list that is already gone.
 
 Stakeout tells you at login while the bug is present, and stops saying so once your settings come back.
 
@@ -35,8 +37,8 @@ right-click mark off there if you don't want it.
 ### Also new
 
 - Two NPCs with the same name keep their button until **both** are dead.
-- After an NPC leaves range, it can alert again once a minute has passed, or at once if you saw it die.
-  Walking in and out of range no longer spams alerts.
+- Once Stakeout stops showing an NPC, it stays quiet for 60 seconds before it can alert again, so walking
+  in and out of range doesn't spam alerts. If you saw it die, it alerts again straight away when it respawns.
 - An NPC whose name loads a moment late is still caught.
 - A player's pet that happens to be named like a rare is ignored.
 - The Stakeout frame never moves or changes during combat; changes wait for the fight to end.

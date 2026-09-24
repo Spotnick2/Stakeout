@@ -23,12 +23,14 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
 
 The Forever beta client currently **doesn't load addon settings back** after you log out. It's a Blizzard bug
 that affects every addon. Your watch list and options start empty each session. Stakeout tells you at
-login while this is happening. To get your list back quickly:
+login while this is happening. To keep your list between sessions:
 
-1. Open the config (`/stakeout`) and click **Export**, or type `/stakeout export`.
+1. **Before you log out**, while your list is still there, open the config (`/stakeout`) and click
+   **Export**, or type `/stakeout export`. Export copies the list you have now; it can't bring back a
+   list that is already gone.
 2. Each line in the box is a complete `/stakeout add ...` command that fits in one macro. Put each line in
-   its own macro.
-3. After logging in, click the macro(s). Your whole list is back.
+   its own macro, or keep the lines in a text file.
+3. After logging in, click the macro(s), or paste the lines into chat. Your whole list is back.
 
 ## Usage
 
