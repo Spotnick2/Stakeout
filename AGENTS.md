@@ -33,8 +33,8 @@ Forever is *Vanilla content running on Blizzard's Retail (Mainline) codebase*: c
 are Vanilla, API assumptions are Retail. Read `C:\Projects\References\PORTING-TBC-TO-FOREVER.md`
 before touching an unfamiliar API.
 
-Port status: the port itself is issue #4. Until it merges, `Stakeout.lua` is still the TBC code and
-`Stakeout.toc` still says `20505`. `Tools/deploy.ps1` refuses to deploy it to Forever.
+What the port (#4) removed, because the client forbids it: proximity scanning, addon-placed raid marks,
+and the combat log. See below. Don't reintroduce them.
 
 ## Repository Layout
 
