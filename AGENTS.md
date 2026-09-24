@@ -116,9 +116,11 @@ ignored when a macro runs, while any other text line would be said in chat.
 The list is restored at `PLAYER_LOGIN`, then at each `UPDATE_MACROS` until Stakeout's macro has been found, or
 the macros are known to be loaded without it (an early update can come before macros load). After that the event is
 unregistered: later ones echo Stakeout's own writes, and a restore then could bring back a name removed in combat,
-whose write is still pending. A restore writes the merged list back (names added before it are kept), and two
-copies of Stakeout's macro are merged before they're folded into one. The login settings notice waits until the
-macros are known, so it never offers `/stakeout macro on` for a macro that is about to load.
+whose write is still pending. A restore writes the merged list back (names added before it are kept).
+**No macro is written before the client has loaded the macros** (it reports some, or 15 s pass for a player with
+none). A `/stakeout macro on` before then waits: a macro created early would be a twin of the real one, and
+folding twins later can bring back names the player removed. The login settings notice waits for the same
+moment.
 
 ## Workflow
 

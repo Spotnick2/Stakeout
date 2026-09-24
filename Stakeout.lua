@@ -617,7 +617,15 @@ local NAME_MAX = 100
 
 -- The first `bytes` bytes of a UTF-8 string, never cutting a character.
 local function Clip(text, bytes)
-    return (text:sub(1, bytes):gsub("[\192-\255][\128-\191]*$", ""))
+    local clipped = text:sub(1, bytes)
+    -- Drop a trailing multibyte character only if the cut left it incomplete.
+    local lead = clipped:find("[\192-\255][\128-\191]*$")
+    if lead then
+        local b = clipped:byte(lead)
+        local length = (b >= 240 and 4) or (b >= 224 and 3) or 2
+        if #clipped - lead + 1 < length then clipped = clipped:sub(1, lead - 1) end
+    end
+    return clipped
 end
 
 -- "A; B ;; C" -> { "A", "B", "C" }, trimmed, blanks and repeats dropped.
@@ -683,6 +691,11 @@ local CHARACTER_MACRO_FIRST = 121   -- measured: character macros follow 120 acc
 local macroMode = false             -- mirror the list into the macros
 local macroSyncPending = false      -- a change made in combat, written when it ends
 local macrosRestored = false        -- the login restore found our macro (or we own it now)
+-- Whether the client has loaded the character macros. Until it has, no macro
+-- is written: one created early would be a twin of the real one still
+-- loading, and folding the two later can resurrect names the player removed.
+local macrosKnown = false
+local macroOnPending = false        -- `macro on` asked for before the macros loaded
 
 local function IsOurBody(body)
     return type(body) == "string" and
@@ -768,11 +781,6 @@ local function SyncMacros()
     end
     macroSyncPending = false
 
-    -- Two copies of ours (e.g. one made before the real one loaded): merge
-    -- their names before WriteMacro folds them into one, so none is lost.
-    local copies = FindMacros(MACRO_NAMES[1])
-    if #copies > 1 and MergeMacroNames() > 0 then RefreshNPCList() end
-
     local lines = ExportLines(StakeoutDB.npcList, MACRO_ADD_MAX)
     -- The first macro is the setting. If it can't be written, write none: a
     -- "Stakeout List 2" alone would take a slot and never be read or updated.
@@ -833,9 +841,14 @@ local function SetMacroMode(on)
         Print("Macros can't be changed in combat; try again when it ends.")
         return macroMode
     end
+    if on and not macrosKnown then
+        macroOnPending = true
+        Print("Your macros haven't loaded yet; Stakeout will turn this on as soon as they have.")
+        return macroMode
+    end
     if on then
-        -- A macro of ours may already be there (it can load after login):
-        -- adopt it and merge, rather than write over it.
+        -- A macro of ours may already be there: adopt it and merge, rather
+        -- than write over it.
         if not RestoreFromMacros() then
             macroMode = true
             macroMode = SyncMacros()
@@ -847,6 +860,7 @@ local function SetMacroMode(on)
         end
     else
         macroMode = false
+        macroOnPending = false
         lastMacroWarning = nil
         for _, name in ipairs(MACRO_NAMES) do DeleteOurMacros(name) end
         Print("Stopped keeping the watch list in a macro; the Stakeout List macros were deleted.")
@@ -1433,14 +1447,28 @@ local function ShowSettingsNotice()
         "that brings it back at every login.")
 end
 
+-- The macros are loaded (or, for a player with none, 15 s have passed): adopt
+-- ours if it is there, say the settings notice if it still applies, and
+-- carry out a `macro on` that had to wait.
+local function OnMacrosKnown()
+    if macrosKnown then return end
+    macrosKnown = true
+    if not macrosRestored then RestoreFromMacros() end
+    ShowSettingsNotice()
+    if macroOnPending then
+        macroOnPending = false
+        SetMacroMode(true)
+    end
+end
+
 local function OnLogin()
     local build = select(2, GetBuildInfo())
     RestoreFromMacros()
     Print("Loaded. |cff00ff00/stakeout|r to open config. Tracking %d NPCs.", #StakeoutDB.npcList)
     if macrosRestored or MacrosLoaded() then
-        ShowSettingsNotice()
+        OnMacrosKnown()
     else
-        C_Timer.After(15, ShowSettingsNotice)
+        C_Timer.After(15, OnMacrosKnown)
     end
     if build ~= MEASURED_ON_BUILD then
         Print("Tested on client build %s; this is %s. Report anything that behaves oddly.",
@@ -1514,7 +1542,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         -- one (turning the mode on later adopts or creates it directly).
         if macrosRestored or MacrosLoaded() then
             self:UnregisterEvent("UPDATE_MACROS")
-            ShowSettingsNotice()
+            OnMacrosKnown()
         end
 
     elseif event == "NAME_PLATE_UNIT_ADDED" then

@@ -101,15 +101,25 @@ fresh()
 WoW.loadAddon()
 H.check(not WoW.chat():find("/stakeout macro on", 1, true),
     "macros not loaded yet: the notice waits instead of offering a macro that may be on its way")
-SlashCmdList.STAKEOUT("macro on")                 -- typed before the real macro loads: an empty copy
+SlashCmdList.STAKEOUT("macro on")                 -- typed before the real macro loads
+H.eq(#WoW.macros, 0, "macro on waits for the macros: no early twin is created")
+H.check(WoW.chat():find("as soon as they have", 1, true), "and says it will turn on once they load")
 WoW.SetMacro("Stakeout List", MARK .. "\n/stakeout add Mother Fang; Fedfennel")   -- the real one arrives
 WoW.fire("UPDATE_MACROS")
-SlashCmdList.STAKEOUT("add Gruff Swiftbite")      -- the next write folds the two copies
-H.eq(WoW.macroCount("Stakeout List"), 1, "the two copies are folded into one")
-local folded = WoW.macroBody("Stakeout List") or ""
-for _, n in ipairs({ "Mother Fang", "Fedfennel", "Gruff Swiftbite" }) do
-    H.check(folded:find(n, 1, true), "no name from either copy is lost: " .. n)
-end
+H.eq(WoW.macroCount("Stakeout List"), 1, "the real macro is adopted, not twinned")
+H.eq(#StakeoutDB.npcList, 2, "and its list restored")
+-- Follow-up review, P2: a removal must stick (a stale twin used to bring it back).
+SlashCmdList.STAKEOUT("remove Mother Fang")
+H.eq(#StakeoutDB.npcList, 1, "a removal after the load sticks")
+H.eq(WoW.macroBody("Stakeout List"), MARK .. "\n/stakeout add Fedfennel", "in the macro too")
+
+-- A player with no macros at all: `macro on` waits for the 15 s fallback.
+fresh()
+WoW.loadAddon()
+SlashCmdList.STAKEOUT("macro on")
+H.eq(#WoW.macros, 0, "no macros reported yet: waiting")
+WoW.flushTimers()
+H.eq(WoW.macroBody("Stakeout List"), MARK, "the fallback turns it on")
 
 -- A player who has macros, none of them ours: the notice comes once macros
 -- are known loaded, and the listening stops.

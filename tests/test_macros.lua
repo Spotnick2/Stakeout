@@ -192,6 +192,12 @@ slash("add a" .. string.rep("\208\150", 60))     -- "a" + 60 x "Ж": byte 40 fal
 local msg = WoW.messages[#WoW.messages] or ""
 local clipped = msg:match("characters%):|r (.-)%.%.%.$") or ""
 H.check(clipped ~= "" and not clipped:find("[\192-\255]$"), "the clipped name ends on a whole character")
+-- Follow-up review, P3: a character that ends exactly at the cut is kept.
+WoW.messages = {}
+slash("add " .. string.rep("a", 38) .. string.rep("\208\150", 40))   -- "Ж" occupies bytes 39-40
+msg = WoW.messages[#WoW.messages] or ""
+clipped = msg:match("characters%):|r (.-)%.%.%.$") or ""
+H.eq(#clipped, 40, "a whole character at the boundary is kept")
 
 ------------------------------------------------------------
 -- Full character macro slots
