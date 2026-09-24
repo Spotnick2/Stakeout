@@ -26,7 +26,7 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 # Stakeout.toc with paths relative to the project.
 Push-Location $RepoRoot
 try {
-    # Syntax-check everything that ships, and any Lua under Tools (the probe).
+    # Syntax-check everything that ships, and any Lua under Tools.
     # A missing luac must fail the run: no test loads every file, so skipping
     # this would let a syntax error through behind a green result.
     $luac = Join-Path (Split-Path -Parent $Lua) "luac.exe"

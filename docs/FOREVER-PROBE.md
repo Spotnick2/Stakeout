@@ -3,17 +3,21 @@
 Measured behaviour on the live client, for the port (#4) and the macro fallback (#5). Addon-agnostic
 findings also go into `C:\Projects\References\PORTING-TBC-TO-FOREVER.md`.
 
-Build under test: **1.60.1.69977** (check `/soprobe client` → `GetBuildInfo` first; if it differs,
-regenerate the API dump before trusting anything here).
+Build under test: **1.60.1.69977**. On any other build (`GetBuildInfo()`), regenerate the API dump and
+re-measure before trusting anything here.
 
-## Runbook
-
-Deploy only the probe. The unported TBC addon would get in the way, so the script refuses to deploy it,
-and if a copy is already installed, disable it in the AddOn list:
+**Settled; the probe addon has been removed (#2 closed).** It lives on in git history. To re-measure on a new
+build, restore it and copy it into the AddOns folder by hand (`deploy.ps1` no longer deploys it):
 
 ```powershell
-pwsh Tools\deploy.ps1 -ProbeOnly
+git checkout 462e6c5 -- Tools/StakeoutProbe
+Copy-Item -Recurse Tools\StakeoutProbe "C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns\"
 ```
+
+Disable Stakeout while probing: the probe's `TargetUnit` and `SetRaidTarget` trials raise forbidden-action
+errors of their own.
+
+## Runbook (as run in session 1)
 
 In game, `/console scriptErrors 1`, then run the steps below. Before **each** `target` trial, `/cleartarget`
 (the probe warns if you forget), so a success can't look like "no change".
@@ -52,7 +56,8 @@ Stakeout copied its targeting from RXPGuides, and RXP ships a Forever build. Its
 - It creates and edits its own macros on Forever (`CreateMacro`/`EditMacro`, cap check `GetNumMacros() < 119`). That shows the calls
   work; it doesn't show they persist.
 
-Session 1: 2026-09-23, build 1.60.1.69977, with !BugGrabber and DBM-Core loaded. Sections still marked _pending_ need more runs.
+Session 1: 2026-09-23, build 1.60.1.69977, with !BugGrabber and DBM-Core loaded. The follow-ups that were still open are
+settled by the port's in-game validation (#9) and the macro report (#2); see items 4, 5 and 10.
 
 ### 1. TargetUnit proximity trick
 
@@ -113,10 +118,14 @@ itself restricted. The `UNIT_DIED` event is the only death signal.
 **Registering `COMBAT_LOG_EVENT_UNFILTERED` is itself a protected action.** `RegisterEvent` returns `false` (no throw) *and* raises
 `ADDON_ACTION_FORBIDDEN` (`"UNKNOWN()"`, captured by !BugGrabber). An addon that still registers CLEU on this client gets a
 forbidden-action error at every login. `UNIT_DIED` registers fine (`true`).
-_Pending:_ the kill lines from `/soprobe watch` (does the `UNIT_DIED` GUID match the plate's?).
+**Settled by the port's in-game validation (#9, 2026-09-23):** a killed watched NPC's button clears through `UNIT_DIED`
+matched on GUID, and a live NPC with the same name keeps its button. The raw `/soprobe watch` kill lines were never captured,
+so the relative order of `NAME_PLATE_UNIT_REMOVED` and `UNIT_DIED` on a kill is still unmeasured. The port handles either order
+(the GUID→name record outlives the entry).
 
 ### 5. Secure macro button and combat drag
-Not probed. RXPGuides ships the same `type=macro` / `/cleartarget\n/targetexact <name>` button on Forever. It will be verified in game with the port.
+Not probed directly. Verified with the port (#9, 2026-09-23): left-click targets, right-click targets and marks (`/tm`), in and
+out of combat, on both edges. Dragging the frame in combat gives no Lua or protected-action errors.
 `ActionButtonUseKeyDown` is `"1"` on this client, so the down edge acts. Both edges stay registered.
 
 ### 6. Templates
@@ -157,8 +166,9 @@ secure `macrotext2="/tm <index>"`, as RXP does.
 - **Duplicate names are allowed.** A second `CreateMacro` with the same name also succeeded (`GetNumMacros` → `0, 2`).
   `GetMacroIndexByName` returns one of them. #5 must look the macro up before creating it.
 - `EditMacro` works out of combat. **A 256-char body was stored as 256**, so there's no 255 cap in memory. Whether the server keeps it is the persistence question.
-- _Pending:_ edits in combat, and the **two full client exits**. The current body is the 256-char "Big" one. After exit 1, the login
-  lines should show `len=256`. Then `/soprobe macro edit`, exit 2, and look for the "Edited <time>" body.
+- **Persistence, reported by the maintainer (#2, 2026-09-24):** macros holding the exported `/stakeout add` lines worked in game,
+  restoring the watch list after logging back in. That's the workaround the v2.0.0 notes recommend. The finer points (edits in combat,
+  and whether a 256-char body survives the server) weren't measured; `/stakeout export` keeps each line within 255 chars.
 
 ### 11. SavedVariables sentinel
 Four logins on 2026-09-23 (15:18, 15:28, 15:29, …) all report `launches before 0, 0` for both the account and character tables. **Nothing
