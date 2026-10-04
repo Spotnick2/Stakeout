@@ -55,6 +55,12 @@ No dependencies, no libraries, no build step.
 Details and raw captures are in `docs/FOREVER-PROBE.md`. Don't re-derive these. If the build changes,
 restore the probe from history (see that file) and re-measure.
 
+On a build other than `MEASURED_ON_BUILD`, a **development copy** (version `dev` from `Tools/deploy.ps1`, or the
+raw `@project-version@` of an unpackaged checkout) prints a one-line note at every login until the constant is
+bumped. **A release never shows it**: telling players a working release was tested on an older build gains
+nothing, and what flags an addon out of date is the TOC's `## Interface:`. Bump the constant only after
+re-measuring; it is the only reminder that these rules describe an older client.
+
 - **No proximity scanning.** `TargetUnit(name, true)` raises `ADDON_ACTION_FORBIDDEN` (`"UNKNOWN()"`) on
   *every* call, for names that don't exist too, so it can't detect anything. RXPGuides disables it on Forever
   for the same reason. Don't bring it back.

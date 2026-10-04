@@ -10,7 +10,8 @@ Stakeout = Stakeout or {}
 local Stakeout = Stakeout
 
 -- The client build the rules in AGENTS.md were measured on. A different build
--- gets a one-line note at login until someone re-measures and bumps this.
+-- gets a one-line note at login until someone re-measures and bumps this, in a
+-- development copy only - a release keeps quiet (IsDevelopmentCopy).
 local MEASURED_ON_BUILD = "69977"
 
 -- Cached API
@@ -1466,6 +1467,16 @@ local function OnMacrosKnown()
     ApplyPendingMacroOn()
 end
 
+-- The build note is for whoever has to re-measure, not for players: a release
+-- that still runs on a newer client gains nothing from being told it was tested
+-- on an older one, and what flags an addon out of date is the TOC's Interface
+-- number, not this. So it speaks only in a development copy - `dev` from
+-- Tools/deploy.ps1, or the raw packager token in an unpackaged checkout.
+local function IsDevelopmentCopy()
+    local version = C_AddOns.GetAddOnMetadata(addonName, "Version")
+    return version == "dev" or version == "@project-version@"
+end
+
 local function OnLogin()
     local build = select(2, GetBuildInfo())
     RestoreFromMacros()
@@ -1475,7 +1486,7 @@ local function OnLogin()
     else
         C_Timer.After(15, OnMacrosKnown)
     end
-    if build ~= MEASURED_ON_BUILD then
+    if build ~= MEASURED_ON_BUILD and IsDevelopmentCopy() then
         Print("Tested on client build %s; this is %s. Report anything that behaves oddly.",
             MEASURED_ON_BUILD, tostring(build))
     end
