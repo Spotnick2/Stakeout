@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.1 - 2026-10-04
+
+- No more "Tested on client build ...; this is ..." message at login. It appeared whenever Blizzard patched the
+  Forever beta, but Stakeout keeps working on newer builds and there was nothing for you to do about it.
+  Nothing else changes.
+
 ## 2.1.0 - 2026-09-24
 
 ### Your watch list can now come back by itself
