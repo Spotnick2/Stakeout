@@ -55,11 +55,13 @@ No dependencies, no libraries, no build step.
 Details and raw captures are in `docs/FOREVER-PROBE.md`. Don't re-derive these. If the build changes,
 restore the probe from history (see that file) and re-measure.
 
-On a build other than `MEASURED_ON_BUILD`, a **development copy** (version `dev` from `Tools/deploy.ps1`, or the
-raw `@project-version@` of an unpackaged checkout) prints a one-line note at every login until the constant is
-bumped. **A release never shows it**: telling players a working release was tested on an older build gains
-nothing, and what flags an addon out of date is the TOC's `## Interface:`. Bump the constant only after
-re-measuring; it is the only reminder that these rules describe an older client.
+When the client build changes, a **development copy** (version `dev` from `Tools/deploy.ps1`, or the raw
+`@project-version@` of an unpackaged checkout) prints one note at the first login on the new build:
+`Client build changed: <last seen> -> <now> (measured on <MEASURED_ON_BUILD>)`. It is latched per build in
+`StakeoutDB.lastBuild` (SavedVariables load again since 70009), and every copy records the build. **A release
+never shows it**: telling players a working release was tested on an older build gains nothing, and what flags an
+addon out of date is the TOC's `## Interface:`. The note says once that the API may have moved; it does not nag,
+so act on it then. Bump `MEASURED_ON_BUILD` after re-measuring.
 
 - **No proximity scanning.** `TargetUnit(name, true)` raises `ADDON_ACTION_FORBIDDEN` (`"UNKNOWN()"`) on
   *every* call, for names that don't exist too, so it can't detect anything. RXPGuides disables it on Forever

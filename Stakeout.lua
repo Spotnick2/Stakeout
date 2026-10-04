@@ -9,9 +9,10 @@ local addonName = ...
 Stakeout = Stakeout or {}
 local Stakeout = Stakeout
 
--- The client build the rules in AGENTS.md were measured on. A different build
--- gets a one-line note at login until someone re-measures and bumps this, in a
--- development copy only - a release keeps quiet (IsDevelopmentCopy).
+-- The client build the rules in AGENTS.md were measured on. A development copy
+-- says once, at the first login on each new client build, that the build moved
+-- on from the last one it saw (from this, when it has seen none). A release
+-- keeps quiet (IsDevelopmentCopy).
 local MEASURED_ON_BUILD = "69977"
 
 -- Cached API
@@ -1471,7 +1472,10 @@ end
 -- that still runs on a newer client gains nothing from being told it was tested
 -- on an older one, and what flags an addon out of date is the TOC's Interface
 -- number, not this. So it speaks only in a development copy - `dev` from
--- Tools/deploy.ps1, or the raw packager token in an unpackaged checkout.
+-- Tools/deploy.ps1, or the raw packager token in an unpackaged checkout - and
+-- only once per build: lastBuild latches it, in SavedVariables, which load
+-- again since 70009. Every copy records the build, so a dev copy deployed over
+-- a release does not announce a patch the player already had.
 local function IsDevelopmentCopy()
     local version = C_AddOns.GetAddOnMetadata(addonName, "Version")
     return version == "dev" or version == "@project-version@"
@@ -1486,10 +1490,12 @@ local function OnLogin()
     else
         C_Timer.After(15, OnMacrosKnown)
     end
-    if build ~= MEASURED_ON_BUILD and IsDevelopmentCopy() then
-        Print("Tested on client build %s; this is %s. Report anything that behaves oddly.",
-            MEASURED_ON_BUILD, tostring(build))
+    local previous = StakeoutDB.lastBuild or MEASURED_ON_BUILD
+    if build ~= previous and IsDevelopmentCopy() then
+        Print("Client build changed: %s -> %s (measured on %s). Check the API dump and re-measure.",
+            previous, tostring(build), MEASURED_ON_BUILD)
     end
+    SetConfig("lastBuild", build)
 end
 
 local function OnCombatEnd()
