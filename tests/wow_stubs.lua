@@ -33,6 +33,7 @@ function WoW.reset()
     WoW.time         = 1000
     WoW.inCombat     = false
     WoW.build        = "69977"
+    WoW.version      = "2.1.0"   -- TOC Version: a release; "dev" is what deploy.ps1 writes
     WoW.units        = {}   -- [token] = { name, guid, dead, player, controlled, plate, secretName, secretGuid, throws }
     WoW.cvars        = { nameplateMaxDistance = "45.000000" }
     WoW.addonsLoaded = {}
@@ -351,6 +352,10 @@ function C_NamePlate.GetNamePlates()
 end
 
 C_AddOns = {}
+function C_AddOns.GetAddOnMetadata(name, key)
+    if name == "Stakeout" and key == "Version" then return WoW.version end
+    return nil
+end
 function C_AddOns.IsAddOnLoaded(name) return WoW.addonsLoaded[name] and true or false, WoW.addonsLoaded[name] and true or false end
 
 C_CVar = {}
