@@ -28,6 +28,26 @@ H.eq(H.directive("Interface"), "16001",
 H.eq(H.directive("Version"), "@project-version@",
     "the packager substitutes @project-version@; deploy.ps1 rewrites it to 'dev' in the deployed copy only")
 
+-- ...and it substitutes keywords in EVERY file it ships, Lua included, not
+-- only the TOC. A Lua comparison against the whole "@project-version@" became
+-- `version == "v2.1.1"` in the released file, and every player's copy took
+-- itself for a development copy (#17), which no offline test could see,
+-- because they load the source, where the token is still raw. So no shipped
+-- Lua file may hold a packager keyword whole; code that needs one builds it
+-- from pieces. Matched by shape, because the packager has a family of them
+-- (@project-revision@, @file-date-iso@, @debug@, ...).
+for _, file in ipairs(H.tocFiles()) do
+    local src = H.readFile(file) or ""
+    local n, keyword = 0, nil
+    for line in (src .. "\n"):gmatch("([^\n]*)\n") do
+        n = n + 1
+        keyword = line:match("(@[%w%-]+@)")
+        if keyword then break end
+    end
+    H.check(keyword == nil, file .. " holds no packager keyword the release would rewrite: "
+        .. tostring(keyword) .. " at line " .. n)
+end
+
 H.eq(H.directive("X-Curse-Project-ID"), "1508654",
     "Stakeout's CurseForge project (the tag webhook posts to this project)")
 
