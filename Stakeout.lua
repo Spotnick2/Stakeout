@@ -1476,9 +1476,16 @@ end
 -- only once per build: lastBuild latches it, in SavedVariables, which load
 -- again since 70009. Every copy records the build, so a dev copy deployed over
 -- a release does not announce a patch the player already had.
+--
+-- The token is built from two pieces ON PURPOSE. The packager replaces it in
+-- every file it ships, Lua included, so the whole literal here became
+-- `version == "v2.1.1"` in the v2.1.1 release, and every player's copy counted
+-- as a development copy (#17). tests/test_manifest.lua fails on the whole
+-- literal in any shipped Lua file.
+local UNPACKAGED_VERSION = "@" .. "project-version@"
 local function IsDevelopmentCopy()
     local version = C_AddOns.GetAddOnMetadata(addonName, "Version")
-    return version == "dev" or version == "@project-version@"
+    return version == "dev" or version == UNPACKAGED_VERSION
 end
 
 local function OnLogin()
