@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.2 - 2026-10-04
+
+- No more "Client build changed: ... Check the API dump and re-measure." message at login. That note is meant for
+  the addon's developer, and 2.1.1 showed it to everyone by mistake whenever Blizzard patched the Forever beta.
+  Stakeout keeps working on newer builds, and there was nothing for you to do about it. Nothing else changes.
+
 ## 2.1.1 - 2026-10-04
 
 - No more "Tested on client build ...; this is ..." message at login. It appeared whenever Blizzard patched the
