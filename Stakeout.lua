@@ -13,7 +13,7 @@ local Stakeout = Stakeout
 -- says once, at the first login on each new client build, that the build moved
 -- on from the last one it saw (from this, when it has seen none). A release
 -- keeps quiet (IsDevelopmentCopy).
-local MEASURED_ON_BUILD = "69977"
+local MEASURED_ON_BUILD = "70338"
 
 -- Cached API
 local fmt              = string.format
