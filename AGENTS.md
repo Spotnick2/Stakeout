@@ -50,7 +50,7 @@ and the combat log. See below. Don't reintroduce them.
 
 No dependencies, no libraries, no build step.
 
-## What the Client Allows (measured on 1.60.1.69977, API re-checked on 70338)
+## What the Client Allows (measured, build 1.60.1.70338)
 
 Details and raw captures are in `docs/FOREVER-PROBE.md`. Don't re-derive these. If the build changes,
 restore the probe from history (see that file) and re-measure.
