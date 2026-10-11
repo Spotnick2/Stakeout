@@ -1,9 +1,10 @@
 # Forever probe: what Stakeout depends on
 
 Measured behaviour on the live client, for the port (#4) and the macro fallback (#5). Addon-agnostic
-findings also go into `C:\Projects\References\PORTING-TBC-TO-FOREVER.md`.
+findings also go into `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`.
 
-Build under test: **1.60.1.69977**. On any other build (`GetBuildInfo()`), regenerate the API dump and
+Build under test: **1.60.1.70338** (first measured on 1.60.1.69977, re-tested in game on 70338 against the 70338 API
+dump). On any later build (`GetBuildInfo()`), regenerate the API dump and
 re-measure before trusting anything here.
 
 **Settled; the probe addon has been removed (#2 closed).** It lives on in git history. To re-measure on a new

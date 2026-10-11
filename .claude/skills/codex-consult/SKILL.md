@@ -81,7 +81,7 @@ settings write path, or a change to the `StakeoutDB` shape.
 measured on the live client, and a cold reviewer will otherwise argue from Classic-era or Retail
 behaviour that doesn't hold here: that the `TargetUnit` proximity trick fires for every name, that
 `SetRaidTarget` and registering the combat log are forbidden, that SavedVariables never load back.
-`C:/Projects/References/forever-api-1.60.1.69977.md` is the full API surface if a question turns
+`C:/Projects/WoW/References/forever-api-1.60.1.70338.md` is the full API surface if a question turns
 on whether something exists.
 
 Say what you have already established and ask it not to repeat that work. A clean "no defect found"
