@@ -34,7 +34,13 @@ try {
         Write-Error "luac.exe not found next to $Lua; the syntax check cannot run."
         exit 1
     }
-    $sources = @("Stakeout.lua")
+    # Every Lua file the TOC loads (what ships), then any Lua under Tools.
+    $sources = @(Get-Content -LiteralPath "Stakeout.toc" | ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and $_ -notmatch "^#" -and $_ -match "[.]lua$" })
+    if ($sources.Count -eq 0) {
+        Write-Error "Stakeout.toc lists no Lua file; the syntax check would check nothing."
+        exit 1
+    }
     if (Test-Path "Tools") {
         $sources += Get-ChildItem "Tools" -Recurse -Filter "*.lua" |
             ForEach-Object { Resolve-Path -Relative $_.FullName }
