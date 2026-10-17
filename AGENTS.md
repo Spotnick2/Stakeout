@@ -42,8 +42,10 @@ and the combat log. See below. Don't reintroduce them.
 - `Stakeout.lua`: the whole addon, in labelled sections (defaults and settings, target frame,
   detection, config GUI, events, slash commands). It stays a single file.
 - `tests/`: Lua 5.1 unit tests, no game client. `pwsh tests/run.ps1`.
-- `Tools/deploy.ps1`: deploys to the local Forever AddOns folder. The in-game probe (`/soprobe`) that
-  measured this client was removed once `docs/FOREVER-PROBE.md` was settled. That file says how to restore it.
+- `Tools/deploy.ps1`: deploys to the local Forever AddOns folder (`-Probe` / `-ProbeOnly` add the probe).
+- `Tools/StakeoutProbe/`: the in-game probe, a ForeverProbe module (`/fp so`, never packaged). It measures what quest
+  targeting relies on (#25); `docs/FOREVER-PROBE.md` lists its procedures. Its tests run locally only (CI sets
+  `FOREVERPROBE_OPTIONAL=1`). The older `/soprobe` that measured sections 1-11 is in git history.
 - `docs/FOREVER-PROBE.md`: what was measured on the live client, and how.
 - `.github/workflows/package-check.yml`: syntax check, tests, and a dry-run package on every PR.
 - `.pkgmeta`, `README.md`, `CHANGELOG.md`: packaging and user-facing material.

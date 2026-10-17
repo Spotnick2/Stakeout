@@ -216,6 +216,24 @@ function Widget:ClearFocus() end
 function Widget:SetFocus() end
 function Widget:HighlightText() end
 function Widget:SetCursorPosition() end
+-- What ForeverProbe's console calls (tests/test_probe.lua loads it); each is a
+-- widget method in forever-api-1.60.1.70450.md.
+function Widget:SetFrameLevel(l) self.level = l end
+function Widget:GetFrameStrata() return "MEDIUM" end
+function Widget:GetEffectiveScale() return self.scale end
+function Widget:IsVisible() return self.shown end
+function Widget:GetScript(name) return self.scripts[name] end
+function Widget:SetParent(p) self.parent = p end
+function Widget:SetJustifyV() end
+function Widget:EnableMouseWheel() end
+function Widget:GetVerticalScroll() return 0 end
+function Widget:GetVerticalScrollRange() return 0 end
+function Widget:SetVerticalScroll() end
+function Widget:HookScript(name, fn)
+    self.hooks = self.hooks or {}
+    self.hooks[name] = fn
+    return true
+end
 
 function CreateFrame(kind, name, parent, template)
     local w = newWidget(kind, name, parent, template)

@@ -7,16 +7,15 @@ Build under test: **1.60.1.70338** (first measured on 1.60.1.69977, re-tested in
 dump). On any later build (`GetBuildInfo()`), regenerate the API dump and
 re-measure before trusting anything here.
 
-**Settled; the probe addon has been removed (#2 closed).** It lives on in git history. To re-measure on a new
-build, restore it and copy it into the AddOns folder by hand (`deploy.ps1` no longer deploys it):
+**Sections 1-11 are settled.** The session-1 probe that measured them (`/soprobe`) was removed (#2 closed) and lives
+on in git history at `462e6c5`. Its folder name is now taken by the ForeverProbe module below, so to re-run those trials,
+check it out elsewhere (`git worktree add ..\Stakeout-462e6c5 462e6c5`) and copy that `Tools\StakeoutProbe` by hand.
+Disable Stakeout while running it: its `TargetUnit` and `SetRaidTarget` trials raise forbidden-action errors.
 
-```powershell
-git checkout 462e6c5 -- Tools/StakeoutProbe
-Copy-Item -Recurse Tools\StakeoutProbe "C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns\"
-```
-
-Disable Stakeout while probing: the probe's `TargetUnit` and `SetRaidTarget` trials raise forbidden-action
-errors of their own.
+**Section 12 is the probe for quest targeting (#24, #25):** `Tools/StakeoutProbe`, a ForeverProbe module
+(`..\ForeverProbe\docs\GUIDE.md`). Deploy it with `pwsh Tools\deploy.ps1 -Probe`, `/reload`, then follow its
+procedures (`/fp steps so <name>`). Its lines go to the `/fp` console and `StakeoutProbe.lua` in SavedVariables, never to
+chat.
 
 ## Runbook (as run in session 1)
 
@@ -174,3 +173,18 @@ secure `macrotext2="/tm <index>"`, as RXP does.
 ### 11. SavedVariables sentinel
 Four logins on 2026-09-23 (15:18, 15:28, 15:29, …) all report `launches before 0, 0` for both the account and character tables. **Nothing
 loads back**, which agrees with the porting guide. A zero after `/reload` is a valid negative.
+
+### 12. Quest targeting (70450, #25) - pending
+
+What the quest buttons rely on, measured by `/fp so` (`Tools/StakeoutProbe`), Questie 12.1.0 with QuestieDB 1.0.6.
+
+| Procedure | Measures | Where |
+|---|---|---|
+| `/fp steps so quests` | QuestieDB's contract and area map; the quest log's raw rows, `IsComplete` vs `ReadyForTurnIn` (P1); a kill mob, the same in combat, a dropper, an unrelated NPC, the turn-in NPC: secret or plain, `UnitIsRelatedToActiveQuest`, QuestieDB's name (P2); the turn-in NPC's QuestieDB spawn vs where he stands, map vs world distance (P3); login samples after a `/reload` (P6) | where your quests are, e.g. Durotar |
+| `/fp steps so range` | `/tm 8` vs `/tm !8` on a second click; `/targetexact` on the turn-in NPC at 40, 60, 80 and 100 yd (P5) | next to a turn-in NPC |
+| `/fp steps so hostile` | `/targetexact` on a quest mob with no nameplate (P5) | near your kill-quest mobs |
+| `/fp steps so events` | quest and death events, and when objective rows change, for a kill, a loot, a turn-in and an accept (P6) | while questing |
+| `/fp steps so core` | Stakeout's own left-click, right-click mark and `UNIT_DIED` clearing on this build (P8) | anywhere with a mob to kill |
+| `/fp steps so mulgore` | QuestieDB spawns vs where two NPCs stand, in a zone QuestieDB's Era-to-Forever helper re-projects (P3) | Mulgore |
+
+Results: not yet measured.
