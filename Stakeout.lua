@@ -6,6 +6,8 @@
 -------------------------------------------------------------------------------
 local addonName, ns = ...
 ns = ns or {}
+-- Theme.lua loads first: the windows' look (WoW Forever, or glass).
+local Theme = ns.theme
 
 Stakeout = Stakeout or {}
 local Stakeout = Stakeout
@@ -54,6 +56,7 @@ local defaults = {
     maxNameplateDist = true,    -- raise the nameplate range
     frameScale       = 1.0,
     lockFrame        = false,
+    theme            = "forever",  -- the windows' look, "forever" or "glass" (Theme.lua; after a /reload)
 }
 
 -- Whether this session's settings came back from disk. svLoadCheck is written
@@ -107,6 +110,11 @@ local function ClearNPCs()
     wipe(StakeoutDB.npcList)
 end
 -- config-owner: end
+
+-- The saved look; anything unknown is the default.
+local function StoredLook()
+    return Theme.IsLook(StakeoutDB.theme) and StakeoutDB.theme or "forever"
+end
 
 -------------------------------------------------------------------------------
 -- Alert sounds
@@ -283,6 +291,11 @@ local function SaveFramePosition(frame)
     SetConfig("framePos", { point, relPoint, x, y })
 end
 
+local BUTTONS_PER_ROW = 5
+local BUTTON_SIZE     = 26
+local BUTTON_PAD      = 2
+local HEADER_HEIGHT   = 16
+
 local function CreateTargetFrame()
     if targetFrame then return end
 
@@ -296,14 +309,18 @@ local function CreateTargetFrame()
     f:EnableMouse(true)
     f:Hide()
 
-    f:SetBackdrop({
-        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 12,
-        insets = { left = 2, right = 2, top = 2, bottom = 2 },
-    })
-    f:SetBackdropColor(0.05, 0.05, 0.08, 0.85)
-    f:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.9)
+    -- Built now, before the frame has any secure button: the glass is never
+    -- touched again, and follows the frame's size through its anchors.
+    if not Theme.Window(f, { small = true, header = HEADER_HEIGHT }) then
+        f:SetBackdrop({
+            bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 12,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 },
+        })
+        f:SetBackdropColor(0.05, 0.05, 0.08, 0.85)
+        f:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.9)
+    end
 
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     f.title:SetPoint("TOP", f, "TOP", 0, -4)
@@ -362,11 +379,6 @@ end
 local function BtnOnLeave()
     GameTooltip:Hide()
 end
-
-local BUTTONS_PER_ROW = 5
-local BUTTON_SIZE     = 26
-local BUTTON_PAD      = 2
-local HEADER_HEIGHT   = 16
 
 -- The watch list shows a button for every detected name.
 local function IsWatchDisplayed(name)
@@ -439,6 +451,9 @@ local function NewButton(i)
     ht:SetAllPoints(true)
     ht:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
     ht:SetBlendMode("ADD")
+    btn.highlight = ht
+    -- Only ever made by ApplyLayout, which runs out of combat.
+    Theme.Button(btn)
 
     btn:SetScript("OnEnter", BtnOnEnter)
     btn:SetScript("OnLeave", BtnOnLeave)
@@ -1065,12 +1080,15 @@ local function ShowExport()
         f:RegisterForDrag("LeftButton")
         f:SetScript("OnDragStart", f.StartMoving)
         f:SetScript("OnDragStop", f.StopMovingOrSizing)
-        f:SetBackdrop({
-            bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 16, edgeSize = 14,
-            insets = { left = 4, right = 4, top = 4, bottom = 4 },
-        })
+        -- The title row ends where the text starts (34 px down).
+        if not Theme.Window(f, { header = 22 }) then
+            f:SetBackdrop({
+                bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                tile = true, tileSize = 16, edgeSize = 14,
+                insets = { left = 4, right = 4, top = 4, bottom = 4 },
+            })
+        end
         local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         title:SetPoint("TOPLEFT", 14, -12)
         title:SetText("Stakeout watch list - one macro per line (each fits 255 characters)")
@@ -1079,6 +1097,7 @@ local function ShowExport()
         local scroll = CreateFrame("ScrollFrame", "StakeoutExportScroll", f, "UIPanelScrollFrameTemplate")
         scroll:SetPoint("TOPLEFT", 14, -34)
         scroll:SetPoint("BOTTOMRIGHT", -34, 14)
+        Theme.Reading(f, scroll, 4)
         local eb = CreateFrame("EditBox", nil, scroll)
         eb:SetMultiLine(true)
         eb:SetAutoFocus(false)
@@ -1160,6 +1179,17 @@ function RefreshNPCList()
     if configFrame.macroCheck then configFrame.macroCheck:SetChecked(macroMode) end
 end
 
+-- Save a look (the config's dropdown, /stakeout look). The windows keep the
+-- one they were built in until a /reload.
+local function ChooseLook(look)
+    SetConfig("theme", look)
+    if look == Theme.Active() then
+        Print("Look: %s (the one in use).", Theme.LABELS[look])
+    else
+        Print("Look: %s. Type |cff00ff00/reload|r to apply it.", Theme.LABELS[look])
+    end
+end
+
 -- Helper: create a labeled checkbox bound to a setting
 local function MakeCheckbox(parent, x, y, label, dbKey, onChange)
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
@@ -1201,15 +1231,18 @@ local function CreateConfigFrame()
     local f = CreateFrame("Frame", "StakeoutConfigFrame", UIParent, "BackdropTemplate")
     configFrame = f
 
-    f:SetSize(400, 722)
+    f:SetSize(400, 762)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetMovable(true)
     f:EnableMouse(true)
     f:SetClampedToScreen(true)
     f:SetFrameStrata("DIALOG")
     f:SetToplevel(true)
-    MakeBackdrop(f, 16, { left = 4, right = 4, top = 4, bottom = 4 },
-        { 0.08, 0.08, 0.10, 0.95 }, { 0.4, 0.4, 0.4, 1 })
+    -- The title row ends where the watch list starts (38 px down).
+    if not Theme.Window(f, { header = 26 }) then
+        MakeBackdrop(f, 16, { left = 4, right = 4, top = 4, bottom = 4 },
+            { 0.08, 0.08, 0.10, 0.95 }, { 0.4, 0.4, 0.4, 1 })
+    end
 
     f:SetScript("OnMouseDown", function(self, btn)
         if btn == "LeftButton" then self:StartMoving() end
@@ -1242,8 +1275,10 @@ local function CreateConfigFrame()
     addBox:SetFontObject("ChatFontNormal")
     addBox:SetAutoFocus(false)
     addBox:SetMaxLetters(255)
-    MakeBackdrop(addBox, 12, { left = 4, right = 4, top = 2, bottom = 2 },
-        { 0.1, 0.1, 0.12, 0.9 }, { 0.5, 0.5, 0.5, 0.8 })
+    if not Theme.Control(addBox) then
+        MakeBackdrop(addBox, 12, { left = 4, right = 4, top = 2, bottom = 2 },
+            { 0.1, 0.1, 0.12, 0.9 }, { 0.5, 0.5, 0.5, 0.8 })
+    end
     addBox:SetTextInsets(6, 6, 0, 0)
 
     addBox.placeholder = addBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -1274,8 +1309,10 @@ local function CreateConfigFrame()
     scrollParent:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
     scrollParent:SetPoint("TOPRIGHT", f, "TOPRIGHT", -14, sectionY)
     scrollParent:SetHeight(170)
-    MakeBackdrop(scrollParent, 12, { left = 2, right = 2, top = 2, bottom = 2 },
-        { 0.04, 0.04, 0.06, 0.8 }, { 0.3, 0.3, 0.3, 0.8 })
+    if not Theme.Reading(scrollParent) then
+        MakeBackdrop(scrollParent, 12, { left = 2, right = 2, top = 2, bottom = 2 },
+            { 0.04, 0.04, 0.06, 0.8 }, { 0.3, 0.3, 0.3, 0.8 })
+    end
 
     local scrollFrame = CreateFrame("ScrollFrame", "StakeoutScrollFrame",
         scrollParent, "UIPanelScrollFrameTemplate")
@@ -1550,6 +1587,41 @@ local function CreateConfigFrame()
         UpdateScaleLabel(val)
     end)
 
+    -- Look: every window's, built in when it is made, so a choice applies
+    -- after a /reload. The note says so while the choice isn't the one worn.
+    sectionY = sectionY - 52
+    local lookLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    lookLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY)
+    lookLabel:SetText("Look:")
+
+    local lookDropdown = CreateFrame("Frame", "StakeoutLookDropdown", f, "UIDropDownMenuTemplate")
+    lookDropdown:SetPoint("TOPLEFT", f, "TOPLEFT", 46, sectionY + 7)
+    UIDropDownMenu_SetWidth(lookDropdown, 120)
+
+    local lookNote = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    lookNote:SetPoint("LEFT", lookDropdown, "RIGHT", -6, 2)
+
+    local function ShowLook()
+        local chosen = StoredLook()
+        UIDropDownMenu_SetText(lookDropdown, Theme.LABELS[chosen])
+        lookNote:SetText(chosen ~= Theme.Active() and "/reload to apply" or "")
+    end
+
+    UIDropDownMenu_Initialize(lookDropdown, function()
+        for _, look in ipairs(Theme.LOOKS) do
+            local info   = UIDropDownMenu_CreateInfo()
+            info.text    = Theme.LABELS[look]
+            info.value   = look
+            info.checked = (StoredLook() == look)
+            info.func = function()
+                ChooseLook(look)
+                ShowLook()
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    ShowLook()
+
     -- ESC closes config
     if UISpecialFrames then tinsert(UISpecialFrames, "StakeoutConfigFrame") end
 
@@ -1674,6 +1746,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         self:UnregisterEvent("ADDON_LOADED")
 
         EnsureDefaults()
+        -- The look is fixed for the session before the first window is made.
+        local _, why = Theme.Init(StoredLook())
+        if why then Print("The glass look isn't available (%s); using the WoW Forever look.", why) end
         CreateTargetFrame()
         ApplyNameplateDistance()
 
@@ -1773,6 +1848,15 @@ SlashCmdList["STAKEOUT"] = function(input)
     elseif cmd == "export" then
         ShowExport()
 
+    elseif cmd == "look" then
+        local arg = rest:lower()
+        if Theme.IsLook(arg) then
+            ChooseLook(arg)
+        else
+            Print("Look: %s. Use |cff00ff00/stakeout look forever|r or |cff00ff00glass|r (applies after a /reload).",
+                Theme.LABELS[Theme.Active()])
+        end
+
     elseif cmd == "clear" then
         ClearWatchList()
 
@@ -1788,6 +1872,7 @@ SlashCmdList["STAKEOUT"] = function(input)
         Print("  /stakeout list                — List tracked NPCs in chat")
         Print("  /stakeout export              — Copy the list as /stakeout add lines")
         Print("  /stakeout macro on / off      — Keep the list in a character macro")
+        Print("  /stakeout look forever/glass  — The windows' look (after a /reload)")
         Print("  /stakeout clear               — Remove all NPCs")
         Print("  /stakeout reset               — Clear detections & rescan")
     end
@@ -1824,4 +1909,5 @@ Stakeout._test = {
     Tick = Tick, MacroSafeName = MacroSafeName, ResetDetections = ResetDetections,
     lastApplied = function() return lastApplied end,
     pendingRefresh = function() return pendingRefresh end,
+    look = function() return Theme.Active() end,
 }

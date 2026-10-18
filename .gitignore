@@ -1,1 +1,3 @@
 .github/copilot-instructions.md
+# Filled by the packager (.pkgmeta externals); the tests read ..\LibGlass.
+Libs/

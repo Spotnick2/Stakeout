@@ -9,22 +9,34 @@ local H = dofile("tests/harness.lua")
 ------------------------------------------------------------
 -- Every write to StakeoutDB is inside the config-owner region
 ------------------------------------------------------------
+-- Every Lua file the TOC loads, not only the core: a second file writing
+-- StakeoutDB directly would bypass the owner as surely as the core could.
 local source = assert(H.readFile("Stakeout.lua"))
 local inOwner, owners, offenders = false, 0, {}
-local lineNo = 0
-for line in (source .. "\n"):gmatch("([^\n]*)\n") do
-    lineNo = lineNo + 1
-    if line:find("-- config-owner: begin", 1, true) then inOwner = true owners = owners + 1
-    elseif line:find("-- config-owner: end", 1, true) then inOwner = false
-    elseif not inOwner then
-        local code = line:gsub("%-%-.*$", "")
-        if code:find("StakeoutDB%.[%w_]+%s*=[^=]") or code:find("StakeoutDB%[[^%]]*%]%s*=[^=]")
-            or code:find("tinsert%(%s*StakeoutDB") or code:find("tremove%(%s*StakeoutDB")
-            or code:find("wipe%(%s*StakeoutDB") or code:find("StakeoutDB%s*=[^=]") then
-            offenders[#offenders + 1] = lineNo .. ": " .. line
+local scanned = 0
+for _, file in ipairs(H.tocFiles()) do
+    if file:match("%.lua$") then
+        scanned = scanned + 1
+        local lineNo = 0
+        for line in (assert(H.readFile(file)) .. "\n"):gmatch("([^\n]*)\n") do
+            lineNo = lineNo + 1
+            if line:find("-- config-owner: begin", 1, true) then inOwner = true owners = owners + 1
+            elseif line:find("-- config-owner: end", 1, true) then inOwner = false
+            elseif not inOwner then
+                local code = line:gsub("%-%-.*$", "")
+                if code:find("StakeoutDB%.[%w_]+%s*=[^=]") or code:find("StakeoutDB%[[^%]]*%]%s*=[^=]")
+                    or code:find("StakeoutDB%.[%w_]+%[[^%]]*%]%s*=[^=]")
+                    or code:find("tinsert%(%s*StakeoutDB") or code:find("tremove%(%s*StakeoutDB")
+                    or code:find("wipe%(%s*StakeoutDB") or code:find("StakeoutDB%s*=[^=]") then
+                    offenders[#offenders + 1] = file .. ":" .. lineNo .. ": " .. line
+                end
+            end
         end
+        H.check(not inOwner, file .. " closes its config-owner region")
+        inOwner = false
     end
 end
+H.check(scanned >= 2, "the scan read every TOC Lua file (" .. scanned .. ")")
 H.eq(owners, 1, "exactly one config-owner region; add another only on purpose")
 H.eq(#offenders, 0, "StakeoutDB is written only through the owner region: " .. table.concat(offenders, " | "))
 

@@ -59,11 +59,16 @@ H.eq(H.directive("SavedVariablesPerCharacter"), "StakeoutDB",
 
 -- Every load line, whatever its extension: the client would try to load a
 -- referenced file that the package doesn't carry.
+-- The library first (its files run before ours, as LibStub embedding needs),
+-- then the look, then the core that builds the windows with it.
 local files = H.tocFiles()
-H.eq(#files, 1, "the TOC loads exactly one file (the addon is a single file)")
-H.eq(files[1], "Stakeout.lua", "the TOC loads Stakeout.lua")
-for _, file in ipairs(files) do
-    H.check(H.readFile(file) ~= nil, "the TOC loads " .. file .. ", which does not exist")
+H.eq(#files, 3, "the TOC loads the library, Theme.lua and Stakeout.lua")
+H.eq(files[1], "Libs\\LibGlass-1.0\\LibGlass-1.0.xml", "the embedded LibGlass-1.0 loads first")
+H.eq(files[2], "Theme.lua", "then Theme.lua")
+H.eq(files[3], "Stakeout.lua", "then Stakeout.lua")
+-- Libs/ is the packager's (.pkgmeta externals) and gitignored: not on disk here.
+for i = 2, #files do
+    H.check(H.readFile(files[i]) ~= nil, "the TOC loads " .. files[i] .. ", which does not exist")
 end
 
 ------------------------------------------------------------
@@ -91,6 +96,21 @@ for _, path in ipairs({ ".github", ".claude", "tests", "Tools", "docs", "AGENTS.
     H.check(ignored[path], ".pkgmeta must ignore " .. path .. " so it never ships to players")
 end
 
-H.check(not pkgmeta:find("externals:"), "Stakeout embeds no libraries")
+-- One library, pinned to a tag: `latest` would ship whatever is newest, and
+-- CI and deploy.ps1 read this pin. The packager's YAML reader keeps an inline
+-- comment as part of a value, so none may sit on these lines.
+local externals = pkgmeta:match("\nexternals:\n(.-)\n%S") or ""
+H.check(externals:find("^  Libs/LibGlass%-1%.0:\n    url: https://github%.com/Spotnick2/LibGlass\n    tag: r%d+\n?$"),
+    "the only external is LibGlass-1.0, from Spotnick2/LibGlass, pinned to a tag: " .. externals)
+local pin = tonumber(externals:match("tag: r(%d+)") or "")
+H.check(pin and pin >= 9, "the pin is r9 or later (Glass.Reflect): r" .. tostring(pin))
+H.check(not pkgmeta:find("\n%s*tag:%s*latest"), "never `tag: latest`")
+-- The library's own ignores don't apply to an external: what it doesn't
+-- ship is named here, or it lands in players' AddOns.
+for _, path in ipairs({ "tests", "docs", "Tools", "AGENTS.md", "CLAUDE.md", "README.md" }) do
+    H.check(ignored["Libs/LibGlass-1.0/" .. path], ".pkgmeta must ignore Libs/LibGlass-1.0/" .. path)
+end
+H.check((H.readFile(".gitignore") or ""):find("\nLibs/\n", 1, true),
+    ".gitignore keeps the packager's Libs/ out of the repo")
 
 H.done("test_manifest")

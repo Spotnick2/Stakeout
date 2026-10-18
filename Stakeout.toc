@@ -6,4 +6,6 @@
 ## SavedVariablesPerCharacter: StakeoutDB
 ## X-Curse-Project-ID: 1508654
 
+Libs\LibGlass-1.0\LibGlass-1.0.xml
+Theme.lua
 Stakeout.lua

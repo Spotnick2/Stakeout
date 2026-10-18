@@ -62,6 +62,8 @@ NPC names must match exactly, spaces included (`/stakeout add Captain Flat Tusk`
 - **Alerts:** taskbar flash, sound on/off, and which sound (it previews when you pick it).
 - **Raid marking:** turn the right-click mark on or off, and pick the marker. Right-clicking again clears the mark.
 - **Target frame:** lock the position (Alt+drag still moves it), the button icon, and the scale.
+- **Look:** WoW Forever (the default) or Glass, a smoked glass look shared with other glass addons. It
+  applies to every Stakeout window after a `/reload`.
 
 ## What changed from the TBC version
 

@@ -965,6 +965,57 @@ Probe:Steps("mulgore", {
       end },
 })
 
+-- The look (#28): both looks over a bright and a dark scene, with the config
+-- and export windows open beside the target frame. Each look is worn after a
+-- /reload, so the owner switches with /stakeout look and the Reload step.
+local function showLook()
+    local S = G("Stakeout")
+    local T = type(S) == "table" and S._test
+    if type(T) ~= "table" or type(T.look) ~= "function" then error("Stakeout (with the look) isn't loaded", 0) end
+    local cfg = G("StakeoutConfigFrame")
+    if not (cfg and cfg:IsShown()) then T.CreateConfigFrame() end
+    T.ShowExport()
+    local f = T.frame()
+    local look, shown = T.look(), f and f:IsShown() or false
+    say(("look: %s; target frame %s"):format(look, shown and "shown" or "hidden (no button)"))
+    return look, shown
+end
+
+local function wearing(look)
+    return function()
+        local S = G("Stakeout")
+        local now = type(S) == "table" and S._test and S._test.look and S._test.look()
+        return now == look, "wearing " .. tostring(now)
+    end
+end
+
+Probe:Steps("look", {
+    rev = 1,
+    title = "Stakeout: the WoW Forever and Glass looks, bright and dark (#28)",
+    { text = "Stand outdoors somewhere bright (sunlit grass, sand or snow) with a mob in view. Type "
+          .. "/stakeout add <its name> and wait for its button, then press Next." },
+    { text = "Type /stakeout look forever, then reload.", reload = true },
+    { text = "WoW Forever, bright: opening the config and export windows.", auto = true, run = showLook,
+      check = wearing("forever"), screenshot = "forever-bright" },
+    { text = "WoW Forever, bright: is every label in the three windows easy to read?", ask = true },
+    { text = "Type /stakeout look glass, then reload.", reload = true },
+    { text = "Glass, bright: opening the config and export windows.", auto = true, run = showLook,
+      check = wearing("glass"), screenshot = "glass-bright" },
+    { text = "Glass, bright: is every label in the three windows easy to read?", ask = true },
+    { text = "Left-click the mob's button, then right-click it. Did it target the mob, then mark it?", ask = true },
+    { text = "Go somewhere dark (inside a building, a cave, or outdoors at night), then press Next." },
+    { text = "Glass, dark: opening the windows again.", auto = true, run = showLook,
+      check = wearing("glass"), screenshot = "glass-dark" },
+    { text = "Glass, dark: is every label easy to read?", ask = true },
+    { text = "Type /stakeout look forever, then reload.", reload = true },
+    { text = "WoW Forever, dark: opening the windows again.", auto = true, run = showLook,
+      check = wearing("forever"), screenshot = "forever-dark" },
+    { text = "WoW Forever, dark: is every label easy to read?", ask = true },
+    { text = "Overall, do you prefer Glass? (No: WoW Forever.) The Note box takes what you'd change.", ask = true },
+    { text = "Type /stakeout remove <the mob's name>, and /stakeout look glass if you want to keep Glass. "
+          .. "Then press Finish and /reload." },
+})
+
 --------------------------------------------------------------------------------
 -- Boot: the saved log, and the login samples (P6)
 --------------------------------------------------------------------------------

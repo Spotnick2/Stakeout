@@ -204,7 +204,7 @@ eq(b.shown, false, "button off hides it")
 -- Procedures
 --------------------------------------------------------------------------------
 
-for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore", "corpse" }) do
+for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore", "corpse", "look" }) do
     fp("steps so " .. name)
     local rec = FP.db.steps.records["StakeoutProbe/" .. name]
     eq(rec and rec.status, "active", "procedure " .. name .. " starts")
