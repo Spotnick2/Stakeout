@@ -174,7 +174,7 @@ secure `macrotext2="/tm <index>"`, as RXP does.
 Four logins on 2026-09-23 (15:18, 15:28, 15:29, …) all report `launches before 0, 0` for both the account and character tables. **Nothing
 loads back**, which agrees with the porting guide. A zero after `/reload` is a valid negative.
 
-### 12. Quest targeting (70450, #25) - pending
+### 12. Quest targeting (70450, #25) - `quests` and `range` measured
 
 What the quest buttons rely on, measured by `/fp so` (`Tools/StakeoutProbe`), Questie 12.1.0 with QuestieDB 1.0.6.
 
@@ -187,4 +187,101 @@ What the quest buttons rely on, measured by `/fp so` (`Tools/StakeoutProbe`), Qu
 | `/fp steps so core` | Stakeout's own left-click, right-click mark and `UNIT_DIED` clearing on this build (P8) | anywhere with a mob to kill |
 | `/fp steps so mulgore` | QuestieDB spawns vs where two NPCs stand, in a zone QuestieDB's Era-to-Forever helper re-projects (P3) | Mulgore |
 
-Results: not yet measured.
+**Not run yet:** `hostile`, `events`, `core`, `mulgore`. So the enemy radius (P5), the event order (P6), combat (P7), the
+core re-check (P8, and with it `MEASURED_ON_BUILD`) and a re-projected zone (P3) are still open.
+
+#### `quests` (2026-10-17, 1.60.1.70450, Durotar, level 6, runs #110-111)
+
+**QuestieDB (P4).**
+```
+LibQuestieDB QuestieDB, readMode baked, contract 4 (min 1); RequireContract(4) true nil
+ObjectiveFirst: eventObjectiveFirst=0 itemObjectiveFirst=5 killCreditObjectiveFirst=1 objectObjectiveFirst=0 spellObjectiveFirst=0
+area map: 1112 areas in 2.4 ms; 14 -> 1411, 362 -> 1411, 215 -> 1412, 1637 -> 1454
+50 reads for the quest log in 0.8 ms
+sample ADDON_LOADED: ... 0 quests; LibQuestieDB yes; Questie ready false      (first login)
+sample PLAYER_LOGIN: ... 16 quests; LibQuestieDB yes; Questie ready false
+sample Questie ready: ... 16 quests; LibQuestieDB yes; Questie ready true     (+5.4 s after ADDON_LOADED; +3.4 s after a /reload)
+```
+- `LibQuestieDB` is there at our `ADDON_LOADED`, and contract 4 holds. The strict area-map parser reads the shipped strings
+  (base plus Override) in 2.4 ms, with the 14→1411 sample. Reads are cheap: 50 in 0.8 ms.
+- The quest log is readable at `PLAYER_LOGIN` (16 quests). After a `/reload` it's already readable at `ADDON_LOADED`.
+- `Questie.API.isReady` turns true 3-5 s after login. Data reads work before that (step 2 read it fine), so the
+  adapter can build at login and rebuild once on ready.
+
+**The quest log (P1).** All 16 quests; a few representative rows:
+```
+Q 96821 Legging It:        row 1: type monster finished false 0/6 objectiveType 0 text "0/6 Ridgeshade Creeper slain"
+Q 818 A Solvent Spirit:    row 1: type item    finished false 1/4 objectiveType 1 text "1/4 Intact Makrura Eye"
+                           row 2: type item    finished false 1/8 objectiveType 1 text "1/8 Crawler Mucus"
+Q 786 Thwarting Kolkar..:  row 1: type object  finished false 0/1 objectiveType 2 text "0/1 Attack Plan: Valley of Trials destroyed"
+Q 823 Report to Orgnil:    IsComplete true  ReadyForTurnIn true, 0 rows
+Q 96655 Camping 101: Cooking: IsComplete false, row 1: type object finished false 1/1 objectiveType 14 text "Learn cooking from Cook Torka in Razor Hill"
+Q 97905 Camping 101: Herbalism: IsComplete true, row 1: type object finished true 1/1 objectiveType 14 text "Raise your herbalism skill to 20"
+Q 97223 Bloodtalon Matriarch: row 1: type item text "0/1 Bloodtalon Matriarch Eggs"; questie item: 277128 Bloodtalon Martriarch Eggs
+```
+- **`IsComplete` and `ReadyForTurnIn` agreed on all 16 quests** (both true on 823 and 97905, both false elsewhere, never
+  nil). The turn-in rule uses `C_QuestLog.IsComplete`; no fallback is needed.
+- A delivery quest with nothing to do (823) has **0 rows** and is complete.
+- Row text is `"<have>/<need> <name>"`, with `" slain"` / `" destroyed"` after creatures and objects. The QuestieDB names
+  appear in it literally, so containment matching works, except where QuestieDB misspells one: item 277128 is
+  "Bloodtalon **Martriarch** Eggs". The order fallback (one item entry, one item row) still pairs it correctly.
+- **Forever's new objective type 14** ("Learn cooking from…", "Raise your herbalism skill to 20") reports `type "object"`.
+  QuestieDB lists the trainer as a *creature* objective there (Cook Torka, Jandi). Type-compatible matching rejects that
+  pairing, so the trainer becomes "progress unknown". He must not be labelled a kill target: the model files a creature
+  objective with no monster row as a friendly "talk" target. Its row read `finished false 1/1` while the quest wasn't
+  complete, so `finished` on type 14 doesn't track the counts.
+- **QuestieDB has no droppers for most of Forever's new items** (IDs 247884, 275713-275718, 277135), and none for 4864
+  (Minshina's Skull, from an object). Those objectives get no button; the pane lists them as "no known source".
+- `ObjectiveFirst` is populated (5 item-first quests, 1 kill-credit-first); none of these 16 were among them.
+
+**Units (P2).**
+```
+target: name "Makrura Clacker" (str15) guid Creature-0-6782-1-2-3103-C322B76B08 creatureID 3103 related false attackable true reaction 2 dead true
+target: name "Pygmy Surf Crawler" (str18) guid Creature-...-3106-9809ECB758 creatureID 3106 related true attackable true reaction 4 dead false combat false
+target: name "Pygmy Surf Crawler" (str18) guid Creature-...-3106-9809ECB758 creatureID 3106 related true ... combat true
+target: name "Xar'Ti" (str6) guid Creature-...-7953-082DD90EF9 creatureID 7953 related false attackable false reaction 5
+target: name "Swift Orange Raptor" (str19) ... creatureID 276801 related false attackable false reaction 5
+questie npc <id>: name <same as the client's> (all four)
+```
+- Names, GUIDs and `UnitCreatureID` are **plain**, for a kill mob and a dropper, **in combat too**. QuestieDB's `Npc.name`
+  equals `UnitName` for every NPC read.
+- `C_QuestLog.UnitIsRelatedToActiveQuest` is plain: true on a live Crawler, false on a **dead** Makrura and on unrelated NPCs.
+- **Not measured:** a turn-in NPC whose quest is complete. Orgnil was out of reach, so Xar'Ti stood in (she ends 97223,
+  which wasn't complete): related false.
+
+**Position (P3).**
+```
+player on map 1411 at 55.21, 75.56 (map 5287 x 3525 yd); nearest spawn 2.8 yd at 55.22, 75.48   (Swift Orange Raptor, standing next to it)
+player on map 1411 at 55.21, 75.56; nearest spawn 4.4 yd at 55.28, 75.49                        (Xar'Ti, next to her)
+player on map 1411 at 55.34, 80.62; nearest spawn 24.2 yd                                        (a Crawler: mobs wander)
+walk: 29.1 yd on the map, 29.1 yd in the world, ratio 0.999
+```
+- **QuestieDB's stored coordinates match where NPCs stand in Durotar**, within 3-5 yd. Era-converted distances equal the
+  stored ones there, as expected (Durotar has the identity transform). Mulgore, which the converter changes, is still open.
+- `GetPlayerMapPosition` × `C_Map.GetMapWorldSize` gives the same distance as `UnitPosition` (ratio 0.999), so the yards
+  formula is right.
+- The `near` list worked: 30 targets, from Sen'jin Village the nearest was a Crawler spawn at 136 yd, and Orgnil was 1153 yd away.
+
+The login samples saw no nameplates (the owner was by a trainer), so "mobs already visible at login" is still open (P6).
+
+Screenshot (deleted after reading): Xar'Ti and her raptors, the quest tracker showing *Report to Orgnil* ready.
+
+#### `range` (2026-10-17, 1.60.1.70450, by Xar'Ti, run #111)
+```
+/tm 8:   click 1 -> mark <secret>;  click 2 -> mark nil
+/tm !8:  click 1 -> mark <secret>;  click 2 -> mark <secret>
+40 yd:   target Xar'Ti (wanted Xar'Ti) plate false     (37.9 yd at the step, 40.6 at the click)
+60 yd:   target Xar'Ti, plate false                    (62.7 yd)
+80 yd:   target Xar'Ti, plate false                    (81.3 yd)
+100 yd:  target Xar'Ti, plate false                    (99.6 yd)
+```
+- **`/tm N` toggles; `/tm !N` keeps the mark.** A second `/tm 8` removed the skull (readback `nil`). A second `/tm !8`
+  left it (still a secret, which `GetRaidTargetIndex` returns for a marked unit). The owner answered "yes, still there"
+  after `/tm 8`, but the readback says otherwise and matches Retail's toggle. Quest buttons use **`/tm !N`**, so clicking
+  again to re-target never unmarks.
+- **`/cleartarget` + `/targetexact` reached a friendly NPC with no nameplate at 40, 60, 80 and ~100 yd.** The ceiling is
+  above 100 yd. The 80 yd friendly radius has room to spare.
+- Every click was a right-click (the owner clicked right where the step said left). The right-click macro is
+  `/cleartarget`, `/targetexact <name>`, `/tm !8`, so the targeting result is the same; it re-marked each time.
+- One click (both edges registered) ran the macro once: the mark didn't toggle twice within a click.
+- Distances are from Xar'Ti's QuestieDB spawn, which is 4-5 yd from where she stands.
