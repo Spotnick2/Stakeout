@@ -32,7 +32,7 @@ WoW.SECRET = setmetatable({}, { __tostring = function() return "<secret>" end })
 function WoW.reset()
     WoW.time         = 1000
     WoW.inCombat     = false
-    WoW.build        = "70338"
+    WoW.build        = "70450"
     WoW.version      = "2.1.0"   -- TOC Version: a release; "dev" is what deploy.ps1 writes
     WoW.units        = {}   -- [token] = { name, guid, dead, player, controlled, plate, secretName, secretGuid, throws }
     WoW.cvars        = { nameplateMaxDistance = "45.000000" }

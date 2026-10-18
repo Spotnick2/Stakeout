@@ -52,10 +52,11 @@ and the combat log. See below. Don't reintroduce them.
 
 No dependencies, no libraries, no build step.
 
-## What the Client Allows (measured, build 1.60.1.70338)
+## What the Client Allows (measured, build 1.60.1.70450)
 
-Details and raw captures are in `docs/FOREVER-PROBE.md`. Don't re-derive these. If the build changes,
-restore the probe from history (see that file) and re-measure.
+Details and raw captures are in `docs/FOREVER-PROBE.md`. Don't re-derive these. If the build changes, run
+`/fp steps so core` (`Tools/StakeoutProbe`) to re-check the buttons, and restore the old probe from history (see that
+file) for anything deeper.
 
 When the client build changes, a **development copy** (version `dev` from `Tools/deploy.ps1`, or the raw
 `@project-version@` of an unpackaged checkout) prints one note at the first login on the new build:

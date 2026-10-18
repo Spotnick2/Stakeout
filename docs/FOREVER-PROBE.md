@@ -3,8 +3,8 @@
 Measured behaviour on the live client, for the port (#4) and the macro fallback (#5). Addon-agnostic
 findings also go into `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`.
 
-Build under test: **1.60.1.70338** (first measured on 1.60.1.69977, re-tested in game on 70338 against the 70338 API
-dump). On any later build (`GetBuildInfo()`), regenerate the API dump and
+Build under test: **1.60.1.70450** (first measured on 1.60.1.69977, re-tested in game on 70338, and Stakeout's own
+buttons re-checked on 70450 by `/fp steps so core`, §12). On any later build (`GetBuildInfo()`), regenerate the API dump and
 re-measure before trusting anything here.
 
 **Sections 1-11 are settled.** The session-1 probe that measured them (`/soprobe`) was removed (#2 closed) and lives
@@ -174,7 +174,7 @@ secure `macrotext2="/tm <index>"`, as RXP does.
 Four logins on 2026-09-23 (15:18, 15:28, 15:29, …) all report `launches before 0, 0` for both the account and character tables. **Nothing
 loads back**, which agrees with the porting guide. A zero after `/reload` is a valid negative.
 
-### 12. Quest targeting (70450, #25) - `quests` and `range` measured
+### 12. Quest targeting (70450, #25)
 
 What the quest buttons rely on, measured by `/fp so` (`Tools/StakeoutProbe`), Questie 12.1.0 with QuestieDB 1.0.6.
 
@@ -185,10 +185,13 @@ What the quest buttons rely on, measured by `/fp so` (`Tools/StakeoutProbe`), Qu
 | `/fp steps so hostile` | `/targetexact` on a quest mob with no nameplate (P5) | near your kill-quest mobs |
 | `/fp steps so events` | quest and death events, and when objective rows change, for a kill, a loot, a turn-in and an accept (P6) | while questing |
 | `/fp steps so core` | Stakeout's own left-click, right-click mark and `UNIT_DIED` clearing on this build (P8) | anywhere with a mob to kill |
+| `/fp steps so corpse` | which unit `/targetexact` picks with a corpse and live mobs of one name around, and whether `/cleartarget [dead]`, a second `/targetexact`, `/target` or a repeat click reaches a live one | by a quest mob you can kill |
 | `/fp steps so mulgore` | QuestieDB spawns vs where two NPCs stand, in a zone QuestieDB's Era-to-Forever helper re-projects (P3) | Mulgore |
 
-**Not run yet:** `hostile`, `events`, `core`, `mulgore`. So the enemy radius (P5), the event order (P6), combat (P7), the
-core re-check (P8, and with it `MEASURED_ON_BUILD`) and a re-projected zone (P3) are still open.
+**Still open:**
+- `mulgore` in Mulgore proper. The first run was in Thunder Bluff, which the Era-to-Forever helper doesn't change.
+- A turn-in's events (`QUEST_TURNED_IN`) and a kill-credit objective's progress (P6).
+- Combat with the quest pane open (P7). That belongs to the pane's own in-game check, since there's no pane yet.
 
 #### `quests` (2026-10-17, 1.60.1.70450, Durotar, level 6, runs #110-111)
 
@@ -262,7 +265,8 @@ walk: 29.1 yd on the map, 29.1 yd in the world, ratio 0.999
   formula is right.
 - The `near` list worked: 30 targets, from Sen'jin Village the nearest was a Crawler spawn at 136 yd, and Orgnil was 1153 yd away.
 
-The login samples saw no nameplates (the owner was by a trainer), so "mobs already visible at login" is still open (P6).
+The login samples over six reloads saw at most one nameplate, never with a readable name, so "mobs already visible at login"
+is still unmeasured (P6). The rescan after the first rebuild covers it either way.
 
 Screenshot (deleted after reading): Xar'Ti and her raptors, the quest tracker showing *Report to Orgnil* ready.
 
@@ -285,3 +289,51 @@ Screenshot (deleted after reading): Xar'Ti and her raptors, the quest tracker sh
   `/cleartarget`, `/targetexact <name>`, `/tm !8`, so the targeting result is the same; it re-marked each time.
 - One click (both edges registered) ran the macro once: the mark didn't toggle twice within a click.
 - Distances are from Xar'Ti's QuestieDB spawn, which is 4-5 yd from where she stands.
+
+#### `hostile` (2026-10-17, 1.60.1.70450, Durotar's coast, run #113)
+```
+target: name "Pygmy Surf Crawler" ... creatureID 3106 related true attackable true reaction 4 dead false plate true
+click LeftButton down: target Pygmy Surf Crawler (wanted Pygmy Surf Crawler) plate false mark nil; 67.1 yd from its nearest spawn
+Did it target a mob you couldn't see a nameplate for?  NO
+note: "as expected it targetted the first dead nearby"
+```
+- **`/targetexact` took a nearby corpse over a live mob of the same name.** The click "worked" (a Pygmy Surf Crawler was
+  targeted, with no plate), but it was a dead one. So this run says nothing about the reach to a live, plateless mob.
+- That matters for kill and item buttons: once the player has killed a few, the button may keep landing on corpses.
+  How `/targetexact` picks among several matches (nearest? corpses first?), and whether a macro line can skip a corpse,
+  is a follow-up probe (see the plan).
+- Quest mobs aren't always hostile: this crawler is neutral (reaction 4) and attackable.
+
+#### `events` (2026-10-17, 1.60.1.70450, run #114)
+```
+kill (no quest progress):  UNIT_DIED "Creature-...-3106-..."
+loot a quest item:         QUEST_WATCH_UPDATE 818 -> UNIT_QUEST_LOG_CHANGED player (rows already read 2/8) -> QUEST_LOG_UPDATE -> QUEST_LOG_UPDATE (+0.3 s)
+abandon:                   UNIT_QUEST_LOG_CHANGED player -> QUEST_REMOVED 97223 false -> QUEST_LOG_UPDATE
+accept:                    GOSSIP_SHOW -> QUEST_DETAIL 0 -> UNIT_QUEST_LOG_CHANGED player -> QUEST_ACCEPTED 97223 -> QUEST_LOG_UPDATE -> QUEST_POI_UPDATE
+idle:                      QUEST_LOG_UPDATE also fires with nothing changed (3 times in 40 s)
+```
+- **The objective rows are already updated when `UNIT_QUEST_LOG_CHANGED` fires**, and `QUEST_LOG_UPDATE` follows within
+  the same frame. Coalescing those events into one rebuild 0.2 s later is safe.
+- `QUEST_REMOVED` carries the quest ID (abandon: second argument `false`). `QUEST_ACCEPTED` carries the quest ID.
+- `UNIT_DIED` fires for deaths near the player that they didn't cause (a Makrura died while the owner looted).
+- Not measured: a turn-in (skipped, none ready) and a kill that advances a "slain" objective.
+
+#### `core` (2026-10-17, 1.60.1.70450, run #115): Stakeout's own buttons, P8
+```
+/stakeout add <mob>; left-click: did it target?   YES
+right-click: did it mark?                          YES
+kill: UNIT_DIED "Creature-...-3125-..." (in combat); did the button go away?  YES
+```
+**Stakeout 2.1.x works unchanged on 70450**: targeting, marking and `UNIT_DIED` clearing. `MEASURED_ON_BUILD` moves to
+70450.
+
+#### `mulgore`, first run (2026-10-17, 1.60.1.70450, another account, run #150): Thunder Bluff, not Mulgore
+```
+Naal Mistrunner (3027):   area 1638 -> uiMap 1456 (map 1044 x 696 yd); nearest spawn 8.7 yd; as Era-converted 8.7 yd   PASS
+Cairne Bloodhoof (3057):  player at 50.95, 51.16; nearest spawn 97.6 yd at 60.3, 51.68                               FAIL
+```
+- Both NPCs were in **Thunder Bluff** (area 1638 → uiMap 1456), which the Era-to-Forever helper leaves alone (stored =
+  converted). Naal's spawn is within 9 yd of where he stands.
+- Cairne's FAIL is not a data error: the player had moved about 6 yd since reading Naal, so they targeted Cairne from
+  across the bluff. His stored spawn (60.3, 51.7) is on the Elder Rise, where he stands.
+- Mulgore proper (area 215 → 1412), the zone the helper re-projects, is still to measure.

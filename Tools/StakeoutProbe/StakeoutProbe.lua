@@ -426,17 +426,23 @@ local function onClick(_, which, down)
     if isPlayer == true then name = "<a player>" end
     local okP, plate = call(api("C_NamePlate", "GetNamePlateForUnit"), "target")
     local _, mark = call(G("GetRaidTargetIndex"), "target")
+    local _, dead = call(G("UnitIsDead"), "target")
+    local _, guid = call(G("UnitGUID"), "target")
+    -- The GUID's last part tells two units of one name apart (which one a click landed on)
+    local uid = exists == true and text(guid) and guid:match("%-(%x+)$") or nil
     local d = state.aim and state.aim.id and spawnDistance(state.aim.id, true)
     state.lastClick = {
         target = exists == true and text(name) or nil, plate = okP and plate ~= nil, mark = num(mark),
-        wanted = state.aim and state.aim.name, d = d,
+        wanted = state.aim and state.aim.name, d = d, dead = exists == true and dead == true, uid = uid,
     }
-    say(("click %s %s: target %s (wanted %s) plate %s mark %s; %s yd from its nearest spawn"):format(str(which),
-        down and "down" or "up", exists == true and str(name) or "none", str(state.lastClick.wanted),
-        tostring(state.lastClick.plate), str(mark), fmt(d)))
+    say(("click %s %s: target %s (wanted %s) plate %s mark %s dead %s unit %s; %s yd from its nearest spawn")
+        :format(str(which), down and "down" or "up", exists == true and str(name) or "none",
+        str(state.lastClick.wanted), tostring(state.lastClick.plate), str(mark), tostring(state.lastClick.dead),
+        str(uid), fmt(d)))
 end
 
-local function aim(name, id, mark)
+-- left: the left-click macro, with <name> for the name (default: /cleartarget, /targetexact <name>)
+local function aim(name, id, mark, left)
     if inCombat() then return false, "in combat: the button can't change" end
     if type(name) ~= "string" or name == "" or name:find("%c") then return false, "no usable name" end
     if not button then
@@ -453,13 +459,14 @@ local function aim(name, id, mark)
     end
     mark = mark or "8"
     button:SetAttribute("type", "macro")
-    button:SetAttribute("macrotext", "/cleartarget\n/targetexact " .. name)
+    left = (left or "/cleartarget\n/targetexact <name>"):gsub("<name>", function() return name end)
+    button:SetAttribute("macrotext", left)
     button:SetAttribute("type2", "macro")
     button:SetAttribute("macrotext2", "/cleartarget\n/targetexact " .. name .. "\n/tm " .. mark)
     button.label:SetText("probe: " .. name .. " (right: /tm " .. mark .. ")")
     button:Show()
     state.aim = { name = name, id = id, mark = mark }
-    say(("button: left targets %s, right also /tm %s"):format(name, mark))
+    say(("button: left %s; right targets %s, then /tm %s"):format((left:gsub("\n", " | ")), name, mark))
     return true
 end
 
@@ -475,7 +482,7 @@ end
 local function clickedSince(n0)
     if state.clicks > n0 then
         local c = state.lastClick
-        return true, c.target, c.plate, c.mark, c.d
+        return true, c.target, c.plate, c.mark, c.d, c.dead, c.uid
     end
     return false, "waiting for a click"
 end
@@ -860,6 +867,56 @@ do
           ask = true },
         { text = "Removing the probe button (out of combat).", button = "Remove", run = function() return buttonOff() end },
     })
+end
+
+-- Corpses: which unit /targetexact picks when dead and live ones share a name, and whether a macro line skips
+-- the dead (the hostile run landed on a corpse). Each variant sets the left-click macro, then waits for a click.
+do
+    local VARIANTS = {
+        { "A", "/cleartarget\n/targetexact <name>", "the macro quest buttons would use" },
+        { "A again", "/cleartarget\n/targetexact <name>", "the same macro, a second time" },
+        { "B", "/cleartarget\n/targetexact <name>\n/cleartarget [dead]", "drops a dead target" },
+        { "C", "/cleartarget\n/targetexact <name>\n/cleartarget [dead]\n/targetexact <name>",
+          "drops a dead target, then tries again" },
+        { "D", "/cleartarget\n/target <name>", "/target instead of /targetexact" },
+        { "E", "/targetexact <name>", "no /cleartarget: click it twice, does it move to another one?" },
+        { "E again", "/targetexact <name>", "the second click" },
+    }
+    local n0
+    local steps = {
+        rev = 1,
+        title = "Stakeout: /targetexact with corpses around",
+        { text = "Go to a quest mob you can kill, where several of the same name are about. Kill one and stay "
+              .. "by its corpse (looted or not); at least one live one should still be in view. Out of combat, "
+              .. "target a live one, then press Read target.", button = "Read target", run = function()
+              local ok, name, id = readTarget("mob")
+              if not ok then return false, "no name" end
+              state.corpseMob = { name = name, id = id }
+              return true, name, id
+          end },
+    }
+    for _, v in ipairs(VARIANTS) do
+        local label, macro, what = v[1], v[2], v[3]
+        steps[#steps + 1] = { text = "Variant " .. label .. " (" .. what .. "). Out of combat, press Set.",
+            button = "Set", run = function()
+                local m = state.corpseMob
+                if not m then return false, "no mob read yet: go back to step 1" end
+                return aim(m.name, m.id, "8", macro)
+            end }
+        steps[#steps + 1] = { text = (label:find("again") and "" or "Clear your target (Escape). ")
+                .. "Left-click the probe button once, then look: did it target the corpse or a live one?",
+            wait = function()
+                n0 = n0 or state.clicks
+                local done, target, plate, _, _, dead, uid = clickedSince(n0)
+                if done then n0 = nil end
+                return done, target, plate, dead, uid
+            end, timeout = 600 }
+    end
+    steps[#steps + 1] = { text = "Roughly how far was the nearest live one, and the corpse? Type it in the note, "
+            .. "then answer: did any variant reach a live one while a corpse was closer?", ask = true }
+    steps[#steps + 1] = { text = "Removing the probe button (out of combat).", button = "Remove",
+        run = function() return buttonOff() end }
+    Probe:Steps("corpse", steps)
 end
 
 Probe:Steps("events", {

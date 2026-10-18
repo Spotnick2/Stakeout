@@ -184,9 +184,14 @@ check(logged("click LeftButton down: target <a player> %(wanted"), "a player tar
 WoW.SetUnit("target", { name = "Orgnil Soulscar", guid = "Creature-0-4170-1-12-3142-0000ABCD", creatureID = 3142,
     friendly = true })
 b.hooks.PostClick(b, "RightButton", false)
-check(logged("click RightButton up: target Orgnil Soulscar %(wanted Orgnil Soulscar%) plate false mark nil"),
-    "a click logs the target it got")
+check(logged("click RightButton up: target Orgnil Soulscar %(wanted Orgnil Soulscar%) plate false mark nil "
+    .. "dead false unit 0000ABCD"), "a click logs the target it got, alive or not, and which one")
 eq(T.state.clicks, 2, "...and counts")
+WoW.SetUnit("target", { name = "Orgnil Soulscar", guid = "Creature-0-4170-1-12-3142-0000BEEF", creatureID = 3142,
+    dead = true })
+b.hooks.PostClick(b, "LeftButton", true)
+check(logged("dead true unit 0000BEEF"), "a corpse is logged as one")
+eq(T.state.lastClick.dead, true, "...and recorded")
 WoW.inCombat = true
 fp("so button Vile Familiar")
 eq(b.attrs.macrotext, "/cleartarget\n/targetexact Orgnil Soulscar", "not changed in combat")
@@ -199,12 +204,22 @@ eq(b.shown, false, "button off hides it")
 -- Procedures
 --------------------------------------------------------------------------------
 
-for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore" }) do
+for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore", "corpse" }) do
     fp("steps so " .. name)
     local rec = FP.db.steps.records["StakeoutProbe/" .. name]
     eq(rec and rec.status, "active", "procedure " .. name .. " starts")
     fp("steps stop")
 end
+
+-- The corpse variants set the left-click macro, with the name filled in.
+eq(T.aim("Pygmy Surf Crawler", 3106, "8",
+    "/cleartarget\n/targetexact <name>\n/cleartarget [dead]\n/targetexact <name>"), true, "a variant is set")
+eq(b.attrs.macrotext,
+    "/cleartarget\n/targetexact Pygmy Surf Crawler\n/cleartarget [dead]\n/targetexact Pygmy Surf Crawler",
+    "...with the name in every line")
+eq(b.attrs.macrotext2, "/cleartarget\n/targetexact Pygmy Surf Crawler\n/tm 8", "right-click unchanged")
+eq(T.aim("Pygmy Surf Crawler", 3106, "8"), true, "no variant")
+eq(b.attrs.macrotext, "/cleartarget\n/targetexact Pygmy Surf Crawler", "...is the default macro")
 
 local errors = 0
 for _, l in ipairs(db.log) do if l:find("ERROR") then errors = errors + 1 end end
