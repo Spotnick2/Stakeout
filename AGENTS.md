@@ -42,18 +42,21 @@ and the combat log. See below. Don't reintroduce them.
 - `Stakeout.lua`: the whole addon, in labelled sections (defaults and settings, target frame,
   detection, config GUI, events, slash commands). It stays a single file.
 - `tests/`: Lua 5.1 unit tests, no game client. `pwsh tests/run.ps1`.
-- `Tools/deploy.ps1`: deploys to the local Forever AddOns folder. The in-game probe (`/soprobe`) that
-  measured this client was removed once `docs/FOREVER-PROBE.md` was settled. That file says how to restore it.
+- `Tools/deploy.ps1`: deploys to the local Forever AddOns folder (`-Probe` / `-ProbeOnly` add the probe).
+- `Tools/StakeoutProbe/`: the in-game probe, a ForeverProbe module (`/fp so`, never packaged). It measures what quest
+  targeting relies on (#25); `docs/FOREVER-PROBE.md` lists its procedures. Its tests run locally only (CI sets
+  `FOREVERPROBE_OPTIONAL=1`). The older `/soprobe` that measured sections 1-11 is in git history.
 - `docs/FOREVER-PROBE.md`: what was measured on the live client, and how.
 - `.github/workflows/package-check.yml`: syntax check, tests, and a dry-run package on every PR.
 - `.pkgmeta`, `README.md`, `CHANGELOG.md`: packaging and user-facing material.
 
 No dependencies, no libraries, no build step.
 
-## What the Client Allows (measured, build 1.60.1.70338)
+## What the Client Allows (measured, build 1.60.1.70450)
 
-Details and raw captures are in `docs/FOREVER-PROBE.md`. Don't re-derive these. If the build changes,
-restore the probe from history (see that file) and re-measure.
+Details and raw captures are in `docs/FOREVER-PROBE.md`. Don't re-derive these. If the build changes, run
+`/fp steps so core` (`Tools/StakeoutProbe`) to re-check the buttons, and restore the old probe from history (see that
+file) for anything deeper.
 
 When the client build changes, a **development copy** (version `dev` from `Tools/deploy.ps1`, or the raw
 `@project-version@` of an unpackaged checkout) prints one note at the first login on the new build:

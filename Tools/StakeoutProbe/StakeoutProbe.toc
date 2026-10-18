@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: StakeoutProbe
+## Notes: Throwaway probe for Stakeout: what quest targeting relies on (#25). A ForeverProbe module: /fp so
+## Author: Spotnick
+## Version: dev
+## Dependencies: ForeverProbe
+## OptionalDeps: Stakeout, QuestieDB, Questie
+## SavedVariables: StakeoutProbeDB
+
+StakeoutProbe.lua

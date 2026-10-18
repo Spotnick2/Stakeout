@@ -7,12 +7,19 @@
     never modified.
 
     Usage:
-        pwsh Tools/deploy.ps1
+        pwsh Tools/deploy.ps1               # Stakeout
+        pwsh Tools/deploy.ps1 -Probe        # ...and StakeoutProbe
+        pwsh Tools/deploy.ps1 -ProbeOnly    # just StakeoutProbe
         pwsh Tools/deploy.ps1 -AddOnsPath "D:\...\_classic_beta_\Interface\AddOns"
+
+    StakeoutProbe is a ForeverProbe module, so -Probe and -ProbeOnly deploy the
+    ForeverProbe checkout first ($env:FOREVERPROBE, else ..\ForeverProbe).
 #>
 
 param(
-    [string]$AddOnsPath = "C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns"
+    [string]$AddOnsPath = "C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns",
+    [switch]$Probe,
+    [switch]$ProbeOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -71,8 +78,27 @@ if ((Get-Content -LiteralPath (Join-Path $RepoRoot "Stakeout.toc") -Raw) -notmat
     Write-Error "Stakeout.toc is not '## Interface: 16001'; this script deploys to WoW: Forever."
     exit 1
 }
-Deploy-Folder "Stakeout" $RepoRoot (Get-TocFiles $RepoRoot)
+$ForeverProbe = if ($env:FOREVERPROBE) { $env:FOREVERPROBE } else { Join-Path (Split-Path -Parent $RepoRoot) "ForeverProbe" }
+
+function Deploy-Probe {
+    # The host first: StakeoutProbe has ## Dependencies: ForeverProbe, so
+    # without it the client loads no StakeoutProbe at all.
+    if (-not (Test-Path -LiteralPath (Join-Path $ForeverProbe "Tools\deploy.ps1"))) {
+        Write-Error "ForeverProbe checkout not found at $ForeverProbe (clone github.com/Spotnick2/ForeverProbe there, or set `$env:FOREVERPROBE)"
+        exit 1
+    }
+    & pwsh -NoProfile -File (Join-Path $ForeverProbe "Tools\deploy.ps1") -AddOnsPath $AddOnsPath
+    if ($LASTEXITCODE -ne 0) { Write-Error "ForeverProbe deploy refused; StakeoutProbe was not touched"; exit 1 }
+    $source = Join-Path $RepoRoot "Tools\StakeoutProbe"
+    Deploy-Folder "StakeoutProbe" $source (Get-TocFiles $source)
+}
+
+if (-not $ProbeOnly) { Deploy-Folder "Stakeout" $RepoRoot (Get-TocFiles $RepoRoot) }
+if ($Probe -or $ProbeOnly) { Deploy-Probe }
 
 Write-Host ""
-Write-Host "Done. In game:  /console scriptErrors 1  then  /reload" -ForegroundColor Green
+Write-Host "Done. In game:  /console scriptErrors 1  then  /reload (a brand-new addon folder included)" -ForegroundColor Green
 Write-Host "Check the AddOn list: enabled AND not flagged out of date." -ForegroundColor Green
+if ($Probe -or $ProbeOnly) {
+    Write-Host "The probe: /fp so for its commands, /fp steps for its procedures." -ForegroundColor Green
+}

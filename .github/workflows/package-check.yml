@@ -29,6 +29,8 @@ jobs:
           luac5.1 -p Stakeout.lua $(find Tools -name '*.lua' 2>/dev/null)
 
       - name: Unit tests
+        env:
+          FOREVERPROBE_OPTIONAL: "1"   # ForeverProbe is private and local: the probe tests run locally
         run: |
           for f in tests/test_*.lua; do
             echo "-- $f"
