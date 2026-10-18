@@ -899,9 +899,12 @@ do
         local label, macro, what = v[1], v[2], v[3]
         steps[#steps + 1] = { text = "Variant " .. label .. " (" .. what .. "). Out of combat, press Set.",
             button = "Set", run = function()
+                -- A throw keeps the step (Retry), so a failed Set never leads on to a click with no button
                 local m = state.corpseMob
-                if not m then return false, "no mob read yet: go back to step 1" end
-                return aim(m.name, m.id, "8", macro)
+                if not m then error("no mob read yet: press Back to step 1", 0) end
+                local ok, why = aim(m.name, m.id, "8", macro)
+                if not ok then error(tostring(why) .. ": press Set again once out of combat", 0) end
+                return true
             end }
         steps[#steps + 1] = { text = (label:find("again") and "" or "Clear your target (Escape). ")
                 .. "Left-click the probe button once, then look: did it target the corpse or a live one?",

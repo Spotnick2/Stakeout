@@ -189,7 +189,7 @@ What the quest buttons rely on, measured by `/fp so` (`Tools/StakeoutProbe`), Qu
 | `/fp steps so mulgore` | QuestieDB spawns vs where two NPCs stand, in a zone QuestieDB's Era-to-Forever helper re-projects (P3) | Mulgore |
 
 **Still open:**
-- `corpse`: which unit `/targetexact` picks among corpses and live mobs.
+- Whether `/targetexact` reaches a live hostile with no nameplate (not needed for v1).
 - A turn-in's events (`QUEST_TURNED_IN`) and a kill-credit objective's progress (P6).
 - Combat with the quest pane open (P7). That belongs to the pane's own in-game check, since there's no pane yet.
 
@@ -303,6 +303,32 @@ note: "as expected it targetted the first dead nearby"
   How `/targetexact` picks among several matches (nearest? corpses first?), and whether a macro line can skip a corpse,
   is a follow-up probe (see the plan).
 - Quest mobs aren't always hostile: this crawler is neutral (reaction 4) and attackable.
+
+#### `corpse` (2026-10-17, 1.60.1.70450, Durotar's coast, run #118)
+```
+step 1 (read):  Pygmy Surf Crawler dead true unit C6CF6B3C31, 10 yd from its spawn   <- the corpse beside the player
+A        /cleartarget | /targetexact X                                  -> live 8B55C76A69
+A again  (same)                                                         -> live 8B55C76A69
+B        /cleartarget | /targetexact X | /cleartarget [dead]            -> live 539B5CDDB2
+C        ... | /cleartarget [dead] | /targetexact X                     -> live 539B5CDDB2
+D        /cleartarget | /target X                                       -> live 539B5CDDB2
+E        /targetexact X (no clear)                                      -> live 6EC39268FE
+E again  (same)                                                         -> live 6EC39268FE
+"Did any variant reach a live one while a corpse was closer?"  YES
+```
+- **With a live one in reach, every variant skipped the corpse at the player's feet** (C6CF6B3C31 was never picked).
+  The `hostile` run's corpse was picked when no live one was in reach: the live crawlers had been walked out of
+  nameplate range.
+- **The pick is deterministic:** the same macro twice gives the same unit, and a repeat click without `/cleartarget` (E)
+  doesn't cycle to another one. Which live unit it picks changes as mobs move (A, then B and C, about 12 s apart).
+- `/target` (D) picks like `/targetexact` here.
+- The `plate` flag at the down edge can read false for a unit that has a plate (E: false on down, true on up), so
+  don't trust it in the same frame as the targeting.
+- **Decision for mob buttons:** `/cleartarget`, `/targetexact <name>`, `/cleartarget [dead]`. With only corpses in reach,
+  the click leaves no target instead of a corpse. With a live one in reach it targets the live one, as A does. The
+  right-click adds `/tm !N`, which does nothing without a target. NPC buttons keep A.
+- Still open, and not needed for v1: whether a live hostile **without** a nameplate is reachable at all. Mob buttons are
+  mostly "seen" buttons anyway.
 
 #### `events` (2026-10-17, 1.60.1.70450, run #114)
 ```
