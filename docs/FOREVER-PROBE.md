@@ -189,7 +189,7 @@ What the quest buttons rely on, measured by `/fp so` (`Tools/StakeoutProbe`), Qu
 | `/fp steps so mulgore` | QuestieDB spawns vs where two NPCs stand, in a zone QuestieDB's Era-to-Forever helper re-projects (P3) | Mulgore |
 
 **Still open:**
-- `mulgore` in Mulgore proper. The first run was in Thunder Bluff, which the Era-to-Forever helper doesn't change.
+- `corpse`: which unit `/targetexact` picks among corpses and live mobs.
 - A turn-in's events (`QUEST_TURNED_IN`) and a kill-credit objective's progress (P6).
 - Combat with the quest pane open (P7). That belongs to the pane's own in-game check, since there's no pane yet.
 
@@ -336,4 +336,13 @@ Cairne Bloodhoof (3057):  player at 50.95, 51.16; nearest spawn 97.6 yd at 60.3,
   converted). Naal's spawn is within 9 yd of where he stands.
 - Cairne's FAIL is not a data error: the player had moved about 6 yd since reading Naal, so they targeted Cairne from
   across the bluff. His stored spawn (60.3, 51.7) is on the Elder Rise, where he stands.
-- Mulgore proper (area 215 → 1412), the zone the helper re-projects, is still to measure.
+#### `mulgore`, second run (2026-10-17, 1.60.1.70450, run #151): Bloodhoof Village
+```
+Brave Darksky (3220):     area 215 -> uiMap 1412 (map 6154 x 4102 yd); nearest spawn 57.8 yd as stored; as Era-converted 201.2 yd   FAIL
+Zarlman Two-Moons (3054): player at 46.91, 61.09; nearest spawn 4.5 yd at 46.88, 61.19 as stored; as Era-converted 137.7 yd       PASS
+```
+- **QuestieDB's stored coordinates are already in Forever's frame in Mulgore.** Zarlman stands 4.5 yd from his stored
+  spawn. Running it through `EraToForever` would put him 138 yd off.
+- Brave Darksky is a Bloodhoof guard, 58 yd from his single stored point. Converting makes it 201 yd. Guards patrol, so
+  his miss doesn't change the conclusion.
+- **Rule confirmed: use QuestieDB's coordinates as stored. Never call `EraToForever` on them.** P3 is closed.
