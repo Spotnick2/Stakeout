@@ -4,7 +4,8 @@
 -- in docs/FOREVER-PROBE.md; read AGENTS.md before changing detection or the
 -- secure buttons.
 -------------------------------------------------------------------------------
-local addonName = ...
+local addonName, ns = ...
+ns = ns or {}
 
 Stakeout = Stakeout or {}
 local Stakeout = Stakeout
@@ -215,6 +216,19 @@ local function IsSecret(v)
     return issecretvalue ~= nil and issecretvalue(v) or false
 end
 
+-- Longer than any NPC name, and short enough that one name always fits a
+-- macro line, the "#stakeout" marker line included.
+local NAME_MAX = 100
+
+-- A name that can go into a /targetexact line as it is: a plain string, no
+-- control character (a newline would start a second macro command), and no
+-- longer than NAME_MAX. Names that come from other addons' data pass this
+-- before they reach a button.
+local function MacroSafeName(name)
+    return type(name) == "string" and not IsSecret(name) and name ~= ""
+        and #name <= NAME_MAX and not name:find("%c")
+end
+
 -- Name and GUID of a live NPC unit, or nil when the unit is absent, dead, a
 -- player, or unreadable. Unit identity can be secret on this client, and a
 -- secret throws when it is compared or truth-tested, not only when read - so
@@ -327,10 +341,20 @@ end
 local function BtnOnEnter(self)
     if self:IsForbidden() or not self.npcName then return end
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine(self.npcName, 1, 0.2, 0.2)
-    GameTooltip:AddLine("Left-click: target", 0.7, 0.7, 0.7)
-    if StakeoutDB.enableMarking then
-        GameTooltip:AddLine("Right-click: target and mark (again: clear the mark)", 0.7, 0.7, 0.7)
+    if self.tooltipLines then
+        -- A quest target: its own lines (quest titles, progress, the clicks).
+        if self.friendly then
+            GameTooltip:AddLine(self.npcName, 0.2, 1, 0.2)
+        else
+            GameTooltip:AddLine(self.npcName, 1, 0.2, 0.2)
+        end
+        for _, line in ipairs(self.tooltipLines) do GameTooltip:AddLine(line, 0.7, 0.7, 0.7) end
+    else
+        GameTooltip:AddLine(self.npcName, 1, 0.2, 0.2)
+        GameTooltip:AddLine("Left-click: target", 0.7, 0.7, 0.7)
+        if StakeoutDB.enableMarking then
+            GameTooltip:AddLine("Right-click: target and mark (again: clear the mark)", 0.7, 0.7, 0.7)
+        end
     end
     GameTooltip:Show()
 end
@@ -344,82 +368,172 @@ local BUTTON_SIZE     = 26
 local BUTTON_PAD      = 2
 local HEADER_HEIGHT   = 16
 
-local function RefreshTargetFrame()
-    if not targetFrame or InCombatLockdown() then return end
+-- The watch list shows a button for every detected name.
+local function IsWatchDisplayed(name)
+    return detected[name] ~= nil
+end
 
-    for _, btn in ipairs(targetButtons) do btn:Hide() end
-
+-- What the frame should show, in order: group 1 is the watch list (as it has
+-- always been), then the quest targets Quests.lua asks for, friendlies (group
+-- 2) before enemies (group 3). A quest name the watch list already shows is
+-- left to the watch list; one that isn't shown there yet gets its own button.
+local function DesiredButtons()
+    local list = {}
     local names = {}
     for name in pairs(detected) do tinsert(names, name) end
     table.sort(names)
+    for _, name in ipairs(names) do
+        local entry = { group = 1, name = name, unit = detected[name].unitId,
+                        macrotext = "/cleartarget\n/targetexact " .. name }
+        -- SetRaidTarget is forbidden to addon code here, so the mark is the
+        -- player's click: right-click targets and marks in one press.
+        if StakeoutDB.enableMarking then
+            entry.macrotext2 = fmt("/cleartarget\n/targetexact %s\n/tm %d", name, StakeoutDB.markerIndex)
+        end
+        list[#list + 1] = entry
+    end
 
-    if #names == 0 then
+    local quests = ns.quests
+    local specs = quests and type(quests.ButtonSpecs) == "function" and quests.ButtonSpecs() or nil
+    if type(specs) ~= "table" then return list end
+    local taken = {}
+    for _, group in ipairs({ { row = "friendly", n = 2 }, { row = "enemy", n = 3 } }) do
+        for _, spec in ipairs(specs) do
+            local row = spec.row == "friendly" and "friendly" or "enemy"
+            if row == group.row and MacroSafeName(spec.name) and type(spec.macrotext) == "string"
+                and not taken[spec.name] and not IsWatchDisplayed(spec.name) then
+                taken[spec.name] = true
+                list[#list + 1] = {
+                    group = group.n, name = spec.name, unit = spec.unit, icon = spec.icon,
+                    macrotext = spec.macrotext, macrotext2 = spec.macrotext2,
+                    tooltip = spec.tooltip, friendly = row == "friendly",
+                }
+            end
+        end
+    end
+    return list
+end
+
+-- Everything a layout writes to the protected frame: the order, the groups,
+-- the names and both macros. Portraits and tooltips are not in it.
+local function Signature(list)
+    local parts = {}
+    for i, e in ipairs(list) do
+        parts[i] = table.concat({ e.group, e.name, e.macrotext, e.macrotext2 or "" }, "\31")
+    end
+    return table.concat(parts, "\30")
+end
+
+local function NewButton(i)
+    local btn = CreateFrame("Button", "StakeoutBtn" .. i, targetFrame, "SecureActionButtonTemplate")
+    btn:SetSize(BUTTON_SIZE, BUTTON_SIZE)
+    -- Both edges: the client's secure handler acts on exactly one of
+    -- them (ActionButtonUseKeyDown). Never set "typerelease".
+    btn:RegisterForClicks("AnyUp", "AnyDown")
+    btn:SetAttribute("type", "macro")
+
+    btn.icon = btn:CreateTexture(nil, "BACKGROUND")
+    btn.icon:SetAllPoints(true)
+
+    local ht = btn:CreateTexture(nil, "HIGHLIGHT")
+    ht:SetAllPoints(true)
+    ht:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+    ht:SetBlendMode("ADD")
+
+    btn:SetScript("OnEnter", BtnOnEnter)
+    btn:SetScript("OnLeave", BtnOnLeave)
+
+    tinsert(targetButtons, btn)
+    return btn
+end
+
+-- The secure part: sizes, anchors, attributes, shown and hidden. Every
+-- attribute is written for every button, so one that changes role (a watch
+-- name, then a quest target) keeps nothing from the old one.
+local function ApplyLayout(list)
+    for _, btn in ipairs(targetButtons) do btn:Hide() end
+    if #list == 0 then
         targetFrame:Hide()
         return
     end
 
-    local cols = math.min(#names, BUTTONS_PER_ROW)
-    local rows = math.ceil(#names / BUTTONS_PER_ROW)
+    -- Each group starts a new line, and a line holds BUTTONS_PER_ROW.
+    local spots, line, col, cols, group = {}, -1, BUTTONS_PER_ROW, 0, nil
+    for i, e in ipairs(list) do
+        if e.group ~= group or col == BUTTONS_PER_ROW then
+            line, col, group = line + 1, 0, e.group
+        end
+        spots[i] = { line = line, col = col }
+        col = col + 1
+        cols = math.max(cols, col)
+    end
     local width  = cols * (BUTTON_SIZE + BUTTON_PAD) + BUTTON_PAD + 8
-    local height = HEADER_HEIGHT + rows * (BUTTON_SIZE + BUTTON_PAD) + BUTTON_PAD + 4
+    local height = HEADER_HEIGHT + (line + 1) * (BUTTON_SIZE + BUTTON_PAD) + BUTTON_PAD + 4
     targetFrame:SetSize(math.max(width, 90), height)
 
-    for i, name in ipairs(names) do
-        local btn = targetButtons[i]
-        if not btn then
-            btn = CreateFrame("Button", "StakeoutBtn" .. i, targetFrame, "SecureActionButtonTemplate")
-            btn:SetSize(BUTTON_SIZE, BUTTON_SIZE)
-            -- Both edges: the client's secure handler acts on exactly one of
-            -- them (ActionButtonUseKeyDown). Never set "typerelease".
-            btn:RegisterForClicks("AnyUp", "AnyDown")
-            btn:SetAttribute("type", "macro")
-
-            btn.icon = btn:CreateTexture(nil, "BACKGROUND")
-            btn.icon:SetAllPoints(true)
-
-            local ht = btn:CreateTexture(nil, "HIGHLIGHT")
-            ht:SetAllPoints(true)
-            ht:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
-            ht:SetBlendMode("ADD")
-
-            btn:SetScript("OnEnter", BtnOnEnter)
-            btn:SetScript("OnLeave", BtnOnLeave)
-
-            tinsert(targetButtons, btn)
-        end
-
-        local col = (i - 1) % BUTTONS_PER_ROW
-        local row = math.floor((i - 1) / BUTTONS_PER_ROW)
+    for i, e in ipairs(list) do
+        local btn = targetButtons[i] or NewButton(i)
         btn:ClearAllPoints()
         btn:SetPoint("TOPLEFT", targetFrame, "TOPLEFT",
-            6 + col * (BUTTON_SIZE + BUTTON_PAD),
-            -(HEADER_HEIGHT + 2 + row * (BUTTON_SIZE + BUTTON_PAD)))
-
+            6 + spots[i].col * (BUTTON_SIZE + BUTTON_PAD),
+            -(HEADER_HEIGHT + 2 + spots[i].line * (BUTTON_SIZE + BUTTON_PAD)))
         -- The key mechanic: a secure macro targets the NPC by exact name.
-        btn:SetAttribute("macrotext", "/cleartarget\n/targetexact " .. name)
-        -- SetRaidTarget is forbidden to addon code here, so the mark is the
-        -- player's click: right-click targets and marks in one press.
-        if StakeoutDB.enableMarking then
+        btn:SetAttribute("type", "macro")
+        btn:SetAttribute("macrotext", e.macrotext)
+        if e.macrotext2 then
             btn:SetAttribute("type2", "macro")
-            btn:SetAttribute("macrotext2", fmt("/cleartarget\n/targetexact %s\n/tm %d",
-                name, StakeoutDB.markerIndex))
+            btn:SetAttribute("macrotext2", e.macrotext2)
         else
+            -- No right-click action: the secure handler falls back to "type".
             btn:SetAttribute("type2", nil)
             btn:SetAttribute("macrotext2", nil)
         end
-        btn.npcName = name
-
-        local data = detected[name]
-        if data.unitId and ReadNPC(data.unitId) == name then
-            SetPortraitTexture(btn.icon, data.unitId)
-        else
-            btn.icon:SetTexture(GetButtonIcon())
-        end
-
         btn:Show()
     end
-
     targetFrame:Show()
+end
+
+-- The insecure part, on every refresh: who each button is for, its tooltip
+-- and its picture (the NPC's portrait while a unit token still shows it).
+local function UpdateButtonLooks(list)
+    for i, e in ipairs(list) do
+        local btn = targetButtons[i]
+        btn.npcName = e.name
+        btn.tooltipLines = e.tooltip
+        btn.friendly = e.friendly
+        if e.unit and ReadNPC(e.unit) == e.name then
+            SetPortraitTexture(btn.icon, e.unit)
+        else
+            btn.icon:SetTexture(e.icon or GetButtonIcon())
+        end
+    end
+end
+
+-- The signature of the layout on the frame now: nil until one is applied. A
+-- refresh that wanted a change in combat applies nothing and leaves it alone.
+local lastApplied
+local pendingRefresh = false
+
+local function RenderTargetFrame()
+    local list = DesiredButtons()
+    local signature = Signature(list)
+    if signature ~= lastApplied then
+        ApplyLayout(list)
+        lastApplied = signature
+    end
+    UpdateButtonLooks(list)
+end
+
+-- Every change to the buttons comes through here. The frame is protected, so
+-- in combat this only notes that a refresh is owed; OnCombatEnd refreshes.
+local function RefreshTargetFrame()
+    if not targetFrame then return end
+    if InCombatLockdown() then
+        pendingRefresh = true
+        return
+    end
+    pendingRefresh = false
+    RenderTargetFrame()
 end
 
 -------------------------------------------------------------------------------
@@ -490,6 +604,9 @@ local function CheckUnit(unit, isPlate)
     if name and IsInNPCList(name) then
         Sighted(name, guid, unit, isPlate)
     end
+    -- Quest targets see every unit, watched or not (Quests.lua, when loaded).
+    local quests = ns.quests
+    if quests and quests.OnUnit then quests.OnUnit(unit, isPlate, name, guid) end
 end
 
 -- Everything that counts as presence: the plates, the target, the mouseover.
@@ -541,6 +658,8 @@ local function PlateRemoved(token)
         end
     end
     Sweep()
+    local quests = ns.quests
+    if quests and quests.OnPlateRemoved then quests.OnPlateRemoved(token) end
 end
 
 local function UnitDied(guid)
@@ -571,6 +690,15 @@ local function UnitDied(guid)
         end
     end
     if changed then RefreshTargetFrame() end
+    local quests = ns.quests
+    if quests and quests.OnUnitDied then quests.OnUnitDied(guid) end
+end
+
+-- The 1 s ticker: the watch list's expiry, then the quest targets' own.
+local function Tick()
+    Sweep()
+    local quests = ns.quests
+    if quests and quests.Tick then quests.Tick() end
 end
 
 local function ForgetNPC(name)
@@ -613,9 +741,6 @@ end
 -------------------------------------------------------------------------------
 local MACRO_LINE_MAX = 255
 local EXPORT_PREFIX  = "/stakeout add "
--- Longer than any NPC name, and short enough that one name always fits a
--- macro line, the "#stakeout" marker line included.
-local NAME_MAX = 100
 
 -- The first `bytes` bytes of a UTF-8 string, never cutting a character.
 local function Clip(text, bytes)
@@ -1555,7 +1680,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         RegisterEvents(self, "PLAYER_LOGIN", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
             "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
             "UPDATE_MOUSEOVER_UNIT", "UNIT_NAME_UPDATE", "UNIT_DIED", "UPDATE_MACROS")
-        C_Timer.NewTicker(1, Sweep)
+        C_Timer.NewTicker(1, Tick)
 
         Rescan()
 
@@ -1669,6 +1794,18 @@ SlashCmdList["STAKEOUT"] = function(input)
 end
 
 -------------------------------------------------------------------------------
+-- What Quests.lua uses from the core. It loads after this file and shares the
+-- addon's namespace; the core looks ns.quests up only when it needs it.
+-------------------------------------------------------------------------------
+ns.core = {
+    Print = Print, IsSecret = IsSecret, ReadNPC = ReadNPC, RegisterEvents = RegisterEvents,
+    SetConfig = SetConfig, RequestFrameRefresh = RefreshTargetFrame, Rescan = Rescan,
+    MacroSafeName = MacroSafeName, NAME_MAX = NAME_MAX, IsWatchDisplayed = IsWatchDisplayed,
+    IsRefreshPending = function() return pendingRefresh end,
+    BUTTON_ICONS = BUTTON_ICONS, MARKER_ICONS = MARKER_ICONS, MARKER_NAMES = MARKER_NAMES,
+}
+
+-------------------------------------------------------------------------------
 -- Test seam (tests/). Harmless in game.
 -------------------------------------------------------------------------------
 Stakeout._test = {
@@ -1684,4 +1821,7 @@ Stakeout._test = {
     buttons = targetButtons, frame = function() return targetFrame end,
     settingsLoaded = function() return settingsLoaded end,
     LINGER = LINGER, MEASURED_ON_BUILD = MEASURED_ON_BUILD,
+    Tick = Tick, MacroSafeName = MacroSafeName, ResetDetections = ResetDetections,
+    lastApplied = function() return lastApplied end,
+    pendingRefresh = function() return pendingRefresh end,
 }

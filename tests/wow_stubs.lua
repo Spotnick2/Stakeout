@@ -409,17 +409,33 @@ function WoW.strictGlobals()
     })
 end
 
--- Load Stakeout the way the client does: run the file with the addon name as
--- `...`, then (optionally) hand it saved variables and fire ADDON_LOADED and
--- PLAYER_LOGIN. Returns the test seam.
+-- The Lua files Stakeout.toc loads, in order.
+function WoW.tocLuaFiles()
+    local f = assert(io.open("Stakeout.toc", "rb"), "Stakeout.toc not found - run from the repo root")
+    local files = {}
+    for line in f:read("*a"):gmatch("[^\r\n]+") do
+        local file = line:match("^%s*([^#%s].-%.lua)%s*$")
+        if file then files[#files + 1] = (file:gsub("\\", "/")) end
+    end
+    f:close()
+    return files
+end
+
+-- Load Stakeout the way the client does: run each file the TOC lists with
+-- the addon name and one shared namespace table as `...`, then (optionally)
+-- hand it saved variables and fire ADDON_LOADED and PLAYER_LOGIN. Returns the
+-- test seam and the namespace (WoW.ns too).
 function WoW.loadAddon(opts)
     opts = opts or {}
-    local chunk = assert(loadfile("Stakeout.lua"))
-    chunk("Stakeout")
+    local ns = opts.ns or {}
+    WoW.ns = ns
+    for _, file in ipairs(WoW.tocLuaFiles()) do
+        assert(loadfile(file))("Stakeout", ns)
+    end
     if opts.savedDB then StakeoutDB = opts.savedDB end
     WoW.fire("ADDON_LOADED", "Stakeout")
     if opts.login ~= false then WoW.fire("PLAYER_LOGIN") end
-    return Stakeout._test
+    return Stakeout._test, ns
 end
 
 WoW.reset()
