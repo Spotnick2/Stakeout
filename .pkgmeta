@@ -6,7 +6,8 @@ manual-changelog:
   markup-type: markdown
 
 # The glass look (#28). Pinned to a tag, never `tag: latest`; bumped only in a
-# release made anyway. r9+ is needed (Glass.Reflect). CI and deploy.ps1 read
+# release made anyway. r11+ is needed: Glass.Reflect (r9), and Pearl, the material
+# Glass UI answers (#36). CI and deploy.ps1 read
 # the pin from here, so it is written once.
 #
 # No comment on a value line: the packager's YAML reader keeps it as part of
@@ -14,7 +15,7 @@ manual-changelog:
 externals:
   Libs/LibGlass-1.0:
     url: https://github.com/Spotnick2/LibGlass
-    tag: r10
+    tag: r11
 
 # Every pattern matches the WHOLE path from the package root, so the top-level
 # names never reach inside Libs/.
