@@ -1390,7 +1390,7 @@ local function CreateConfigFrame()
     optHeader:SetText("Detection")
 
     sectionY = sectionY - 4
-    MakeCheckbox(f, 10, sectionY - 20, "Raise nameplate range  |cff888888(nameplates find NPCs)|r",
+    MakeCheckbox(f, 10, sectionY - 14, "Raise nameplate range  |cff888888(nameplates find NPCs)|r",
         "maxNameplateDist", function(v)
             if v then ApplyNameplateDistance() end
         end)
@@ -1405,10 +1405,10 @@ local function CreateConfigFrame()
     alertHeader:SetText("Alerts")
 
     sectionY = sectionY - 4
-    MakeCheckbox(f, 10, sectionY - 20, "Flash taskbar on detection", "flashOnFind")
-    MakeCheckbox(f, 10, sectionY - 44, "Play sound on detection", "soundOnFind")
+    MakeCheckbox(f, 10, sectionY - 14, "Flash taskbar on detection", "flashOnFind")
+    MakeCheckbox(f, 10, sectionY - 38, "Play sound on detection", "soundOnFind")
 
-    sectionY = sectionY - 68
+    sectionY = sectionY - 72
     local soundLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     soundLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY)
     soundLabel:SetText("Sound:")
@@ -1451,10 +1451,10 @@ local function CreateConfigFrame()
     markHeader:SetText("Raid Marking")
 
     sectionY = sectionY - 4
-    MakeCheckbox(f, 10, sectionY - 20, "Right-click a button to target and mark",
+    MakeCheckbox(f, 10, sectionY - 14, "Right-click a button to target and mark",
         "enableMarking", function() RefreshTargetFrame() end)
 
-    sectionY = sectionY - 46
+    sectionY = sectionY - 50
     local markerLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     markerLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY)
     markerLabel:SetText("Marker:")
@@ -1508,9 +1508,9 @@ local function CreateConfigFrame()
     frameHeader:SetText("Target Frame")
 
     sectionY = sectionY - 4
-    MakeCheckbox(f, 10, sectionY - 20, "Lock frame position  |cff888888(Alt+drag overrides)|r", "lockFrame")
+    MakeCheckbox(f, 10, sectionY - 14, "Lock frame position  |cff888888(Alt+drag overrides)|r", "lockFrame")
 
-    sectionY = sectionY - 46
+    sectionY = sectionY - 50
     local iconLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     iconLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY)
     iconLabel:SetText("Button icon:")
