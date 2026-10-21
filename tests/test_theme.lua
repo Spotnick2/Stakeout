@@ -202,7 +202,7 @@ H.eq(T.buttons[2]:GetAttribute("macrotext"), "/cleartarget\n/targetexact Rare Mo
 -- add box a control.
 local cg = StakeoutConfigFrame.glass
 H.eq(cg.size, "thin", "the config window: the large shell")
-H.eq(cg.reflect.header.height, 26, "lit down to where the watch list starts")
+H.eq(cg.reflect.header.height, 40, "lit down to the rule under its title")
 H.eq(StakeoutConfigFrame.backdrop, nil, "no backdrop under the glass")
 H.eq(StakeoutAddBox.glass and StakeoutAddBox.glass.size, "thin_small", "the add box is a glass control")
 H.eq(color(StakeoutAddBox.glass.tint), rgba(CONTROL.tint), "with the control's tint")

@@ -388,7 +388,8 @@ Note: "a lot of items seems overlapping the next row on the window, seems there 
 - **The overlap is the config window's layout, in both looks** (#32): each checkbox's art ran into the row below it
   ("Play sound" into "Sound:", the marking checkbox into "Marker:", "Lock frame position" into "Button icon:"), and
   sat far below its section title. Measured off the screenshots, `UICheckButtonTemplate`'s art is about 21 of its
-  32 px, 4 px down from the frame's top. The rows are spaced by that now.
+  32 px, 4 px down from the frame's top. The window was then rebuilt in two columns (#34), its checkboxes drawn at 26 px
+  (art about 17 of them) on rows 30 px apart, 44 with a line under the label.
 - The run's copy predates #31, and the probe opens the export window behind the config window, so the export's
   reading pane over the glass wasn't judged.
 - The auto steps' screenshots were taken before the windows they open had drawn: they show the scene only. The
