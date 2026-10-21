@@ -64,6 +64,8 @@ NPC names must match exactly, spaces included (`/stakeout add Captain Flat Tusk`
 - **Target frame:** lock the position (Alt+drag still moves it), the button icon, and the scale.
 - **Look:** WoW Forever (the default) or Glass, a smoked glass look shared with other glass addons. It
   applies to every Stakeout window after a `/reload`.
+- **Glass UI:** with Glass UI loaded, Stakeout wears its look (its glass,
+  tint and accent) by default. Untick *Use Glass UI appearance* to use your own look instead (after a `/reload`).
 
 ## What changed from the TBC version
 
