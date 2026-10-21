@@ -5,10 +5,24 @@ manual-changelog:
   filename: CHANGELOG.md
   markup-type: markdown
 
+# The glass look (#28). Pinned to a tag, never `tag: latest`; bumped only in a
+# release made anyway. r9+ is needed (Glass.Reflect). CI and deploy.ps1 read
+# the pin from here, so it is written once.
+#
+# No comment on a value line: the packager's YAML reader keeps it as part of
+# the value.
+externals:
+  Libs/LibGlass-1.0:
+    url: https://github.com/Spotnick2/LibGlass
+    tag: r10
+
+# Every pattern matches the WHOLE path from the package root, so the top-level
+# names never reach inside Libs/.
 ignore:
   - .github
   - .claude
   - .gitignore
+  - .gitattributes
   - AGENTS.md
   - CLAUDE.md
   - README.md
@@ -17,3 +31,12 @@ ignore:
   - docs
   - tests
   - Tools
+  # CurseForge's packager doesn't apply the library's own .pkgmeta ignores
+  # (measured in Priestly's published zip), so they are named here. CI asserts
+  # what the zip holds under Libs/LibGlass-1.0/; its LICENSE ships (MIT).
+  - Libs/LibGlass-1.0/tests
+  - Libs/LibGlass-1.0/docs
+  - Libs/LibGlass-1.0/Tools
+  - Libs/LibGlass-1.0/AGENTS.md
+  - Libs/LibGlass-1.0/CLAUDE.md
+  - Libs/LibGlass-1.0/README.md

@@ -109,6 +109,7 @@ local function newWidget(kind, name, parent, template)
         kind = kind, name = name, parent = parent, template = template,
         shown = true, scripts = {}, attrs = {}, points = {}, children = {},
         scale = 1, _text = "", checked = false, value = 0, width = 100, height = 20,
+        level = parent and (parent.level or 0) + 1 or 0, alpha = 1, masks = {},
     }, Widget)
     if name then _G[name] = w end
     WoW.frames[#WoW.frames + 1] = w
@@ -158,7 +159,7 @@ function Widget:SetShown(v) if v then self:Show() else self:Hide() end end
 function Widget:SetScale(s) guardProtected(self, "SetScale") self.scale = s end
 function Widget:SetClampedToScreen() end
 function Widget:SetMovable() end
-function Widget:EnableMouse() end
+function Widget:EnableMouse(v) self.mouse = v end
 function Widget:SetFrameStrata() end
 function Widget:SetToplevel() end
 function Widget:StartMoving() guardProtected(self, "StartMoving") self.moving = true end
@@ -167,11 +168,16 @@ function Widget:RegisterForDrag() end
 function Widget:SetScript(name, fn) self.scripts[name] = fn end
 function Widget:GetName() return self.name end
 function Widget:IsForbidden() return false end
-function Widget:SetBackdrop() end
+function Widget:SetBackdrop(b) self.backdrop = b end
 function Widget:SetBackdropColor() end
 function Widget:SetBackdropBorderColor() end
 function Widget:CreateFontString() local c = newWidget("FontString") self.children[#self.children + 1] = c return c end
-function Widget:CreateTexture() local c = newWidget("Texture") self.children[#self.children + 1] = c return c end
+function Widget:CreateTexture(_, layer, _, sublevel)
+    local c = newWidget("Texture")
+    c.owner, c.layer, c.sublevel = self, layer, sublevel
+    self.children[#self.children + 1] = c
+    return c
+end
 function Widget:SetScrollChild(child) self.scrollChild = child end
 -- Events: unknown names throw, refused ones return false (both measured).
 function Widget:RegisterEvent(event)
@@ -196,7 +202,7 @@ function Widget:SetFontObject() end
 function Widget:SetJustifyH() end
 function Widget:SetWordWrap() end
 function Widget:SetTexture(t) self.texture = t end
-function Widget:SetColorTexture() end
+function Widget:SetColorTexture(r, g, b, a) self.color = { r, g, b, a } end
 function Widget:SetBlendMode() end
 function Widget:SetChecked(v) self.checked = v and true or false end
 function Widget:GetChecked() return self.checked end
@@ -234,6 +240,34 @@ function Widget:HookScript(name, fn)
     self.hooks[name] = fn
     return true
 end
+-- What LibGlass-1.0 calls building the glass look (Theme.lua); each is a
+-- widget method in forever-api-1.60.1.70450.md (Frame:CreateMaskTexture,
+-- Texture:AddMaskTexture, Texture/MaskTexture:SetTextureSliceMargins and
+-- SetTextureSliceMode, Texture:SetGradient, SetHorizTile, SetVertTile,
+-- SetAlpha, GetAlpha, SetVertexColor, Frame:GetFrameLevel, GetParent, GetHeight).
+function Widget:GetFrameLevel() return self.level end
+function Widget:GetParent() return self.parent end
+function Widget:GetHeight() return self.height end
+function Widget:SetAlpha(a) self.alpha = a end
+function Widget:GetAlpha() return self.alpha end
+function Widget:CreateMaskTexture()
+    local m = newWidget("MaskTexture")
+    m.owner = self
+    self.children[#self.children + 1] = m
+    return m
+end
+function Widget:AddMaskTexture(m)
+    -- Measured rule (LibGlass docs/GLASS-MATERIAL.md): a mask only clips the
+    -- textures of the frame that made it, so a wrong owner draws unclipped.
+    assert(m.kind == "MaskTexture", "AddMaskTexture takes a mask texture")
+    self.masks[#self.masks + 1] = m
+end
+function Widget:SetTextureSliceMargins(...) self.slice = { ... } end
+function Widget:SetTextureSliceMode(mode) self.sliceMode = mode end
+function Widget:SetGradient(orientation, from, to) self.gradient = { orientation, from, to } end
+function Widget:SetHorizTile() end
+function Widget:SetVertTile() end
+function Widget:SetVertexColor() end
 
 function CreateFrame(kind, name, parent, template)
     local w = newWidget(kind, name, parent, template)
@@ -259,6 +293,12 @@ function UIDropDownMenu_AddButton(info) WoW.dropdownItems[#WoW.dropdownItems + 1
 WoW.dropdownItems = {}
 
 SlashCmdList = {}
+
+-- For LibGlass-1.0 and its LibStub: CreateColor and strmatch are in the dump,
+-- and so is Enum.UITextureSliceMode (SetTextureSliceMode's argument type).
+function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
+strmatch = string.match
+Enum = { UITextureSliceMode = { Stretched = 0, Tiled = 1 } }
 
 ------------------------------------------------------------
 -- Game state
@@ -394,6 +434,8 @@ local KNOWN_ABSENT = {
     GetAddOnMetadata = true, SetRaidTarget = true, TargetUnit = true,
     -- The addon's own globals, nil until it creates them / SavedVariables load.
     Stakeout = true, StakeoutDB = true,
+    -- Nil until the embedded library's LibStub.lua runs (it checks for a copy).
+    LibStub = true,
 }
 
 function WoW.allowGlobal(name) KNOWN_ABSENT[name] = true end
@@ -421,16 +463,51 @@ function WoW.tocLuaFiles()
     return files
 end
 
+-- The embedded LibGlass-1.0. Libs/ is filled by the packager (.pkgmeta
+-- externals) and gitignored, so the tests read the library from a checkout:
+-- $LIBGLASS (CI fetches the pinned tag there), else ../LibGlass. A missing
+-- checkout fails loudly: a silently skipped library would test nothing.
+WoW.LIBGLASS_XML = "Libs\\LibGlass-1.0\\LibGlass-1.0.xml"
+
+function WoW.libGlassScripts()
+    local root = (os.getenv("LIBGLASS") or "../LibGlass"):gsub("\\", "/"):gsub("/$", "")
+    local f = io.open(root .. "/LibGlass-1.0.xml", "rb")
+    if not f then
+        error("LibGlass checkout not found at " .. root .. " (no LibGlass-1.0.xml): clone "
+              .. "github.com/Spotnick2/LibGlass there or set LIBGLASS", 0)
+    end
+    local xml = f:read("*a"):gsub("<!%-%-.-%-%->", "")   -- listed in a comment is not loaded
+    f:close()
+    local files = {}
+    for file in xml:gmatch('<Script%s+file="([^"]+)"') do
+        files[#files + 1] = root .. "/" .. file:gsub("\\", "/")
+    end
+    assert(#files > 0, "LibGlass-1.0.xml at " .. root .. " lists no Script files")
+    return files
+end
+
 -- Load Stakeout the way the client does: run each file the TOC lists with
--- the addon name and one shared namespace table as `...`, then (optionally)
--- hand it saved variables and fire ADDON_LOADED and PLAYER_LOGIN. Returns the
--- test seam and the namespace (WoW.ns too).
+-- the addon name and one shared namespace table as `...` (the library's XML
+-- runs its own scripts, each with its own), then (optionally) hand it saved
+-- variables and fire ADDON_LOADED and PLAYER_LOGIN. Returns the test seam and
+-- the namespace (WoW.ns too). `noLibrary` loads the addon without LibGlass.
 function WoW.loadAddon(opts)
     opts = opts or {}
     local ns = opts.ns or {}
     WoW.ns = ns
-    for _, file in ipairs(WoW.tocLuaFiles()) do
-        assert(loadfile(file))("Stakeout", ns)
+    local f = assert(io.open("Stakeout.toc", "rb"))
+    local toc = f:read("*a")
+    f:close()
+    for line in toc:gmatch("[^\r\n]+") do
+        local file = line:match("^%s*([^#%s].-)%s*$")
+        if file == WoW.LIBGLASS_XML then
+            if not opts.noLibrary then
+                for _, path in ipairs(WoW.libGlassScripts()) do assert(loadfile(path))("Stakeout", {}) end
+            end
+        elseif file then
+            assert(file:match("%.lua$"), "the TOC loads " .. file .. ", which this loader doesn't know")
+            assert(loadfile((file:gsub("\\", "/"))))("Stakeout", ns)
+        end
     end
     if opts.savedDB then StakeoutDB = opts.savedDB end
     WoW.fire("ADDON_LOADED", "Stakeout")

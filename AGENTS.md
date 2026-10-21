@@ -13,9 +13,9 @@ Repository-specific additions:
 - Post every pull-request review and follow-up review on the PR, then link the posted review in the
   final response.
 - Match `MEASURED_ON_BUILD` in `Stakeout.lua` to
-  `C:/Projects/WoW/References/forever-api-<version>.<build>.md`. Runtime measurements live in
+  `C:/Projects/WoW/References/Forever/api/forever-api-<version>.<build>.md`. Runtime measurements live in
   `docs/FOREVER-PROBE.md`; addon-agnostic Forever findings live in
-  `C:/Projects/WoW/References/PORTING-TBC-TO-FOREVER.md`.
+  `C:/Projects/WoW/References/Docs/PORTING-TBC-TO-FOREVER.md`.
 - For an adversarial second opinion on a plan or a risky diff, use `/codex-consult`
   (`.claude/skills/codex-consult`).
 
@@ -30,7 +30,7 @@ downloadable on CurseForge, and the code is archived on the `tbc-anniversary` br
 Don't add flavor branching for it.
 
 Forever is *Vanilla content running on Blizzard's Retail (Mainline) codebase*: content assumptions
-are Vanilla, API assumptions are Retail. Read `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`
+are Vanilla, API assumptions are Retail. Read `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`
 before touching an unfamiliar API.
 
 What the port (#4) removed, because the client forbids it: proximity scanning, addon-placed raid marks,
@@ -38,9 +38,14 @@ and the combat log. See below. Don't reintroduce them.
 
 ## Repository Layout
 
-- `Stakeout.toc`: manifest (interface, SavedVariables, load order).
-- `Stakeout.lua`: the whole addon, in labelled sections (defaults and settings, target frame,
-  detection, config GUI, events, slash commands). It stays a single file.
+- `Stakeout.toc`: manifest (interface, SavedVariables, load order): the embedded LibGlass-1.0, then
+  `Theme.lua`, then `Stakeout.lua`.
+- `Theme.lua`: the windows' look (#28). WoW Forever (the backdrops, the default) or LibGlass's reflective
+  glass (`C:/Projects/WoW/References/Docs/LIBGLASS-WINDOW-STYLING.md`), fixed once a session from
+  `StakeoutDB.theme`, so a new choice applies after a `/reload`. Every LibGlass call is here. Its helpers
+  return false under WoW Forever and the caller paints its own backdrop, unchanged.
+- `Stakeout.lua`: the addon's core, in labelled sections (defaults and settings, target frame,
+  detection, config GUI, events, slash commands).
 - `tests/`: Lua 5.1 unit tests, no game client. `pwsh tests/run.ps1`.
 - `Tools/deploy.ps1`: deploys to the local Forever AddOns folder (`-Probe` / `-ProbeOnly` add the probe).
 - `Tools/StakeoutProbe/`: the in-game probe, a ForeverProbe module (`/fp so`, never packaged). It measures what quest
@@ -50,7 +55,15 @@ and the combat log. See below. Don't reintroduce them.
 - `.github/workflows/package-check.yml`: syntax check, tests, and a dry-run package on every PR.
 - `.pkgmeta`, `README.md`, `CHANGELOG.md`: packaging and user-facing material.
 
-No dependencies, no libraries, no build step.
+One embedded library, no build step. LibGlass-1.0 comes in through `.pkgmeta` externals, pinned to a tag
+(r9 or later: `Glass.Reflect`). `Libs/` is gitignored; the tests and `Tools/deploy.ps1` read the library
+from a checkout (`$LIBGLASS`, else `..\LibGlass`), and CI fetches the pinned tag (`tests/fetch_libglass.sh`)
+and checks the zip holds exactly the addon and the library's shipped files. Bump the pin only in a release
+made anyway.
+
+The glass on the target frame is textures and plain child frames that never take the mouse, built out of
+combat (the frame's at `ADDON_LOADED`, a button's when `ApplyLayout` makes it) and never re-anchored,
+re-levelled or resized afterwards. Keep it that way: the frame is protected once it has a secure button.
 
 ## What the Client Allows (measured, build 1.60.1.70450)
 
@@ -84,7 +97,7 @@ so act on it then. Bump `MEASURED_ON_BUILD` after re-measuring.
 
 - Target the **Retail/Mainline** API. Keep `## Interface: 16001`. The format is `%d%02d%02d`;
   `11601` is a transposed-digit bug you'll see in the wild.
-- Evidence for what exists is the build-matched `C:/Projects/WoW/References/forever-api-<version>.<build>.md`, or `/api search <name>` in game.
+- Evidence for what exists is the build-matched `C:/Projects/WoW/References/Forever/api/forever-api-<version>.<build>.md`, or `/api search <name>` in game.
   Evidence for how something *behaves* is `docs/FOREVER-PROBE.md`. The dump lists things that are nil at runtime
   (`C_CombatLogInternal.GetCurrentEventInfo`).
 - **Unit names and GUIDs may be secret values.** A secret throws when it's compared or truth-tested, not only

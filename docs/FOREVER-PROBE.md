@@ -1,7 +1,7 @@
 # Forever probe: what Stakeout depends on
 
 Measured behaviour on the live client, for the port (#4) and the macro fallback (#5). Addon-agnostic
-findings also go into `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`.
+findings also go into `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`.
 
 Build under test: **1.60.1.70450** (first measured on 1.60.1.69977, re-tested in game on 70338, and Stakeout's own
 buttons re-checked on 70450 by `/fp steps so core`, §12). On any later build (`GetBuildInfo()`), regenerate the API dump and
