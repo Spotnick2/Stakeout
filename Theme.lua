@@ -110,11 +110,12 @@ end
 
 -- A reading region under a list or text: one plain masked texture on `host`,
 -- over `area` (default: host) grown by `outset` px. It follows the window,
--- never the number of rows.
+-- never the number of rows. BACKGROUND 0: over a shell on the same frame
+-- (the library's layers stop at -3), under the text.
 function Theme.Reading(host, area, outset)
     if active ~= "glass" then return false end
     area, outset = area or host, outset or 0
-    local pane = host:CreateTexture(nil, "BACKGROUND", nil, -7)
+    local pane = host:CreateTexture(nil, "BACKGROUND", nil, 0)
     pane:SetPoint("TOPLEFT", area, "TOPLEFT", -outset, outset)
     pane:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", outset, -outset)
     pane:SetColorTexture(unpack(READING))
