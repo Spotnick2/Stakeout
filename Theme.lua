@@ -3,7 +3,7 @@
 --
 -- Two looks: "forever", the WoW Forever backdrops Stakeout always had (the
 -- default), and "glass", LibGlass-1.0's reflective shell as GlassRaidFrames
--- and AltStable draw it (C:\Projects\WoW\References\LIBGLASS-WINDOW-STYLING.md).
+-- and AltStable draw it (C:\Projects\WoW\References\Docs\LIBGLASS-WINDOW-STYLING.md).
 --
 -- The look is fixed once a session (Init, from the saved choice) and built
 -- into each window as it is made, so a new choice applies after a /reload.

@@ -13,9 +13,9 @@ Repository-specific additions:
 - Post every pull-request review and follow-up review on the PR, then link the posted review in the
   final response.
 - Match `MEASURED_ON_BUILD` in `Stakeout.lua` to
-  `C:/Projects/WoW/References/forever-api-<version>.<build>.md`. Runtime measurements live in
+  `C:/Projects/WoW/References/Forever/api/forever-api-<version>.<build>.md`. Runtime measurements live in
   `docs/FOREVER-PROBE.md`; addon-agnostic Forever findings live in
-  `C:/Projects/WoW/References/PORTING-TBC-TO-FOREVER.md`.
+  `C:/Projects/WoW/References/Docs/PORTING-TBC-TO-FOREVER.md`.
 - For an adversarial second opinion on a plan or a risky diff, use `/codex-consult`
   (`.claude/skills/codex-consult`).
 
@@ -30,7 +30,7 @@ downloadable on CurseForge, and the code is archived on the `tbc-anniversary` br
 Don't add flavor branching for it.
 
 Forever is *Vanilla content running on Blizzard's Retail (Mainline) codebase*: content assumptions
-are Vanilla, API assumptions are Retail. Read `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`
+are Vanilla, API assumptions are Retail. Read `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`
 before touching an unfamiliar API.
 
 What the port (#4) removed, because the client forbids it: proximity scanning, addon-placed raid marks,
@@ -41,7 +41,7 @@ and the combat log. See below. Don't reintroduce them.
 - `Stakeout.toc`: manifest (interface, SavedVariables, load order): the embedded LibGlass-1.0, then
   `Theme.lua`, then `Stakeout.lua`.
 - `Theme.lua`: the windows' look (#28). WoW Forever (the backdrops, the default) or LibGlass's reflective
-  glass (`C:/Projects/WoW/References/LIBGLASS-WINDOW-STYLING.md`), fixed once a session from
+  glass (`C:/Projects/WoW/References/Docs/LIBGLASS-WINDOW-STYLING.md`), fixed once a session from
   `StakeoutDB.theme`, so a new choice applies after a `/reload`. Every LibGlass call is here. Its helpers
   return false under WoW Forever and the caller paints its own backdrop, unchanged.
 - `Stakeout.lua`: the addon's core, in labelled sections (defaults and settings, target frame,
@@ -97,7 +97,7 @@ so act on it then. Bump `MEASURED_ON_BUILD` after re-measuring.
 
 - Target the **Retail/Mainline** API. Keep `## Interface: 16001`. The format is `%d%02d%02d`;
   `11601` is a transposed-digit bug you'll see in the wild.
-- Evidence for what exists is the build-matched `C:/Projects/WoW/References/forever-api-<version>.<build>.md`, or `/api search <name>` in game.
+- Evidence for what exists is the build-matched `C:/Projects/WoW/References/Forever/api/forever-api-<version>.<build>.md`, or `/api search <name>` in game.
   Evidence for how something *behaves* is `docs/FOREVER-PROBE.md`. The dump lists things that are nil at runtime
   (`C_CombatLogInternal.GetCurrentEventInfo`).
 - **Unit names and GUIDs may be secret values.** A secret throws when it's compared or truth-tested, not only
