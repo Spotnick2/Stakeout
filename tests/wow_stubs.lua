@@ -49,6 +49,7 @@ function WoW.reset()
     WoW.macros       = {}   -- character macros: { name, icon, body }, index = 120 + position
     WoW.accountMacros = {}  -- account macros, index = position (1..120)
     WoW.macroSlots   = 18   -- character slots; CreateMacro fails beyond this
+    WoW.playerClass  = "WARRIOR"   -- UnitClass("player")'s file name; nil: not readable yet
 end
 
 -- A macro as the client would hold it (for tests that start with one).
@@ -142,6 +143,7 @@ local function guardProtected(w, what)
 end
 
 function Widget:SetSize(wd, h) guardProtected(self, "SetSize") self.width, self.height = wd, h end
+function Widget:GetSize() return self.width, self.height end
 function Widget:SetWidth(wd) self.width = wd end
 function Widget:SetHeight(h) self.height = h end
 function Widget:GetWidth() return self.width end
@@ -199,6 +201,7 @@ function Widget:RegisterForClicks(...) guardProtected(self, "RegisterForClicks")
 function Widget:SetText(t) self._text = t end
 function Widget:GetText() return self._text end
 function Widget:SetFontObject() end
+function Widget:SetTextColor(r, g, b, a) self.textColor = { r, g, b, a } end
 function Widget:SetJustifyH() end
 function Widget:SetWordWrap() end
 function Widget:SetTexture(t) self.texture = t end
@@ -346,6 +349,15 @@ end
 function UnitIsDead(token) local u = unit(token) return u and u.dead or false end
 function UnitIsPlayer(token) local u = unit(token) return u and u.player or false end
 function UnitPlayerControlled(token) local u = unit(token) return u and (u.player or u.controlled) or false end
+function UnitClass(token)
+    if token == "player" and WoW.playerClass then return "Warrior", WoW.playerClass, 1 end
+    return nil
+end
+
+C_ClassColor = {}
+function C_ClassColor.GetClassColor(class)
+    if class == "WARRIOR" then return { r = 0.78, g = 0.61, b = 0.43 } end
+end
 
 ------------------------------------------------------------
 -- Macros. Measured on 69977 (docs/FOREVER-PROBE.md, 10): character macros

@@ -54,6 +54,10 @@ H.eq(H.directive("X-Curse-Project-ID"), "1508654",
 -- SavedVariables never load back on this client (docs/FOREVER-PROBE.md, 11),
 -- per-character included. The directive stays: it is where settings will be
 -- read from once Blizzard fixes the loader.
+-- Glass UI loads first when it is enabled, so Stakeout can follow it at its own
+-- ADDON_LOADED (GlassUI docs/SUITE.md); without it, Stakeout loads as before.
+H.eq(H.directive("OptionalDeps"), "GlassUI", "Glass UI, optionally, before Stakeout")
+
 H.eq(H.directive("SavedVariablesPerCharacter"), "StakeoutDB",
     "settings are per character")
 

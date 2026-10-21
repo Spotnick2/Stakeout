@@ -57,6 +57,7 @@ local defaults = {
     frameScale       = 1.0,
     lockFrame        = false,
     theme            = "forever",  -- the windows' look, "forever" or "glass" (Theme.lua; after a /reload)
+    followGlassUI    = true,    -- with Glass UI loaded, wear its look (Theme.lua; after a /reload)
 }
 
 -- Whether this session's settings came back from disk. svLoadCheck is written
@@ -1091,6 +1092,7 @@ local function ShowExport()
         end
         local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         title:SetPoint("TOPLEFT", 14, -12)
+        Theme.Accent(title)
         title:SetText("Stakeout watch list - one macro per line (each fits 255 characters)")
         local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
         close:SetPoint("TOPRIGHT", 2, 2)
@@ -1186,7 +1188,9 @@ end
 -- one they were built in until a /reload.
 local function ChooseLook(look)
     SetConfig("theme", look)
-    if look == Theme.Active() then
+    if Theme.Following() then
+        Print("Look: %s, kept for when Stakeout doesn't follow Glass UI.", Theme.LABELS[look])
+    elseif look == Theme.Active() then
         Print("Look: %s (the one in use).", Theme.LABELS[look])
     else
         Print("Look: %s. Type |cff00ff00/reload|r to apply it.", Theme.LABELS[look])
@@ -1213,6 +1217,7 @@ local function SectionTitle(parent, x, y, text)
     local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     fs:SetText(text)
+    Theme.Accent(fs)
     return fs
 end
 
@@ -1319,7 +1324,10 @@ local function CreateConfigFrame()
     local f = CreateFrame("Frame", "StakeoutConfigFrame", UIParent, "BackdropTemplate")
     configFrame = f
 
-    f:SetSize(CFG_W, CFG_H)
+    -- The Glass UI switch only means something with Glass UI loaded.
+    local suiteRow = Theme.SuiteAvailable()
+    local height = CFG_H + (suiteRow and 44 or 0)
+    f:SetSize(CFG_W, height)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetMovable(true)
     f:EnableMouse(true)
@@ -1403,7 +1411,7 @@ local function CreateConfigFrame()
     hint:SetText("Separate multiple names with semicolons.")
 
     -- From the bottom up: the macro checkbox and its line, then the buttons.
-    local macroY = -(CFG_H - 16 - 40)
+    local macroY = -(height - 16 - 40)
     local buttonsY = macroY + 36
 
     -- The list fills the space between the hint and the buttons.
@@ -1608,7 +1616,11 @@ local function CreateConfigFrame()
     local function ShowLook()
         local chosen = StoredLook()
         UIDropDownMenu_SetText(lookDropdown, Theme.LABELS[chosen])
-        lookNote:SetText(chosen ~= Theme.Active() and "/reload to apply" or "")
+        if Theme.Following() then
+            lookNote:SetText("Glass UI's in use")
+        else
+            lookNote:SetText(chosen ~= Theme.Active() and "/reload to apply" or "")
+        end
     end
 
     UIDropDownMenu_Initialize(lookDropdown, function()
@@ -1625,6 +1637,14 @@ local function CreateConfigFrame()
         end
     end)
     ShowLook()
+
+    if suiteRow then
+        y = y - 34
+        local follow = MakeCheckbox(f, x, y, "Use Glass UI appearance", "followGlassUI", function(on)
+            Print("%s Glass UI's look after a |cff00ff00/reload|r.", on and "Stakeout will wear" or "Stakeout won't wear")
+        end, "Its glass, tint and accent; off, the look above.")
+        f.followCheck = follow
+    end
 
     -- ESC closes config
     if UISpecialFrames then tinsert(UISpecialFrames, "StakeoutConfigFrame") end
@@ -1751,7 +1771,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
         EnsureDefaults()
         -- The look is fixed for the session before the first window is made.
-        local _, why = Theme.Init(StoredLook())
+        local _, why = Theme.Init(StoredLook(), StakeoutDB.followGlassUI ~= false, function()
+            if not (configFrame and configFrame:IsShown()) then CreateConfigFrame() end
+        end)
         if why then Print("The glass look isn't available (%s); using the WoW Forever look.", why) end
         CreateTargetFrame()
         ApplyNameplateDistance()
@@ -1858,7 +1880,7 @@ SlashCmdList["STAKEOUT"] = function(input)
             ChooseLook(arg)
         else
             Print("Look: %s. Use |cff00ff00/stakeout look forever|r or |cff00ff00glass|r (applies after a /reload).",
-                Theme.LABELS[Theme.Active()])
+                Theme.Following() and "Glass UI's" or Theme.LABELS[Theme.Active()])
         end
 
     elseif cmd == "clear" then
