@@ -1148,7 +1148,7 @@ function RefreshNPCList()
             row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.label:SetPoint("LEFT", row, "LEFT", 6, 0)
             row.label:SetJustifyH("LEFT")
-            row.label:SetWidth(260)
+            row.label:SetWidth(250)
             row.label:SetWordWrap(false)
 
             row.deleteBtn = CreateFrame("Button", nil, row, "UIPanelCloseButton")
@@ -1173,8 +1173,11 @@ function RefreshNPCList()
 
     parent:SetHeight(math.max(yOff, 1))
 
-    if configFrame.countLabel then
-        configFrame.countLabel:SetText(fmt("Tracked: |cffffffff%d|r", #StakeoutDB.npcList))
+    local count = #StakeoutDB.npcList
+    if configFrame.countLabel then configFrame.countLabel:SetText(fmt("%d tracked", count)) end
+    if configFrame.emptyTitle then
+        configFrame.emptyTitle:SetShown(count == 0)
+        configFrame.emptyHint:SetShown(count == 0)
     end
     if configFrame.macroCheck then configFrame.macroCheck:SetChecked(macroMode) end
 end
@@ -1190,24 +1193,109 @@ local function ChooseLook(look)
     end
 end
 
--- Helper: create a labeled checkbox bound to a setting
-local function MakeCheckbox(parent, x, y, label, dbKey, onChange)
-    local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-    cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+-- The config window (#34): the watch list on the left, the settings on the
+-- right. Each column is laid out down a y cursor, in px from the window's top.
+local CFG_W, CFG_H = 712, 584
+local COL_W = 324
+local LEFT, RIGHT = 16, 372   -- the columns' left edges
+local TOP = -50               -- where both columns start, under the title row
+local CHECK = 26              -- a checkbox's size; its art is about two thirds of it (FOREVER-PROBE.md §13)
 
+local function Rule(parent, x, y, width)
+    local t = parent:CreateTexture(nil, "ARTWORK")
+    t:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    t:SetSize(width, 1)
+    t:SetColorTexture(0.4, 0.4, 0.4, 0.5)
+    return t
+end
+
+local function SectionTitle(parent, x, y, text)
+    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    fs:SetText(text)
+    return fs
+end
+
+-- A row's label, its left edge at x and its middle at y.
+local function RowLabel(parent, x, y, text)
+    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    fs:SetPoint("LEFT", parent, "TOPLEFT", x, y)
+    fs:SetText(text)
+    return fs
+end
+
+-- A checkbox with its label in white and, optionally, a line under the label
+-- in grey. Takes 30 px down, or 44 with the line.
+local function Check(parent, x, y, label, desc)
+    local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    cb:SetSize(CHECK, CHECK)
+    cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     local text = cb.text or cb.Text
     if text then
+        text:SetFontObject("GameFontHighlight")
         text:SetText(label)
-        text:SetFontObject("GameFontNormalSmall")
     end
+    if desc then
+        cb.desc = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        if text then
+            cb.desc:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -3)
+        else
+            cb.desc:SetPoint("TOPLEFT", cb, "BOTTOMRIGHT", 2, 2)
+        end
+        cb.desc:SetText(desc)
+    end
+    return cb
+end
 
+-- Helper: create a labeled checkbox bound to a setting
+local function MakeCheckbox(parent, x, y, label, dbKey, onChange, desc)
+    local cb = Check(parent, x, y, label, desc)
     cb:SetChecked(StakeoutDB[dbKey])
     cb:SetScript("OnClick", function(self)
         SetConfig(dbKey, self:GetChecked() and true or false)
         if onChange then onChange(StakeoutDB[dbKey]) end
     end)
-
     return cb
+end
+
+-- A row of picture buttons, the chosen one lit. entries: { texture, name }.
+local function MakePicker(parent, x, y, entries, chosen, onPick)
+    local buttons = {}
+    for idx, entry in ipairs(entries) do
+        local b = CreateFrame("Button", nil, parent)
+        b:SetSize(26, 26)
+        b:SetPoint("TOPLEFT", parent, "TOPLEFT", x + (idx - 1) * 30, y)
+
+        b.icon = b:CreateTexture(nil, "ARTWORK")
+        b.icon:SetAllPoints(true)
+        b.icon:SetTexture(entry.texture)
+
+        b.selected = b:CreateTexture(nil, "OVERLAY")
+        b.selected:SetPoint("TOPLEFT", -2, 2)
+        b.selected:SetPoint("BOTTOMRIGHT", 2, -2)
+        b.selected:SetColorTexture(1, 1, 1, 0.25)
+        b.selected:Hide()
+
+        b.ht = b:CreateTexture(nil, "HIGHLIGHT")
+        b.ht:SetAllPoints(true)
+        b.ht:SetColorTexture(1, 1, 1, 0.15)
+
+        b:SetScript("OnClick", function()
+            for _, other in ipairs(buttons) do other.selected:Hide() end
+            b.selected:Show()
+            onPick(idx, entry)
+        end)
+        b:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine(entry.name, 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+        if chosen == idx then b.selected:Show() end
+        buttons[idx] = b
+    end
+    return buttons
 end
 
 local function MakeBackdrop(frame, edgeSize, insets, bg, border)
@@ -1231,15 +1319,15 @@ local function CreateConfigFrame()
     local f = CreateFrame("Frame", "StakeoutConfigFrame", UIParent, "BackdropTemplate")
     configFrame = f
 
-    f:SetSize(400, 762)
+    f:SetSize(CFG_W, CFG_H)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetMovable(true)
     f:EnableMouse(true)
     f:SetClampedToScreen(true)
     f:SetFrameStrata("DIALOG")
     f:SetToplevel(true)
-    -- The title row ends where the watch list starts (38 px down).
-    if not Theme.Window(f, { header = 26 }) then
+    -- The title row ends at the rule under it (40 px down).
+    if not Theme.Window(f, { header = 40 }) then
         MakeBackdrop(f, 16, { left = 4, right = 4, top = 4, bottom = 4 },
             { 0.08, 0.08, 0.10, 0.95 }, { 0.4, 0.4, 0.4, 1 })
     end
@@ -1252,26 +1340,31 @@ local function CreateConfigFrame()
     local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
 
-    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
     title:SetPoint("TOP", f, "TOP", 0, -12)
     title:SetText("|cff33ccffStakeout|r")
 
-    ---------------------------------------------------------------------------
-    -- Section: NPC List
-    ---------------------------------------------------------------------------
-    local sectionY = -38
+    Rule(f, 14, -40, CFG_W - 28)
+    -- Between the columns, from under the title row to the bottom.
+    local split = f:CreateTexture(nil, "ARTWORK")
+    split:SetPoint("TOPLEFT", f, "TOPLEFT", RIGHT - 16, TOP)
+    split:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", RIGHT - 16, 16)
+    split:SetWidth(1)
+    split:SetColorTexture(0.4, 0.4, 0.4, 0.5)
 
-    local npcHeader = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    npcHeader:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
-    npcHeader:SetText("Watch List")
+    ---------------------------------------------------------------------------
+    -- Left: the watch list
+    ---------------------------------------------------------------------------
+    local y = TOP
+    SectionTitle(f, LEFT, y, "Watch list")
 
     f.countLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    f.countLabel:SetPoint("TOPRIGHT", f, "TOPRIGHT", -40, sectionY - 1)
+    f.countLabel:SetPoint("TOPRIGHT", f, "TOPLEFT", LEFT + COL_W, y - 4)
 
-    sectionY = sectionY - 20
+    y = y - 28
     local addBox = CreateFrame("EditBox", "StakeoutAddBox", f, "BackdropTemplate")
-    addBox:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
-    addBox:SetSize(272, 24)
+    addBox:SetPoint("TOPLEFT", f, "TOPLEFT", LEFT, y)
+    addBox:SetSize(COL_W - 98, 26)
     addBox:SetFontObject("ChatFontNormal")
     addBox:SetAutoFocus(false)
     addBox:SetMaxLetters(255)
@@ -1291,8 +1384,8 @@ local function CreateConfigFrame()
     addBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
     local addBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    addBtn:SetPoint("LEFT", addBox, "RIGHT", 4, 0)
-    addBtn:SetSize(90, 24)
+    addBtn:SetPoint("LEFT", addBox, "RIGHT", 8, 0)
+    addBtn:SetSize(90, 26)
     addBtn:SetText("Add NPC")
 
     local function DoAddNPC()
@@ -1304,11 +1397,20 @@ local function CreateConfigFrame()
     addBtn:SetScript("OnClick", DoAddNPC)
     addBox:SetScript("OnEnterPressed", DoAddNPC)
 
-    sectionY = sectionY - 30
+    y = y - 32
+    local hint = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    hint:SetPoint("TOPLEFT", f, "TOPLEFT", LEFT + 2, y)
+    hint:SetText("Separate multiple names with semicolons.")
+
+    -- From the bottom up: the macro checkbox and its line, then the buttons.
+    local macroY = -(CFG_H - 16 - 40)
+    local buttonsY = macroY + 36
+
+    -- The list fills the space between the hint and the buttons.
+    y = y - 18
     local scrollParent = CreateFrame("Frame", nil, f, "BackdropTemplate")
-    scrollParent:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
-    scrollParent:SetPoint("TOPRIGHT", f, "TOPRIGHT", -14, sectionY)
-    scrollParent:SetHeight(170)
+    scrollParent:SetPoint("TOPLEFT", f, "TOPLEFT", LEFT, y)
+    scrollParent:SetSize(COL_W, y - buttonsY - 10)
     if not Theme.Reading(scrollParent) then
         MakeBackdrop(scrollParent, 12, { left = 2, right = 2, top = 2, bottom = 2 },
             { 0.04, 0.04, 0.06, 0.8 }, { 0.3, 0.3, 0.3, 0.8 })
@@ -1320,16 +1422,38 @@ local function CreateConfigFrame()
     scrollFrame:SetPoint("BOTTOMRIGHT", scrollParent, "BOTTOMRIGHT", -24, 4)
 
     local scrollContent = CreateFrame("Frame", nil, scrollFrame)
-    scrollContent:SetSize(scrollFrame:GetWidth(), 1)
+    scrollContent:SetSize(COL_W - 28, 1)
     scrollFrame:SetScrollChild(scrollContent)
     f.scrollContent = scrollContent
 
-    -- Clear all / Reset / Export
-    sectionY = sectionY - 178
+    -- Shown while the list is empty (RefreshNPCList).
+    f.emptyTitle = scrollParent:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    f.emptyTitle:SetPoint("CENTER", scrollParent, "CENTER", 0, 10)
+    f.emptyTitle:SetText("No NPCs tracked")
+    f.emptyHint = scrollParent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    f.emptyHint:SetPoint("TOP", f.emptyTitle, "BOTTOM", 0, -6)
+    f.emptyHint:SetText("Add an exact NPC name above to start watching.")
+
+    -- Reset detections / Export / Clear list, the column's width together.
+    local resetBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    resetBtn:SetPoint("TOPLEFT", f, "TOPLEFT", LEFT, buttonsY)
+    resetBtn:SetSize(130, 26)
+    resetBtn:SetText("Reset detections")
+    resetBtn:SetScript("OnClick", function()
+        ResetDetections()
+        Print("Detections reset.")
+    end)
+
+    local exportBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    exportBtn:SetPoint("LEFT", resetBtn, "RIGHT", 6, 0)
+    exportBtn:SetSize(90, 26)
+    exportBtn:SetText("Export")
+    exportBtn:SetScript("OnClick", ShowExport)
+
     local clearBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    clearBtn:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
-    clearBtn:SetSize(100, 22)
-    clearBtn:SetText("Clear All")
+    clearBtn:SetPoint("LEFT", exportBtn, "RIGHT", 6, 0)
+    clearBtn:SetSize(COL_W - 130 - 90 - 12, 26)
+    clearBtn:SetText("Clear list")
     clearBtn:SetScript("OnClick", function()
         StaticPopupDialogs["STAKEOUT_CLEAR_CONFIRM"] = {
             text = "Remove all NPCs from the watch list?",
@@ -1341,81 +1465,35 @@ local function CreateConfigFrame()
         StaticPopup_Show("STAKEOUT_CLEAR_CONFIRM")
     end)
 
-    local resetBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    resetBtn:SetPoint("LEFT", clearBtn, "RIGHT", 6, 0)
-    resetBtn:SetSize(130, 22)
-    resetBtn:SetText("Reset Detections")
-    resetBtn:SetScript("OnClick", function()
-        ResetDetections()
-        Print("Detections reset.")
-    end)
-
-    local exportBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    exportBtn:SetPoint("LEFT", resetBtn, "RIGHT", 6, 0)
-    exportBtn:SetSize(90, 22)
-    exportBtn:SetText("Export")
-    exportBtn:SetScript("OnClick", ShowExport)
-
     -- Not a StakeoutDB setting: the macro's existence is the setting.
-    sectionY = sectionY - 26
-    local macroCheck = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
-    macroCheck:SetPoint("TOPLEFT", f, "TOPLEFT", 10, sectionY)
-    local macroText = macroCheck.text or macroCheck.Text
-    if macroText then
-        macroText:SetText("Keep the list in a character macro  |cff888888(comes back at login)|r")
-        macroText:SetFontObject("GameFontNormalSmall")
-    end
+    local macroCheck = Check(f, LEFT, macroY, "Save list in a character macro",
+        "Restores the list when you log in.")
     macroCheck:SetScript("OnClick", function(self)
         self:SetChecked(SetMacroMode(self:GetChecked() and true or false))
     end)
     f.macroCheck = macroCheck
 
     ---------------------------------------------------------------------------
-    -- Divider
+    -- Right: the settings
     ---------------------------------------------------------------------------
-    sectionY = sectionY - 30
-    local divider = f:CreateTexture(nil, "ARTWORK")
-    divider:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
-    divider:SetPoint("TOPRIGHT", f, "TOPRIGHT", -14, sectionY)
-    divider:SetHeight(1)
-    divider:SetColorTexture(0.4, 0.4, 0.4, 0.5)
+    local x = RIGHT
+    y = TOP
+    SectionTitle(f, x, y, "Detection & alerts")
 
-    ---------------------------------------------------------------------------
-    -- Section: Detection
-    ---------------------------------------------------------------------------
-    sectionY = sectionY - 14
+    y = y - 26
+    MakeCheckbox(f, x, y, "Increase nameplate range", "maxNameplateDist", function(v)
+        if v then ApplyNameplateDistance() end
+    end, "Uses nameplates to find nearby NPCs.")
+    y = y - 44
+    MakeCheckbox(f, x, y, "Flash taskbar on detection", "flashOnFind")
+    y = y - 30
+    MakeCheckbox(f, x, y, "Play sound on detection", "soundOnFind")
 
-    local optHeader = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    optHeader:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
-    optHeader:SetText("Detection")
-
-    sectionY = sectionY - 4
-    MakeCheckbox(f, 10, sectionY - 20, "Raise nameplate range  |cff888888(nameplates find NPCs)|r",
-        "maxNameplateDist", function(v)
-            if v then ApplyNameplateDistance() end
-        end)
-
-    ---------------------------------------------------------------------------
-    -- Section: Alerts
-    ---------------------------------------------------------------------------
-    sectionY = sectionY - 52
-
-    local alertHeader = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    alertHeader:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
-    alertHeader:SetText("Alerts")
-
-    sectionY = sectionY - 4
-    MakeCheckbox(f, 10, sectionY - 20, "Flash taskbar on detection", "flashOnFind")
-    MakeCheckbox(f, 10, sectionY - 44, "Play sound on detection", "soundOnFind")
-
-    sectionY = sectionY - 68
-    local soundLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    soundLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY)
-    soundLabel:SetText("Sound:")
-
+    y = y - 32
+    RowLabel(f, x + 4, y - 14, "Sound")
     local soundDropdown = CreateFrame("Frame", "StakeoutSoundDropdown", f, "UIDropDownMenuTemplate")
-    soundDropdown:SetPoint("TOPLEFT", f, "TOPLEFT", 46, sectionY + 7)
-    UIDropDownMenu_SetWidth(soundDropdown, 190)
+    soundDropdown:SetPoint("LEFT", f, "TOPLEFT", x + 44, y - 14)
+    UIDropDownMenu_SetWidth(soundDropdown, 220)
 
     UIDropDownMenu_Initialize(soundDropdown, function()
         local current = StakeoutDB.soundChoice or "Raid Warning"
@@ -1441,127 +1519,56 @@ local function CreateConfigFrame()
     end)
     UIDropDownMenu_SetText(soundDropdown, StakeoutDB.soundChoice or "Raid Warning")
 
-    ---------------------------------------------------------------------------
-    -- Section: Raid Marking
-    ---------------------------------------------------------------------------
-    sectionY = sectionY - 32
+    y = y - 40
+    Rule(f, x, y, COL_W)
+    y = y - 12
+    SectionTitle(f, x, y, "Raid marking")
 
-    local markHeader = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    markHeader:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
-    markHeader:SetText("Raid Marking")
+    y = y - 26
+    MakeCheckbox(f, x, y, "Right-click to target and mark", "enableMarking",
+        function() RefreshTargetFrame() end, "On a tracked NPC button.")
 
-    sectionY = sectionY - 4
-    MakeCheckbox(f, 10, sectionY - 20, "Right-click a button to target and mark",
-        "enableMarking", function() RefreshTargetFrame() end)
+    y = y - 44
+    RowLabel(f, x + 4, y - 13, "Marker")
+    local markers = {}
+    for i = 1, 8 do markers[i] = { texture = MARKER_ICONS[i], name = MARKER_NAMES[i] } end
+    MakePicker(f, x + 60, y, markers, StakeoutDB.markerIndex, function(idx)
+        SetConfig("markerIndex", idx)
+        RefreshTargetFrame()
+        Print("Marker set to: %s", MARKER_NAMES[idx])
+    end)
 
-    sectionY = sectionY - 46
-    local markerLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    markerLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY)
-    markerLabel:SetText("Marker:")
+    y = y - 36
+    Rule(f, x, y, COL_W)
+    y = y - 12
+    SectionTitle(f, x, y, "Target frame")
 
-    local markerButtons = {}
-    for idx = 1, 8 do
-        local mb = CreateFrame("Button", nil, f)
-        mb:SetSize(22, 22)
-        mb:SetPoint("LEFT", markerLabel, "RIGHT", 4 + (idx - 1) * 26, 0)
+    y = y - 26
+    MakeCheckbox(f, x, y, "Lock frame position", "lockFrame", nil, "Alt + drag overrides the lock.")
 
-        mb.icon = mb:CreateTexture(nil, "ARTWORK")
-        mb.icon:SetAllPoints(true)
-        mb.icon:SetTexture(MARKER_ICONS[idx])
+    y = y - 44
+    local iconLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    iconLabel:SetPoint("TOPLEFT", f, "TOPLEFT", x + 4, y)
+    iconLabel:SetText("Button icon")
+    y = y - 18
+    MakePicker(f, x + 60, y, BUTTON_ICONS, StakeoutDB.buttonIcon or 1, function(idx, entry)
+        SetConfig("buttonIcon", idx)
+        RefreshTargetFrame()
+        Print("Button icon set to: %s", entry.name)
+    end)
 
-        mb.selected = mb:CreateTexture(nil, "OVERLAY")
-        mb.selected:SetPoint("TOPLEFT", -2, 2)
-        mb.selected:SetPoint("BOTTOMRIGHT", 2, -2)
-        mb.selected:SetColorTexture(1, 1, 1, 0.25)
-        mb.selected:Hide()
+    -- Scale: the label, its value at the column's right, the slider under them.
+    y = y - 38
+    local scaleLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    scaleLabel:SetPoint("TOPLEFT", f, "TOPLEFT", x + 4, y)
+    scaleLabel:SetText("Scale")
+    local scaleValue = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    scaleValue:SetPoint("TOPRIGHT", f, "TOPLEFT", x + COL_W - 4, y)
 
-        mb.ht = mb:CreateTexture(nil, "HIGHLIGHT")
-        mb.ht:SetAllPoints(true)
-        mb.ht:SetColorTexture(1, 1, 1, 0.15)
-
-        mb:SetScript("OnClick", function()
-            SetConfig("markerIndex", idx)
-            for _, b in ipairs(markerButtons) do b.selected:Hide() end
-            mb.selected:Show()
-            RefreshTargetFrame()
-            Print("Marker set to: %s", MARKER_NAMES[idx])
-        end)
-
-        mb:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:AddLine(MARKER_NAMES[idx], 1, 1, 1)
-            GameTooltip:Show()
-        end)
-        mb:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-        if StakeoutDB.markerIndex == idx then mb.selected:Show() end
-        markerButtons[idx] = mb
-    end
-
-    ---------------------------------------------------------------------------
-    -- Section: Target Frame
-    ---------------------------------------------------------------------------
-    sectionY = sectionY - 34
-
-    local frameHeader = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    frameHeader:SetPoint("TOPLEFT", f, "TOPLEFT", 14, sectionY)
-    frameHeader:SetText("Target Frame")
-
-    sectionY = sectionY - 4
-    MakeCheckbox(f, 10, sectionY - 20, "Lock frame position  |cff888888(Alt+drag overrides)|r", "lockFrame")
-
-    sectionY = sectionY - 46
-    local iconLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    iconLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY)
-    iconLabel:SetText("Button icon:")
-
-    local iconButtons = {}
-    for idx, entry in ipairs(BUTTON_ICONS) do
-        local ib = CreateFrame("Button", nil, f)
-        ib:SetSize(22, 22)
-        ib:SetPoint("LEFT", iconLabel, "RIGHT", 4 + (idx - 1) * 26, 0)
-
-        ib.icon = ib:CreateTexture(nil, "ARTWORK")
-        ib.icon:SetAllPoints(true)
-        ib.icon:SetTexture(entry.texture)
-
-        ib.selected = ib:CreateTexture(nil, "OVERLAY")
-        ib.selected:SetPoint("TOPLEFT", -2, 2)
-        ib.selected:SetPoint("BOTTOMRIGHT", 2, -2)
-        ib.selected:SetColorTexture(1, 1, 1, 0.25)
-        ib.selected:Hide()
-
-        ib.ht = ib:CreateTexture(nil, "HIGHLIGHT")
-        ib.ht:SetAllPoints(true)
-        ib.ht:SetColorTexture(1, 1, 1, 0.15)
-
-        ib:SetScript("OnClick", function()
-            SetConfig("buttonIcon", idx)
-            for _, b in ipairs(iconButtons) do b.selected:Hide() end
-            ib.selected:Show()
-            RefreshTargetFrame()
-            Print("Button icon set to: %s", entry.name)
-        end)
-
-        ib:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:AddLine(entry.name, 1, 1, 1)
-            GameTooltip:Show()
-        end)
-        ib:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-        if (StakeoutDB.buttonIcon or 1) == idx then ib.selected:Show() end
-        iconButtons[idx] = ib
-    end
-
-    -- Scale slider
-    sectionY = sectionY - 30
-    local scaleLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    scaleLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY)
-
+    y = y - 20
     local slider = CreateFrame("Slider", "StakeoutScaleSlider", f, "OptionsSliderTemplate")
-    slider:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY - 18)
-    slider:SetWidth(220)
+    slider:SetPoint("TOPLEFT", f, "TOPLEFT", x + 60, y)
+    slider:SetWidth(COL_W - 68)
     slider:SetMinMaxValues(50, 300)
     slider:SetValueStep(10)
     slider:SetObeyStepOnDrag(true)
@@ -1575,7 +1582,7 @@ local function CreateConfigFrame()
     if slider.Text then slider.Text:SetText("")      end
 
     local function UpdateScaleLabel(val)
-        scaleLabel:SetText(fmt("Scale: |cffffffff%.0f%%|r", val))
+        scaleValue:SetText(fmt("%.0f%%", val))
     end
     UpdateScaleLabel(slider:GetValue())
 
@@ -1589,13 +1596,10 @@ local function CreateConfigFrame()
 
     -- Look: every window's, built in when it is made, so a choice applies
     -- after a /reload. The note says so while the choice isn't the one worn.
-    sectionY = sectionY - 52
-    local lookLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    lookLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, sectionY)
-    lookLabel:SetText("Look:")
-
+    y = y - 40
+    RowLabel(f, x + 4, y - 14, "Look")
     local lookDropdown = CreateFrame("Frame", "StakeoutLookDropdown", f, "UIDropDownMenuTemplate")
-    lookDropdown:SetPoint("TOPLEFT", f, "TOPLEFT", 46, sectionY + 7)
+    lookDropdown:SetPoint("LEFT", f, "TOPLEFT", x + 44, y - 14)
     UIDropDownMenu_SetWidth(lookDropdown, 120)
 
     local lookNote = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")

@@ -372,3 +372,25 @@ Zarlman Two-Moons (3054): player at 46.91, 61.09; nearest spawn 4.5 yd at 46.88,
 - Brave Darksky is a Bloodhoof guard, 58 yd from his single stored point. Converting makes it 201 yd. Guards patrol, so
   his miss doesn't change the conclusion.
 - **Rule confirmed: use QuestieDB's coordinates as stored. Never call `EraToForever` on them.** P3 is closed.
+
+### 13. The look (#28)
+
+#### `look` (2026-10-21, 1.60.1.70450, Razor Hill, runs #420-423)
+```
+WoW Forever, bright: every label in the three windows easy to read?   YES
+Glass, bright: every label easy to read?                              YES
+Glass: left-click targets the mob, right-click marks it?              YES
+Glass, dark (the inn): every label easy to read?                      YES
+WoW Forever, dark: every label easy to read?                          YES
+Overall, prefer Glass?                                                YES
+Note: "a lot of items seems overlapping the next row on the window, seems there is a padding issue"
+```
+- **The overlap is the config window's layout, in both looks** (#32): each checkbox's art ran into the row below it
+  ("Play sound" into "Sound:", the marking checkbox into "Marker:", "Lock frame position" into "Button icon:"), and
+  sat far below its section title. Measured off the screenshots, `UICheckButtonTemplate`'s art is about 21 of its
+  32 px, 4 px down from the frame's top. The window was then rebuilt in two columns (#34), its checkboxes drawn at 26 px
+  (art about 17 of them) on rows 30 px apart, 44 with a line under the label.
+- The run's copy predates #31, and the probe opens the export window behind the config window, so the export's
+  reading pane over the glass wasn't judged.
+- The auto steps' screenshots were taken before the windows they open had drawn: they show the scene only. The
+  question steps' screenshots show the windows.

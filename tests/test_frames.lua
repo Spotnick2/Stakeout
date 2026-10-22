@@ -70,6 +70,19 @@ H.check(StaticPopupDialogs.STAKEOUT_CLEAR_CONFIRM ~= nil, "Clear All asks first"
 H.check(pcall(StaticPopupDialogs.STAKEOUT_CLEAR_CONFIRM.OnAccept), "confirming Clear All runs")
 H.eq(#StakeoutDB.npcList, 0, "and clears the list")
 
+-- The watch list column: its count, and the empty state while nothing is watched (#34).
+H.eq(StakeoutConfigFrame.countLabel:GetText(), "0 tracked", "the count says none")
+H.check(StakeoutConfigFrame.emptyTitle:IsShown() and StakeoutConfigFrame.emptyHint:IsShown(),
+    "an empty list says so")
+H.eq(StakeoutConfigFrame.emptyTitle:GetText(), "No NPCs tracked", "in the empty state's words")
+SlashCmdList.STAKEOUT("add Other Mob; Rare Mob")
+H.eq(StakeoutConfigFrame.countLabel:GetText(), "2 tracked", "the count follows the list")
+H.check(not StakeoutConfigFrame.emptyTitle:IsShown() and not StakeoutConfigFrame.emptyHint:IsShown(),
+    "and the empty state goes once something is watched")
+StaticPopupDialogs.STAKEOUT_CLEAR_CONFIRM.OnAccept()
+H.check(StakeoutConfigFrame.emptyTitle:IsShown(), "and comes back when the list is cleared")
+H.eq(#StakeoutDB.npcList, 0, "which leaves the list empty for what follows")
+
 ------------------------------------------------------------
 -- In combat: the protected target frame must not be touched
 ------------------------------------------------------------

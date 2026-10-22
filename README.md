@@ -25,7 +25,7 @@ The Forever beta client currently **doesn't load addon settings back** after you
 that affects every addon. Your watch list and options start empty each session. Stakeout tells you at
 login while this is happening.
 
-**The easy way:** type `/stakeout macro on`, or tick *Keep the list in a character macro* in the config.
+**The easy way:** type `/stakeout macro on`, or tick *Save list in a character macro* in the config.
 Stakeout then keeps your watch list in a character macro called **Stakeout List** (plus *Stakeout List 2*
 and *3* for long lists), updates it whenever the list changes, and reads your list back from it at every
 login, with nothing to click. It uses one character macro slot, or up to three for a long list
