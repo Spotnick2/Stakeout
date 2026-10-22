@@ -48,6 +48,10 @@ for _, file in ipairs(H.tocFiles()) do
         .. tostring(keyword) .. " at line " .. n)
 end
 
+-- The Wago Addons project: CI's `wago` job uploads each tag to the project the
+-- packaged TOC names, and the Wago app matches an installed copy by it (#23).
+H.eq(H.directive("X-Wago-ID"), "rNkgwjNa", "Stakeout's Wago Addons project")
+
 H.eq(H.directive("X-Curse-Project-ID"), "1508654",
     "Stakeout's CurseForge project (the tag webhook posts to this project)")
 

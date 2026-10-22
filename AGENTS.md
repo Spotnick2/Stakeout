@@ -54,7 +54,9 @@ and the combat log. See below. Don't reintroduce them.
   targeting relies on (#25); `docs/FOREVER-PROBE.md` lists its procedures. Its tests run locally only (CI sets
   `FOREVERPROBE_OPTIONAL=1`). The older `/soprobe` that measured sections 1-11 is in git history.
 - `docs/FOREVER-PROBE.md`: what was measured on the live client, and how.
-- `.github/workflows/package-check.yml`: syntax check, tests, and a dry-run package on every PR.
+- `.github/workflows/package-check.yml`: syntax check, tests, a dry-run package, the zip allowlist and the release
+  files on every PR; on a tag, publishes that zip to GitHub and Wago (see Releasing).
+- `tests/release_files.sh`: the tag's notes and `release.json` (RELEASING.md's template, unchanged).
 - `.pkgmeta`, `README.md`, `CHANGELOG.md`: packaging and user-facing material.
 
 One embedded library, no build step. LibGlass-1.0 comes in through `.pkgmeta` externals, pinned to a tag
@@ -163,19 +165,36 @@ Commit messages: a short imperative subject; a body only if it adds something; e
 
 ## Releasing
 
-CurseForge (project `1508654`) builds from the repository **webhook** when it sees a tag, and publishes
-`CHANGELOG.md` as the release notes.
+A tag publishes three times, following `C:/Projects/WoW/References/Docs/RELEASING.md` (#23):
+- **CurseForge** (project `1508654`) builds its own file from the repository **webhook**, and publishes
+  `CHANGELOG.md` as the release notes.
+- **GitHub:** the tag's CI run (`package-check.yml`, job `release`) publishes the zip `check` built and checked,
+  with `release.json` (what WowUp reads) and the tag's changelog section as the notes.
+- **Wago Addons** (project `rNkgwjNa`, `## X-Wago-ID` in the TOC; https://addons.wago.io/addons/rNkgwjNa): job
+  `wago` uploads the same zip with the same notes, for game version 1.60.1. It uses the `WAGO_API_TOKEN` repo
+  secret. If Wago doesn't list a new client's patch yet, the job fails on purpose: publish again later.
 
-1. Add a `## <version> - <date>` section at the top of `CHANGELOG.md`, written for players, not from the diff.
+No CurseForge key lives in the repo, and the packager never uploads from CI: `check` runs it with `-d`, and
+`release` and `wago` publish `check`'s artifacts, never a second build. `tests/release_files.sh` (the guide's
+template, unchanged) writes the notes and `release.json` on every run, so a broken heading fails on the PR.
+
+1. Add a `## vX.Y.Z - <date>` section at the top of `CHANGELOG.md`, written for players, not from the diff.
    Anything that resets or behaves differently after updating gets its own heading.
-2. Commit the changelog, **then** tag: `git tag v2.0.0 && git push --tags`. A tag without a changelog entry
-   publishes the previous release's notes against the new build.
-3. The tag name picks the channel: `alpha` → Alpha, `beta` → Beta, anything else → Release. Almost nobody opts into
-   Alpha or Beta, so ship a Release unless the build should be held back. The *game* being in beta is not a reason; say that in the notes.
-4. Download the published file and check it contains only `Stakeout/Stakeout.toc` and `Stakeout/Stakeout.lua`, flagged Forever.
+2. Merge it, wait for `main`'s run, **then** tag: `git tag -a vX.Y.Z -m "Stakeout X.Y.Z: <one line>"` and
+   `git push origin vX.Y.Z`. A tag without its changelog section fails `check`, and so publishes nothing on
+   GitHub or Wago, while CurseForge would still build it with the previous notes.
+3. The tag name picks the channel: `alpha` → Alpha (a GitHub pre-release), `beta` → Beta, anything else →
+   Release. Almost nobody opts into Alpha or Beta, so ship a Release unless the build should be held back. The
+   *game* being in beta is not a reason; say that in the notes. An alpha may go out before its version's
+   section: it falls back to `## vX.Y.Z`, then to `## Unreleased`.
+4. Watch the tag's run (`gh run list --event push --limit 5`, then `gh run watch <id> --exit-status`): `check`,
+   `release` and `wago` green.
+5. Check the guide's §4: CurseForge's own zip against `check`'s allowlist (only `Stakeout/Stakeout.toc`, the Lua
+   it lists, and `Libs/LibGlass-1.0`'s shipped files), `release.json` downloadable without logging in, and the
+   version under the right channel on Wago.
 
-**Do not add a release workflow.** Running `BigWigsMods/packager` on a tag would publish a second time
-alongside the webhook. The CI workflow is a dry run (`-d`) and publishes nothing.
+**Publishing a tag again** where a target failed: Actions > Package check > Run workflow, from `main`, with the
+tag and `publish: github|wago|both`.
 
 ## Validation
 
