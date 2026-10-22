@@ -198,7 +198,38 @@ WoW.units.nameplate1 = nil
 WoW.fire("UNIT_DIED", guid(3106, "1"))
 WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
 H.eq(shown(), "Pygmy Surf Crawler", "the other one's plate keeps it")
+-- An old GUID doesn't outlive its sighting (Codex on #45): crawler 1 seen
+-- and gone out of sight, crawler 2 seen past LINGER, then 2 dies.
+clean()
+WoW.questLog = { { questID = 1, title = "Crawlers", rows = { row("monster", "0/6 Pygmy Surf Crawler slain") } } }
+Q.Rebuild()
+plate("nameplate1", { name = "Pygmy Surf Crawler", guid = guid(3106, "1"), attackable = true })
+WoW.units.nameplate1 = nil
+WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+plate("nameplate2", { name = "Pygmy Surf Crawler", guid = guid(3106, "2"), attackable = true })
+WoW.advance(ns.core.LINGER + 1)
+WoW.ticker.fn()
+WoW.units.nameplate2 = nil
+WoW.fire("UNIT_DIED", guid(3106, "2"))
+WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate2")
+H.eq(shown(), "", "the one in sight dies: over at once, whatever was seen before it")
+-- Partial reads (a collapsed header) keep the quests they missed (Codex on #45).
+clean()
+WoW.questLog = { { questID = 1, title = "Crawlers", rows = { row("monster", "0/6 Pygmy Surf Crawler slain") } } }
+Q.Rebuild()
+plate("nameplate1", { name = "Pygmy Surf Crawler", guid = guid(3106, "1"), attackable = true })
+H.eq(shown(), "Pygmy Surf Crawler", "a crawler in sight has its button")
+WoW.questLog, WoW.questLogUnshown = {}, 1
+Q.Rebuild()
+H.eq(shown(), "Pygmy Surf Crawler", "its quest hidden under a collapsed header: the button stays")
+WoW.questLogUnshown = nil
+Q.Rebuild()
+H.eq(shown(), "", "a whole read without the quest: it goes")
 -- A stale token (a missed removal, a reused plate) is dropped by the tick.
+clean()
+WoW.questLog = { { questID = 1, title = "Crawlers", rows = { row("monster", "0/6 Pygmy Surf Crawler slain") } } }
+Q.Rebuild()
+plate("nameplate2", { name = "Pygmy Surf Crawler", guid = guid(3106, "2"), attackable = true })
 WoW.units.nameplate2 = { name = "Boar", guid = guid(3098), plate = true }
 WoW.ticker.fn()
 H.eq(QT.members["n:Pygmy Surf Crawler"].tier, 2, "a plate now showing another unit no longer counts")

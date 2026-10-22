@@ -278,8 +278,19 @@ local function Hold(m, token, guid, name)
 end
 
 -- The token stopped showing the member. It was seen until now: it lingers.
+-- Its GUID goes with it unless another token still shows that unit: an old
+-- GUID left behind would keep the sighting of a later one of the name alive
+-- past that one's death (Codex on #45).
 local function Release(m, token)
+    local guid = m.tokens[token]
     m.tokens[token] = nil
+    if type(guid) == "string" then
+        local held = false
+        for _, g in pairs(m.tokens) do
+            if g == guid then held = true break end
+        end
+        if not held then m.guids[guid] = nil end
+    end
     if holders[token] then holders[token][m] = nil end
     if m.unit == token then m.unit = nil end
     if not next(m.tokens) then m.lastSeen = GetTime() end
@@ -446,6 +457,20 @@ function Rebuild()
     end
     local list, whole = ReadLog()
     if not list then return end   -- unreadable: keep what there is
+    -- A partial read (a collapsed header hides quests) keeps the quests it
+    -- missed as they were last read, so their targets and sightings stay; a
+    -- whole read replaces them (Codex on #45). Until then their rows can be
+    -- stale, which errs on keeping a button.
+    if not whole then
+        local present = {}
+        for _, quest in ipairs(list) do present[quest.questID] = true end
+        for _, old in ipairs(questList) do
+            if not present[old.questID] then
+                list[#list + 1] = { questID = old.questID, title = old.title, rows = old.rows,
+                                    complete = old.complete, pos = #list + 1, refs = {} }
+            end
+        end
+    end
 
     local wanted = {}   -- [key] = { npcId, dbName, refs }
     local function want(key, npcId, dbName, ref)
