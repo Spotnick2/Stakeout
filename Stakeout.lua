@@ -396,12 +396,17 @@ local function DesiredButtons()
     for name in pairs(detected) do tinsert(names, name) end
     table.sort(names)
     for _, name in ipairs(names) do
-        local entry = { group = 1, name = name, unit = detected[name].unitId,
-                        macrotext = "/cleartarget\n/targetexact " .. name }
+        -- /targetexact can pick a corpse of the name when no live one is in
+        -- reach; /cleartarget [dead] then leaves no target instead (the
+        -- `corpse` probe, FOREVER-PROBE.md; with a live one in reach it
+        -- targets that one). The mark that follows needs a target, so a
+        -- corpse is never marked either.
+        local target = fmt("/cleartarget\n/targetexact %s\n/cleartarget [dead]", name)
+        local entry = { group = 1, name = name, unit = detected[name].unitId, macrotext = target }
         -- SetRaidTarget is forbidden to addon code here, so the mark is the
         -- player's click: right-click targets and marks in one press.
         if StakeoutDB.enableMarking then
-            entry.macrotext2 = fmt("/cleartarget\n/targetexact %s\n/tm %d", name, StakeoutDB.markerIndex)
+            entry.macrotext2 = fmt("%s\n/tm %d", target, StakeoutDB.markerIndex)
         end
         list[#list + 1] = entry
     end
