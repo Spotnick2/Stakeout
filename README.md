@@ -81,3 +81,7 @@ Blizzard's Forever client doesn't allow some of what Stakeout did on TBC:
 
 - Stakeout never moves, shows or hides its frame during combat. Changes wait for the fight to end.
 - It's designed for your own list, not a built-in rare database.
+- Hover a button to see roughly how far its NPC is (e.g. "25-30 yd"), while a nameplate, your target or your
+  mouse shows it. Addons can't read other units' positions, so it's bracketed with range checks, as
+  NameplateDistance by Nedyar does (MIT; its notice is
+  in `Range.lua`).

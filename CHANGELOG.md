@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hover a target button to see roughly how far its NPC is ("Distance: 25-30 yd"), updated as it moves. It shows
+  while a nameplate, your target or your mouse shows the NPC. The method comes from NameplateDistance by Nedyar.
 - **Experimental: quest targets**, off by default. Type `/stakeout quests on` to try it: a mob you see whose
   name is in one of your unfinished kill objectives gets its own button (left-click targets a live one,
   right-click also marks it). That's all it does for now. Turn-in NPCs and the mobs that drop quest items need

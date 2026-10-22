@@ -387,6 +387,20 @@ local function CreateTargetFrame()
     f:SetScale(StakeoutDB.frameScale or 1.0)
 end
 
+-- How far the button's NPC is (Range.lua), while a token still shows it.
+local function DistanceText(btn)
+    local range = ns.range
+    if not (range and btn.unit and ReadNPC(btn.unit) == btn.npcName) then return nil end
+    local ok, text = pcall(range.Text, btn.unit)
+    return ok and text or nil
+end
+
+-- While a button's tooltip is up, the distance is read again twice a second,
+-- and the tooltip rebuilt only when it changed. A plain frame, never the
+-- protected button: its scripts can't change in combat.
+local tooltipRefresh = CreateFrame("Frame")
+tooltipRefresh:Hide()
+
 local function BtnOnEnter(self)
     if self:IsForbidden() or not self.npcName then return end
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
@@ -397,20 +411,41 @@ local function BtnOnEnter(self)
         else
             GameTooltip:AddLine(self.npcName, 1, 0.2, 0.2)
         end
-        for _, line in ipairs(self.tooltipLines) do GameTooltip:AddLine(line, 0.7, 0.7, 0.7) end
     else
         GameTooltip:AddLine(self.npcName, 1, 0.2, 0.2)
+    end
+    local distance = DistanceText(self)
+    if distance then GameTooltip:AddLine("Distance: " .. distance, 1, 1, 1) end
+    if self.tooltipLines then
+        for _, line in ipairs(self.tooltipLines) do GameTooltip:AddLine(line, 0.7, 0.7, 0.7) end
+    else
         GameTooltip:AddLine("Left-click: target", 0.7, 0.7, 0.7)
         if StakeoutDB.enableMarking then
             GameTooltip:AddLine("Right-click: target and mark (again: clear the mark)", 0.7, 0.7, 0.7)
         end
     end
     GameTooltip:Show()
+    tooltipRefresh.button, tooltipRefresh.distance, tooltipRefresh.elapsed = self, distance, 0
+    tooltipRefresh:Show()
 end
 
 local function BtnOnLeave()
+    tooltipRefresh.button = nil
+    tooltipRefresh:Hide()
     GameTooltip:Hide()
 end
+
+tooltipRefresh:SetScript("OnUpdate", function(f, elapsed)
+    f.elapsed = (f.elapsed or 0) + (elapsed or 0)
+    if f.elapsed < 0.5 then return end
+    f.elapsed = 0
+    local btn = f.button
+    if not (btn and btn:IsShown()) then
+        f:Hide()
+    elseif DistanceText(btn) ~= f.distance then
+        BtnOnEnter(btn)
+    end
+end)
 
 -- The watch list shows a button for every detected name.
 local function IsWatchDisplayed(name)
@@ -597,6 +632,7 @@ local function UpdateButtonLooks(list)
     for i, e in ipairs(list) do
         local btn = targetButtons[i]
         btn.npcName = e.name
+        btn.unit = e.unit
         btn.tooltipLines = e.tooltip
         btn.friendly = e.friendly
         if e.unit and ReadNPC(e.unit) == e.name then

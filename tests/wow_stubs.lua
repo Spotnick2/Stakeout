@@ -50,6 +50,9 @@ function WoW.reset()
     WoW.accountMacros = {}  -- account macros, index = position (1..120)
     WoW.macroSlots   = 18   -- character slots; CreateMacro fails beyond this
     WoW.playerClass  = "WARRIOR"   -- UnitClass("player")'s file name; nil: not readable yet
+    WoW.distance     = {}   -- [token] = yards to that unit, for the range checks (Range.lua)
+    WoW.spellbook    = {}   -- the player's spells: { id, name, maxRange, minRange, harmful, helpful }
+    WoW.itemRanges   = {}   -- [itemID] = yards: the items the client knows and answers for
     -- The quest log, in log order: { questID, title, complete, rows = { QuestObjectiveInfo... },
     -- header = true for a header line }. questLogThrows: every C_QuestLog read errors.
     WoW.questLog     = {}
@@ -287,8 +290,8 @@ end
 
 UIParent = newWidget("Frame", "UIParent")
 GameTooltip = newWidget("GameTooltip", "GameTooltip")
-function GameTooltip:SetOwner() end
-function GameTooltip:AddLine() end
+function GameTooltip:SetOwner(owner) self.owner, self.lines = owner, {} end
+function GameTooltip:AddLine(text) self.lines = self.lines or {} self.lines[#self.lines + 1] = text end
 DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) WoW.messages[#WoW.messages + 1] = msg end }
 UISpecialFrames = {}
 StaticPopupDialogs = {}
@@ -359,6 +362,65 @@ function UnitPlayerControlled(token) local u = unit(token) return u and (u.playe
 function UnitClass(token)
     if token == "player" and WoW.playerClass then return "Warrior", WoW.playerClass, 1 end
     return nil
+end
+
+-- The range checks (Range.lua; dump: C_Spell, C_SpellBook, C_Item,
+-- CheckInteractDistance). Modelled on NameplateDistance's measurements: a
+-- spell answers nil, not false, once the unit is out of its range; an item the
+-- client doesn't know (or that never answers) gives nil; an interaction answers
+-- true or false. A unit with no WoW.distance gives nil to everything.
+C_Spell = {}
+local function bookSpell(id)
+    for _, sp in ipairs(WoW.spellbook) do if sp.id == id then return sp end end
+end
+function C_Spell.GetSpellInfo(id)
+    local sp = bookSpell(id)
+    if not sp then return nil end
+    return { name = sp.name, iconID = 1, originalIconID = 1, castTime = 0,
+             minRange = sp.minRange or 0, maxRange = sp.maxRange or 0, spellID = id }
+end
+function C_Spell.IsSpellHarmful(id) local sp = bookSpell(id) return sp and sp.harmful or false end
+function C_Spell.IsSpellHelpful(id) local sp = bookSpell(id) return sp and sp.helpful or false end
+function C_Spell.IsSpellInRange(id, token)
+    local sp, d = bookSpell(id), WoW.distance[token]
+    if not (sp and d) then return nil end
+    if d <= sp.maxRange then return true end
+    return nil
+end
+C_SpellBook = {}
+function C_SpellBook.GetNumSpellBookSkillLines() return 1 end
+function C_SpellBook.GetSpellBookSkillLineInfo(line)
+    if line ~= 1 then return nil end
+    return { name = "General", iconID = 1, itemIndexOffset = 0, numSpellBookItems = #WoW.spellbook,
+             isGuild = false, shouldHide = false }
+end
+function C_SpellBook.GetSpellBookItemInfo(index)
+    local sp = WoW.spellbook[index]
+    if not sp then return nil end
+    return { actionID = sp.id, spellID = sp.id, itemType = 1, name = sp.name, subName = "", iconID = 1,
+             isPassive = false, isOffSpec = false }
+end
+C_Item = {}
+function C_Item.GetItemInfoInstant(id) if WoW.itemRanges[id] then return id end end
+function C_Item.RequestLoadItemDataByID() end
+function C_Item.IsItemInRange(id, token)
+    local r, d = WoW.itemRanges[id], WoW.distance[token]
+    if not (r and d) then return nil end
+    return d <= r
+end
+function CheckInteractDistance(token, index)
+    local d = WoW.distance[token]
+    if not d then return nil end
+    return d <= ({ [3] = 8, [4] = 28 })[index]
+end
+function UnitRace(token) if token == "player" then return "Orc", "Orc", 2 end end
+
+-- UnitCanAssist(unit, target) -> bool (dump: [Unit]): "player" and a unit
+-- that isn't attackable, the stub's whole model of a friendly one.
+function UnitCanAssist(token, other)
+    local u = unit(other)
+    if token ~= "player" or not u then return false end
+    return u.attackable ~= true and u.attackable ~= WoW.SECRET
 end
 
 -- UnitCanAttack(unit, target) -> bool (dump: [Unit]). Only "player" against a

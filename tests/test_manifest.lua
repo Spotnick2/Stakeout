@@ -68,14 +68,16 @@ H.eq(H.directive("SavedVariablesPerCharacter"), "StakeoutDB",
 -- Every load line, whatever its extension: the client would try to load a
 -- referenced file that the package doesn't carry.
 -- The library first (its files run before ours, as LibStub embedding needs),
--- then the look, then the core that builds the windows with it, then the
--- quest targets, which plug into the core's hooks (ns.core).
+-- then the look and the distance estimator the tooltips read, then the core
+-- that builds the windows with both, then the quest targets, which plug into
+-- the core's hooks (ns.core).
 local files = H.tocFiles()
-H.eq(#files, 4, "the TOC loads the library, Theme.lua, Stakeout.lua and Quests.lua")
+H.eq(#files, 5, "the TOC loads the library, Theme.lua, Range.lua, Stakeout.lua and Quests.lua")
 H.eq(files[1], "Libs\\LibGlass-1.0\\LibGlass-1.0.xml", "the embedded LibGlass-1.0 loads first")
 H.eq(files[2], "Theme.lua", "then Theme.lua")
-H.eq(files[3], "Stakeout.lua", "then Stakeout.lua")
-H.eq(files[4], "Quests.lua", "then Quests.lua, after the core it hooks into")
+H.eq(files[3], "Range.lua", "then Range.lua")
+H.eq(files[4], "Stakeout.lua", "then Stakeout.lua")
+H.eq(files[5], "Quests.lua", "then Quests.lua, after the core it hooks into")
 -- Libs/ is the packager's (.pkgmeta externals) and gitignored: not on disk here.
 for i = 2, #files do
     H.check(H.readFile(files[i]) ~= nil, "the TOC loads " .. files[i] .. ", which does not exist")
