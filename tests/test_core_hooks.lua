@@ -149,7 +149,37 @@ H.eq(T.buttons[3]:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Vile F
 H.eq(T.buttons[3]:GetAttribute("type2"), "macro", "...as a right-click macro")
 H.eq(T.buttons[2].tooltipLines and T.buttons[2].tooltipLines[1], "Report to Orgnil", "its tooltip lines")
 H.check(T.frame().shown, "the frame shows")
-H.eq(T.frame().height, 16 + 3 * 28 + 2 + 4, "three lines tall")
+H.eq(T.frame().height, 16 + 3 * 28 + 2 * 9 + 2 + 4, "three lines tall, the two quest lines with their labels")
+H.eq(T.buttons[1].label:GetText(), "", "a watch button has no label: the player typed the name")
+H.eq(T.buttons[2].label:GetText(), "Orgnil Soulscar", "a quest button is labelled with its name")
+
+-- A label drops the words quest buttons share, so two "Kul Tiras" mobs read
+-- apart; a name with nothing left to drop stays whole.
+specs = { spec("Kul Tiras Sailor", "enemy"), spec("Kul Tiras Marine", "enemy"), spec("Lieutenant Benedict", "enemy") }
+T.RefreshTargetFrame()
+H.eq(T.buttons[2].label:GetText(), "Sailor", "Kul Tiras Sailor reads Sailor")
+H.eq(T.buttons[3].label:GetText(), "Marine", "...and Kul Tiras Marine reads Marine")
+H.eq(T.buttons[4].label:GetText(), "Lieutenant Benedict", "a name that shares nothing stays whole")
+H.eq(T.buttons[2].label.width, 28, "a label in the middle of a line fits under its button")
+specs = { spec("Kul Tiras Sailor", "enemy") }
+T.RefreshTargetFrame()
+H.eq(T.buttons[2].label:GetText(), "Kul Tiras Sailor", "a lone quest button keeps its whole name")
+H.eq(T.buttons[2].label.width, 90 - 6 - 4, "...and the last of its line runs its label to the frame's edge")
+
+-- The picture: the face while a token shows the NPC, kept while the button
+-- lingers after that, and never carried over to another NPC in that place.
+WoW.SetUnit("nameplate2", { name = "Kul Tiras Sailor", guid = "Creature-0-0-0-0-3128-1", plate = true })
+specs = { spec("Kul Tiras Sailor", "enemy", { unit = "nameplate2", icon = "QI" }) }
+T.RefreshTargetFrame()
+local qb = T.buttons[2]
+H.eq(qb.icon.portrait, "nameplate2", "in sight, a quest button shows the NPC's face")
+qb.icon.texture = nil
+specs = { spec("Kul Tiras Sailor", "enemy", { icon = "QI" }) }
+T.RefreshTargetFrame()
+H.eq(qb.icon.texture, nil, "lingering, it keeps the face instead of going back to the icon")
+specs = { spec("Kul Tiras Marine", "enemy", { icon = "QI" }) }
+T.RefreshTargetFrame()
+H.eq(qb.icon.texture, "QI", "another NPC in that place gets the icon, not the old face")
 
 -- Six watch names wrap at five; the quest group still starts on a fresh line.
 clean()

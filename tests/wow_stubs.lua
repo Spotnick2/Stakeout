@@ -50,6 +50,10 @@ function WoW.reset()
     WoW.accountMacros = {}  -- account macros, index = position (1..120)
     WoW.macroSlots   = 18   -- character slots; CreateMacro fails beyond this
     WoW.playerClass  = "WARRIOR"   -- UnitClass("player")'s file name; nil: not readable yet
+    -- The quest log, in log order: { questID, title, complete, rows = { QuestObjectiveInfo... },
+    -- header = true for a header line }. questLogThrows: every C_QuestLog read errors.
+    WoW.questLog     = {}
+    WoW.questLogThrows = false
 end
 
 -- A macro as the client would hold it (for tests that start with one).
@@ -201,6 +205,7 @@ function Widget:GetAttribute(k) return self.attrs[k] end
 function Widget:RegisterForClicks(...) guardProtected(self, "RegisterForClicks") self.clicks = { ... } end
 -- Text, check buttons, sliders, edit boxes
 function Widget:SetText(t) self._text = t end
+function Widget:SetFontHeight(h) self.fontHeight = h end
 function Widget:GetText() return self._text end
 function Widget:SetFontObject() end
 function Widget:SetTextColor(r, g, b, a) self.textColor = { r, g, b, a } end
@@ -356,6 +361,75 @@ function UnitClass(token)
     return nil
 end
 
+-- UnitCanAttack(unit, target) -> bool (dump: [Unit]). Only "player" against a
+-- unit is modelled: the unit's `attackable` field.
+function UnitCanAttack(token, other)
+    local u = unit(other)
+    if token ~= "player" or not u then return false end
+    if u.attackable == WoW.SECRET then return WoW.SECRET end
+    return u.attackable == true
+end
+
+------------------------------------------------------------
+-- The quest log (forever-api-1.60.1.70532.md, C_QuestLog). Rows are
+-- QuestObjectiveInfo { text, type, finished, numFulfilled, numRequired,
+-- objectiveType }; GetInfo returns a QuestInfo (only the fields read here).
+------------------------------------------------------------
+C_QuestLog = {}
+local function questLogGuard()
+    if WoW.questLogThrows then error("quest log not available") end
+end
+-- WoW.questLogHidden: quests under a collapsed header. The log counts them and
+-- answers for them by ID, but they aren't among the shown rows GetInfo walks.
+local function questByID(questID)
+    for _, list in ipairs({ WoW.questLog, WoW.questLogHidden or {} }) do
+        for i, q in ipairs(list) do
+            if not q.header and q.questID == questID then return q, list == WoW.questLog and i or 1000 + i end
+        end
+    end
+end
+function C_QuestLog.GetNumQuestLogEntries()
+    questLogGuard()
+    local quests = #(WoW.questLogHidden or {})
+    for _, q in ipairs(WoW.questLog) do if not q.header then quests = quests + 1 end end
+    return #WoW.questLog, quests
+end
+function C_QuestLog.GetLogIndexForQuestID(questID)
+    questLogGuard()
+    local _, index = questByID(questID)
+    return index
+end
+function C_QuestLog.GetInfo(index)
+    questLogGuard()
+    local q = WoW.questLog[index]
+    if not q then return nil end
+    return { title = q.title or "", questLogIndex = index, questID = q.header and 0 or q.questID,
+             isHeader = q.header and true or false, isHidden = false }
+end
+function C_QuestLog.GetQuestObjectives(questID)
+    questLogGuard()
+    local q = questByID(questID)
+    local out = {}
+    for i, r in ipairs(q and q.rows or {}) do
+        out[i] = { text = r.text, type = r.type, finished = r.finished and true or false,
+                   numFulfilled = r.numFulfilled or 0, numRequired = r.numRequired or 1, objectiveType = r.objectiveType }
+    end
+    return out
+end
+function C_QuestLog.IsComplete(questID)
+    questLogGuard()
+    local q = questByID(questID)
+    return q and q.complete and true or false
+end
+-- UnitIsRelatedToActiveQuest(unit) -> bool. The unit's `related` field; a
+-- secret one models a read that would throw when tested.
+function C_QuestLog.UnitIsRelatedToActiveQuest(token)
+    local u = unit(token)
+    if not u then return false end
+    if u.related == WoW.SECRET then return WoW.SECRET end
+    return u.related == true
+end
+
 C_ClassColor = {}
 function C_ClassColor.GetClassColor(class)
     if class == "WARRIOR" then return { r = 0.78, g = 0.61, b = 0.43 } end
@@ -435,7 +509,7 @@ function C_CVar.GetCVar(name) return WoW.cvars[name] end
 function C_CVar.SetCVar(name, value) WoW.cvars[name] = value return true end
 
 C_Timer = {}
-function C_Timer.After(_, fn) WoW.timers[#WoW.timers + 1] = { fn = fn } end
+function C_Timer.After(seconds, fn) WoW.timers[#WoW.timers + 1] = { fn = fn, delay = seconds } end
 function C_Timer.NewTicker(_, fn) local t = { fn = fn } WoW.ticker = t return t end
 
 ------------------------------------------------------------

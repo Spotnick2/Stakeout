@@ -39,7 +39,7 @@ and the combat log. See below. Don't reintroduce them.
 ## Repository Layout
 
 - `Stakeout.toc`: manifest (interface, SavedVariables, `OptionalDeps: GlassUI`, load order): the embedded
-  LibGlass-1.0, then `Theme.lua`, then `Stakeout.lua`.
+  LibGlass-1.0, then `Theme.lua`, then `Stakeout.lua`, then `Quests.lua`.
 - `Theme.lua`: the windows' look (#28). WoW Forever (the backdrops, the default) or LibGlass's reflective
   glass (`C:/Projects/WoW/References/Docs/LIBGLASS-WINDOW-STYLING.md`), fixed once a session from
   `StakeoutDB.theme`, so a new choice applies after a `/reload`. Every LibGlass call is here. Its helpers
@@ -48,6 +48,12 @@ and the combat log. See below. Don't reintroduce them.
   turns it off, reported as `declined`). Not live: asked once at `ADDON_LOADED`, reported with `live = false`.
 - `Stakeout.lua`: the addon's core, in labelled sections (defaults and settings, target frame,
   detection, config GUI, events, slash commands).
+- `Quests.lua`: quest targets (#24), **experimental and off by default** (`StakeoutDB.questTargets`,
+  `/stakeout quests on`). Reads the quest log, matches the units the core sees (its `ns.core` hooks) and hands
+  the core up to 8 quest buttons (`ns.quests.ButtonSpecs`). Objective NPCs, item droppers and turn-in NPCs
+  come from a data provider, `ns.questData`, whose interface the file documents (Phase 3's QuestieDB adapter).
+  Without one it is a reduced subset: a mob you see whose name is literally in an unfinished kill objective gets
+  a button, nothing else (no turn-ins, no droppers; "other quest units", `questOther`, is opt-in).
 - `tests/`: Lua 5.1 unit tests, no game client. `pwsh tests/run.ps1`.
 - `Tools/deploy.ps1`: deploys to the local Forever AddOns folder (`-Probe` / `-ProbeOnly` add the probe).
 - `Tools/StakeoutProbe/`: the in-game probe, a ForeverProbe module (`/fp so`, never packaged). It measures what quest

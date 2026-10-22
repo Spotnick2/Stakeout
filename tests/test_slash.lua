@@ -78,4 +78,28 @@ for _, cmd in ipairs({ "list", "reset", "help", "config", "config" }) do
     H.check(pcall(slash, cmd), "/stakeout " .. cmd .. " runs")
 end
 
+------------------------------------------------------------
+-- /stakeout quests (experimental, off by default)
+------------------------------------------------------------
+WoW.messages = {}
+slash("help")
+H.check(WoW.chat():find("/stakeout quests on / off", 1, true) and WoW.chat():find("(experimental)", 1, true),
+    "the help names the quests command as experimental")
+WoW.messages = {}
+slash("quests")
+H.check(WoW.chat():find("Quest targets (experimental):", 1, true) and WoW.chat():find("off", 1, true),
+    "/stakeout quests says it is off: " .. WoW.chat())
+H.check(WoW.chat():find("/stakeout quests on", 1, true), "...and how to try it")
+H.eq(StakeoutDB.questTargets, false, "asking changes nothing")
+WoW.messages = {}
+slash("quests on")
+H.eq(StakeoutDB.questTargets, true, "/stakeout quests on")
+H.check(WoW.chat():find("Quest targets (experimental):", 1, true) and WoW.chat():find("on", 1, true),
+    "...confirmed")
+H.check(WoW.chat():find("Without quest data", 1, true), "...with the subset it covers without Questie")
+slash("quests OFF")
+H.eq(StakeoutDB.questTargets, false, "/stakeout quests off (any case)")
+slash("quests maybe")
+H.eq(StakeoutDB.questTargets, false, "anything else only reports")
+
 H.done("test_slash")

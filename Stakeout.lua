@@ -58,6 +58,9 @@ local defaults = {
     lockFrame        = false,
     theme            = "forever",  -- the windows' look, "forever" or "glass" (Theme.lua; after a /reload)
     followGlassUI    = true,    -- with Glass UI loaded, wear its look (Theme.lua; after a /reload)
+    questTargets     = false,   -- experimental: buttons for what the quest log wants (Quests.lua)
+    questOther       = false,   -- ...and for other units the client relates to a quest
+    questMutes       = {},      -- [muteKey] = true; see SetQuestMute
 }
 
 -- Whether this session's settings came back from disk. svLoadCheck is written
@@ -109,6 +112,33 @@ end
 
 local function ClearNPCs()
     wipe(StakeoutDB.npcList)
+end
+
+-- Quest target mutes (Quests.lua). "q<questID>" mutes a whole quest, and
+-- "q<questID>:<objKey>:<npcId|name>" one target of one of its objectives.
+-- Returns false for a key of neither shape.
+local function SetQuestMute(key, on)
+    if type(key) ~= "string" or not key:find("^q%d+$") and not key:find("^q%d+:.+:.+$") then return false end
+    if type(StakeoutDB.questMutes) ~= "table" then StakeoutDB.questMutes = {} end
+    StakeoutDB.questMutes[key] = on and true or nil
+    return true
+end
+
+-- Forget the mutes of quests that left the log; activeIDs is [questID] = true.
+-- Quests.lua calls this only after a read of an initialized log, so a log that
+-- isn't loaded yet never wipes them. Returns how many went.
+local function PruneQuestMutes(activeIDs)
+    local mutes = StakeoutDB.questMutes
+    if type(mutes) ~= "table" or type(activeIDs) ~= "table" then return 0 end
+    local dropped = 0
+    for key in pairs(mutes) do
+        local id = type(key) == "string" and tonumber(key:match("^q(%d+)")) or nil
+        if not (id and activeIDs[id]) then
+            mutes[key] = nil
+            dropped = dropped + 1
+        end
+    end
+    return dropped
 end
 -- config-owner: end
 
@@ -296,6 +326,7 @@ local BUTTONS_PER_ROW = 5
 local BUTTON_SIZE     = 26
 local BUTTON_PAD      = 2
 local HEADER_HEIGHT   = 16
+local LABEL_HEIGHT    = 9    -- the name under a quest button (groups 2 and 3)
 
 local function CreateTargetFrame()
     if targetFrame then return end
@@ -458,6 +489,12 @@ local function NewButton(i)
     ht:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
     ht:SetBlendMode("ADD")
     btn.highlight = ht
+
+    -- A quest button's name, under it: placed by ApplyLayout, written by
+    -- UpdateButtonLooks. A watch button's is empty: the player typed those.
+    btn.label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    btn.label:SetFontHeight(8)
+    btn.label:SetWordWrap(false)
     -- Only ever made by ApplyLayout, which runs out of combat.
     Theme.Button(btn)
 
@@ -478,26 +515,42 @@ local function ApplyLayout(list)
         return
     end
 
-    -- Each group starts a new line, and a line holds BUTTONS_PER_ROW.
+    -- Each group starts a new line, and a line holds BUTTONS_PER_ROW. A quest
+    -- line is taller by its labels.
     local spots, line, col, cols, group = {}, -1, BUTTONS_PER_ROW, 0, nil
+    local y, lineHeight = 0, 0
     for i, e in ipairs(list) do
         if e.group ~= group or col == BUTTONS_PER_ROW then
+            y = y + lineHeight
             line, col, group = line + 1, 0, e.group
+            lineHeight = BUTTON_SIZE + BUTTON_PAD + (e.group > 1 and LABEL_HEIGHT or 0)
         end
-        spots[i] = { line = line, col = col }
+        spots[i] = { line = line, col = col, y = y }
         col = col + 1
         cols = math.max(cols, col)
     end
-    local width  = cols * (BUTTON_SIZE + BUTTON_PAD) + BUTTON_PAD + 8
-    local height = HEADER_HEIGHT + (line + 1) * (BUTTON_SIZE + BUTTON_PAD) + BUTTON_PAD + 4
-    targetFrame:SetSize(math.max(width, 90), height)
+    local pitch  = BUTTON_SIZE + BUTTON_PAD
+    local width  = math.max(cols * pitch + BUTTON_PAD + 8, 90)
+    local height = HEADER_HEIGHT + y + lineHeight + BUTTON_PAD + 4
+    targetFrame:SetSize(width, height)
 
     for i, e in ipairs(list) do
         local btn = targetButtons[i] or NewButton(i)
+        local x = 6 + spots[i].col * pitch
         btn:ClearAllPoints()
-        btn:SetPoint("TOPLEFT", targetFrame, "TOPLEFT",
-            6 + spots[i].col * (BUTTON_SIZE + BUTTON_PAD),
-            -(HEADER_HEIGHT + 2 + spots[i].line * (BUTTON_SIZE + BUTTON_PAD)))
+        btn:SetPoint("TOPLEFT", targetFrame, "TOPLEFT", x, -(HEADER_HEIGHT + 2 + spots[i].y))
+        -- A label fits under its own button, except the last of a line, whose
+        -- label runs to the frame's edge: a lone "Kul Tiras Sailor" fits whole.
+        btn.label:ClearAllPoints()
+        if not spots[i + 1] or spots[i + 1].line ~= spots[i].line then
+            btn.label:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -1)
+            btn.label:SetWidth(width - x - 4)
+            btn.label:SetJustifyH("LEFT")
+        else
+            btn.label:SetPoint("TOP", btn, "BOTTOM", 0, -1)
+            btn.label:SetWidth(pitch)
+            btn.label:SetJustifyH("CENTER")
+        end
         -- The key mechanic: a secure macro targets the NPC by exact name.
         btn:SetAttribute("type", "macro")
         btn:SetAttribute("macrotext", e.macrotext)
@@ -514,9 +567,33 @@ local function ApplyLayout(list)
     targetFrame:Show()
 end
 
--- The insecure part, on every refresh: who each button is for, its tooltip
--- and its picture (the NPC's portrait while a unit token still shows it).
+-- A quest button's label: its name without the words it shares with another
+-- quest button's ("Kul Tiras Sailor" and "Kul Tiras Marine" read "Sailor" and
+-- "Marine"), or the whole name when nothing would be left. By words, so no
+-- language's own rules are assumed.
+local function ShortLabel(name, others)
+    local shared = {}
+    for _, other in ipairs(others) do
+        if other ~= name then
+            for word in other:gmatch("%S+") do shared[word] = true end
+        end
+    end
+    local kept = {}
+    for word in name:gmatch("%S+") do
+        if not shared[word] then kept[#kept + 1] = word end
+    end
+    return #kept > 0 and table.concat(kept, " ") or name
+end
+
+-- The insecure part, on every refresh: who each button is for, its tooltip,
+-- its label and its picture. The picture is the NPC's portrait while a unit
+-- token shows it, and stays while the button lingers after that (the portrait
+-- is of that NPC, at most LINGER seconds old); otherwise the button's icon.
 local function UpdateButtonLooks(list)
+    local questNames = {}
+    for _, e in ipairs(list) do
+        if e.group > 1 then questNames[#questNames + 1] = e.name end
+    end
     for i, e in ipairs(list) do
         local btn = targetButtons[i]
         btn.npcName = e.name
@@ -524,9 +601,12 @@ local function UpdateButtonLooks(list)
         btn.friendly = e.friendly
         if e.unit and ReadNPC(e.unit) == e.name then
             SetPortraitTexture(btn.icon, e.unit)
-        else
+            btn.portraitOf = e.name
+        elseif btn.portraitOf ~= e.name then
             btn.icon:SetTexture(e.icon or GetButtonIcon())
+            btn.portraitOf = nil
         end
+        btn.label:SetText(e.group > 1 and ShortLabel(e.name, questNames) or "")
     end
 end
 
@@ -1893,6 +1973,19 @@ SlashCmdList["STAKEOUT"] = function(input)
                 Theme.Following() and "Glass UI's" or Theme.LABELS[Theme.Active()])
         end
 
+    elseif cmd == "quests" then
+        -- Quests.lua owns the feature; the core only passes the command on.
+        local quests = ns.quests
+        if not (quests and quests.SetEnabled) then
+            Print("Quest targets aren't loaded.")
+            return
+        end
+        local arg = rest:lower()
+        if arg == "on" or arg == "off" then
+            quests.SetEnabled(arg == "on")
+        end
+        quests.PrintState()
+
     elseif cmd == "clear" then
         ClearWatchList()
 
@@ -1909,6 +2002,7 @@ SlashCmdList["STAKEOUT"] = function(input)
         Print("  /stakeout export              — Copy the list as /stakeout add lines")
         Print("  /stakeout macro on / off      — Keep the list in a character macro")
         Print("  /stakeout look forever/glass  — The windows' look (after a /reload)")
+        Print("  /stakeout quests on / off     — Quest target buttons (experimental)")
         Print("  /stakeout clear               — Remove all NPCs")
         Print("  /stakeout reset               — Clear detections & rescan")
     end
@@ -1923,6 +2017,7 @@ ns.core = {
     SetConfig = SetConfig, RequestFrameRefresh = RefreshTargetFrame, Rescan = Rescan,
     MacroSafeName = MacroSafeName, NAME_MAX = NAME_MAX, IsWatchDisplayed = IsWatchDisplayed,
     IsRefreshPending = function() return pendingRefresh end,
+    SetQuestMute = SetQuestMute, PruneQuestMutes = PruneQuestMutes, LINGER = LINGER,
     BUTTON_ICONS = BUTTON_ICONS, MARKER_ICONS = MARKER_ICONS, MARKER_NAMES = MARKER_NAMES,
 }
 
