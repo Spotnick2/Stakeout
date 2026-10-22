@@ -217,6 +217,16 @@ local eg = StakeoutExportFrame.glass
 H.eq(eg.reflect.header.height, 22, "the export window, lit down to its text")
 H.check(StakeoutExportFrame.glassReading, "its text sits on a reading region")
 H.eq(StakeoutExportFrame.glassReading.points[1][2], StakeoutExportScroll, "covering the text's scroll area")
+-- The pane shares the export window with its shell: it must draw over every
+-- layer of it, or the shell's tint covers the text's backing (Codex on #29).
+local over = true
+for _, c in ipairs(StakeoutExportFrame.children) do
+    if c ~= StakeoutExportFrame.glassReading and c.layer == "BACKGROUND"
+        and (c.sublevel or 0) >= StakeoutExportFrame.glassReading.sublevel then
+        over = false
+    end
+end
+H.check(over, "the export's reading region draws over its window's shell")
 
 -- Last: the sweep clicks Clear All, Reset Detections and every delete.
 H.check(fireAll("glass, out of combat") > 40, "every handler runs under glass")
