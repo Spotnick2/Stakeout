@@ -1,18 +1,18 @@
 # Changelog
 
-## 2.1.2 - 2026-10-04
+## v2.1.2 - 2026-10-04
 
 - No more "Client build changed: ... Check the API dump and re-measure." message at login. That note is meant for
   the addon's developer, and 2.1.1 showed it to everyone by mistake whenever Blizzard patched the Forever beta.
   Stakeout keeps working on newer builds, and there was nothing for you to do about it. Nothing else changes.
 
-## 2.1.1 - 2026-10-04
+## v2.1.1 - 2026-10-04
 
 - No more "Tested on client build ...; this is ..." message at login. It appeared whenever Blizzard patched the
   Forever beta, but Stakeout keeps working on newer builds and there was nothing for you to do about it.
   Nothing else changes.
 
-## 2.1.0 - 2026-09-24
+## v2.1.0 - 2026-09-24
 
 ### Your watch list can now come back by itself
 
@@ -37,7 +37,7 @@ on. Changes made in combat are written to the macro when combat ends.
 - Very long NPC names (over 100 bytes of text, which is 100 letters in English and fewer in some other alphabets)
   are refused. No NPC has a name that long, and the limit keeps every name small enough for a macro.
 
-## 2.0.0 - 2026-09-24
+## v2.0.0 - 2026-09-24
 
 **Stakeout now runs on World of Warcraft: Forever.** This version is for Forever only. TBC Classic Anniversary
 players can keep using 1.0.2, which stays available on CurseForge. There will be no further TBC updates.
@@ -86,11 +86,11 @@ Nine sounds that Forever refuses to play were removed (the four bells other than
 Fireworks, Goblin Spring, Gnome Yell). If you had one selected, Stakeout uses Raid Warning. The DBM-Core
 sounds still work when DBM is installed.
 
-## 1.0.2 - 2026-04-23
+## v1.0.2 - 2026-04-23
 
 ### Added
 - Alert sound selection: choose from 30 sounds in the Alerts config section. Includes UI alerts (Raid Warning, Ready Check, Whisper, Alarm Clock), creature sounds (Murloc Aggro, Loatheb), bells (Alliance, Horde, Night Elf, Karazhan, Dwarf/Gnome), horns (Horn of Awakening, Horn of Cenarius, Dwarf), nautical (Foghorn, Boat Warning), PvP sounds, atmospheric sounds (Ogre War Drums, Troll Drums, Fireworks, Goblin Spring, Gnome Yell), and 7 additional sounds if DBM-Core is installed (Algalon, Illidan, Kil'Jaeden, Air Horn, etc.). The selection previews immediately on click and is saved per character.
 
-## 1.0.0 - 2026-04-08
+## v1.0.0 - 2026-04-08
 
 Initial release

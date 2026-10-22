@@ -6,6 +6,7 @@
 ## SavedVariablesPerCharacter: StakeoutDB
 ## OptionalDeps: GlassUI
 ## X-Curse-Project-ID: 1508654
+## X-Wago-ID: rNkgwjNa
 
 Libs\LibGlass-1.0\LibGlass-1.0.xml
 Theme.lua

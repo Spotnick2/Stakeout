@@ -1,3 +1,5 @@
 .github/copilot-instructions.md
 # Filled by the packager (.pkgmeta externals); the tests read ..\LibGlass.
 Libs/
+# The packager's output (CI's dry run, or a local one).
+.release/
