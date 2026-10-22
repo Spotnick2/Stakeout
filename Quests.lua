@@ -266,8 +266,24 @@ local function NewMember(key, npcId)
     return { key = key, npcId = npcId, refs = {}, tokens = {}, guids = {}, near = false, tier = NONE }
 end
 
+-- Each GUID of a sighting lives as long as that unit's own part of it (Codex
+-- on #45): `true` while a token shows it, then the time it left sight, and
+-- gone LINGER seconds after that (Tick). So a death while it lingers still
+-- ends it at once, and an old one never keeps a later one's sighting alive.
+local function Depart(m, guid)
+    if type(guid) ~= "string" or not m.guids[guid] then return end
+    for _, g in pairs(m.tokens) do
+        if g == guid then return end   -- another token still shows it
+    end
+    m.guids[guid] = GetTime()
+end
+
 local function Hold(m, token, guid, name)
+    -- A token now showing another unit of the member (a plate reused without
+    -- a removal): the one it showed before has left sight.
+    local before = m.tokens[token]
     m.tokens[token] = guid or true
+    if before ~= m.tokens[token] then Depart(m, before) end
     holders[token] = holders[token] or {}
     holders[token][m] = true
     if guid then m.guids[guid] = true end
@@ -278,19 +294,10 @@ local function Hold(m, token, guid, name)
 end
 
 -- The token stopped showing the member. It was seen until now: it lingers.
--- Its GUID goes with it unless another token still shows that unit: an old
--- GUID left behind would keep the sighting of a later one of the name alive
--- past that one's death (Codex on #45).
 local function Release(m, token)
     local guid = m.tokens[token]
     m.tokens[token] = nil
-    if type(guid) == "string" then
-        local held = false
-        for _, g in pairs(m.tokens) do
-            if g == guid then held = true break end
-        end
-        if not held then m.guids[guid] = nil end
-    end
+    Depart(m, guid)
     if holders[token] then holders[token][m] = nil end
     if m.unit == token then m.unit = nil end
     if not next(m.tokens) then m.lastSeen = GetTime() end
@@ -344,6 +351,24 @@ end
 -------------------------------------------------------------------------------
 -- Reading the quest log
 -------------------------------------------------------------------------------
+-- One quest, read by its ID: its rows and whether it's complete.
+local function ReadQuest(questID, title, pos)
+    local rows = {}
+    local raw = C_QuestLog.GetQuestObjectives(questID)
+    if type(raw) == "table" then
+        for r, o in ipairs(raw) do
+            rows[r] = {
+                text = PlainString(o.text), type = PlainString(o.type), finished = o.finished == true,
+                numFulfilled = o.numFulfilled, numRequired = o.numRequired,
+            }
+        end
+    end
+    return {
+        questID = questID, title = title, rows = rows,
+        complete = C_QuestLog.IsComplete(questID) == true, pos = pos, refs = {},
+    }
+end
+
 -- The second return says whether the read found every quest the log counts.
 -- The first count is of the shown rows only, so a quest under a collapsed
 -- header may be missing from a read: such a read must never prune its mutes.
@@ -354,21 +379,7 @@ local function ReadLogUnsafe()
     for i = 1, n do
         local info = C_QuestLog.GetInfo(i)
         if type(info) == "table" and not info.isHeader and type(info.questID) == "number" and info.questID > 0 then
-            local questID = info.questID
-            local rows = {}
-            local raw = C_QuestLog.GetQuestObjectives(questID)
-            if type(raw) == "table" then
-                for r, o in ipairs(raw) do
-                    rows[r] = {
-                        text = PlainString(o.text), type = PlainString(o.type), finished = o.finished == true,
-                        numFulfilled = o.numFulfilled, numRequired = o.numRequired,
-                    }
-                end
-            end
-            list[#list + 1] = {
-                questID = questID, title = PlainString(info.title), rows = rows,
-                complete = C_QuestLog.IsComplete(questID) == true, pos = #list + 1, refs = {},
-            }
+            list[#list + 1] = ReadQuest(info.questID, PlainString(info.title), #list + 1)
         end
     end
     return list, type(total) == "number" and #list >= total
@@ -380,6 +391,17 @@ local function ReadLog()
     local ok, list, whole = pcall(ReadLogUnsafe)
     if ok then return list, whole end
     return nil
+end
+
+-- A quest a partial read missed (a collapsed header), read again by its ID:
+-- fresh rows while the log still holds it, nil once it has left (turned in,
+-- abandoned). Nil too when it can't be read.
+local function RereadMissed(old, pos)
+    local ok, quest = pcall(function()
+        if not C_QuestLog.GetLogIndexForQuestID(old.questID) then return nil end
+        return ReadQuest(old.questID, old.title, pos)
+    end)
+    return ok and quest or nil
 end
 
 -- A ref's progress. A row says it; without one the quest's completion does.
@@ -458,16 +480,16 @@ function Rebuild()
     local list, whole = ReadLog()
     if not list then return end   -- unreadable: keep what there is
     -- A partial read (a collapsed header hides quests) keeps the quests it
-    -- missed as they were last read, so their targets and sightings stay; a
-    -- whole read replaces them (Codex on #45). Until then their rows can be
-    -- stale, which errs on keeping a button.
+    -- missed, so their targets and sightings stay: each is read again by its
+    -- ID, so its progress stays current and it goes once it leaves the log
+    -- (Codex on #45).
     if not whole then
         local present = {}
         for _, quest in ipairs(list) do present[quest.questID] = true end
         for _, old in ipairs(questList) do
             if not present[old.questID] then
-                list[#list + 1] = { questID = old.questID, title = old.title, rows = old.rows,
-                                    complete = old.complete, pos = #list + 1, refs = {} }
+                local quest = RereadMissed(old, #list + 1)
+                if quest then list[#list + 1] = quest end
             end
         end
     end
@@ -679,6 +701,9 @@ local function Tick()
         for token in pairs(m.tokens) do
             local name, guid = C.ReadNPC(token)
             if not Shows(m, name, guid) then Release(m, token) end
+        end
+        for guid, held in pairs(m.guids) do
+            if type(held) == "number" and now - held > LINGER then m.guids[guid] = nil end
         end
         if next(m.tokens) then
             m.lastSeen = now

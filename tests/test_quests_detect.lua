@@ -29,7 +29,7 @@ local function clean()
     for k in pairs(T.detected) do T.detected[k] = nil end
     for k in pairs(T.announced) do T.announced[k] = nil end
     WoW.units, WoW.messages, WoW.sounds, WoW.inCombat = {}, {}, {}, false
-    WoW.questLog = {}
+    WoW.questLog, WoW.questLogHidden = {}, nil
     ns.questData = nil
     if StakeoutDB.questOther then Q.SetOther(false) end
     WoW.flushTimers()
@@ -213,16 +213,56 @@ WoW.units.nameplate2 = nil
 WoW.fire("UNIT_DIED", guid(3106, "2"))
 WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate2")
 H.eq(shown(), "", "the one in sight dies: over at once, whatever was seen before it")
--- Partial reads (a collapsed header) keep the quests they missed (Codex on #45).
+-- A death while it lingers still ends it at once (its GUID outlives the plate
+-- for LINGER, Codex on #45).
 clean()
 WoW.questLog = { { questID = 1, title = "Crawlers", rows = { row("monster", "0/6 Pygmy Surf Crawler slain") } } }
 Q.Rebuild()
 plate("nameplate1", { name = "Pygmy Surf Crawler", guid = guid(3106, "1"), attackable = true })
+WoW.units.nameplate1 = nil
+WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+H.eq(shown(), "Pygmy Surf Crawler", "out of sight: lingering")
+WoW.fire("UNIT_DIED", guid(3106, "1"))
+H.eq(shown(), "", "killed while it lingers: over at once")
+-- A plate reused for another one of the name, with no removal in between:
+-- the first one's GUID departs then, and expires after LINGER.
+clean()
+WoW.questLog = { { questID = 1, title = "Crawlers", rows = { row("monster", "0/6 Pygmy Surf Crawler slain") } } }
+Q.Rebuild()
+plate("nameplate1", { name = "Pygmy Surf Crawler", guid = guid(3106, "1"), attackable = true })
+plate("nameplate1", { name = "Pygmy Surf Crawler", guid = guid(3106, "2"), attackable = true })
+WoW.advance(ns.core.LINGER + 1)
+WoW.ticker.fn()
+WoW.units.nameplate1 = nil
+WoW.fire("UNIT_DIED", guid(3106, "2"))
+WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+H.eq(shown(), "", "the second one dies: over at once, the reused plate's first GUID long expired")
+-- Partial reads (a collapsed header) keep the quests they missed, read again
+-- by ID so their progress stays current (Codex on #45).
+clean()
+local crawlers = { questID = 1, title = "Crawlers", rows = { row("monster", "0/6 Pygmy Surf Crawler slain") } }
+WoW.questLog = { crawlers }
+Q.Rebuild()
+plate("nameplate1", { name = "Pygmy Surf Crawler", guid = guid(3106, "1"), attackable = true })
 H.eq(shown(), "Pygmy Surf Crawler", "a crawler in sight has its button")
-WoW.questLog, WoW.questLogUnshown = {}, 1
+WoW.questLog, WoW.questLogHidden = {}, { crawlers }
 Q.Rebuild()
 H.eq(shown(), "Pygmy Surf Crawler", "its quest hidden under a collapsed header: the button stays")
-WoW.questLogUnshown = nil
+crawlers.rows[1] = row("monster", "6/6 Pygmy Surf Crawler slain", true)
+Q.Rebuild()
+H.eq(shown(), "", "the hidden quest's objective finishes: the button goes")
+crawlers.rows[1] = row("monster", "5/6 Pygmy Surf Crawler slain")
+Q.Rebuild()
+H.eq(shown(), "Pygmy Surf Crawler", "unfinished again (still hidden): the crawler in sight is back")
+WoW.questLogHidden = { { questID = 2, title = "Another hidden", rows = {} } }
+Q.Rebuild()
+H.eq(shown(), "", "turned in while hidden (the read still partial): it goes at once")
+H.eq(#Q.QuestList(), 0, "...and leaves the quest list, though the read was partial")
+WoW.questLogHidden = nil
+WoW.questLog = { crawlers }
+Q.Rebuild()
+H.eq(shown(), "Pygmy Surf Crawler", "back in the shown rows: its button returns")
+WoW.questLog = {}
 Q.Rebuild()
 H.eq(shown(), "", "a whole read without the quest: it goes")
 -- A stale token (a missed removal, a reused plate) is dropped by the tick.

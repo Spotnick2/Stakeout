@@ -379,17 +379,25 @@ C_QuestLog = {}
 local function questLogGuard()
     if WoW.questLogThrows then error("quest log not available") end
 end
+-- WoW.questLogHidden: quests under a collapsed header. The log counts them and
+-- answers for them by ID, but they aren't among the shown rows GetInfo walks.
 local function questByID(questID)
-    for _, q in ipairs(WoW.questLog) do
-        if not q.header and q.questID == questID then return q end
+    for _, list in ipairs({ WoW.questLog, WoW.questLogHidden or {} }) do
+        for i, q in ipairs(list) do
+            if not q.header and q.questID == questID then return q, list == WoW.questLog and i or 1000 + i end
+        end
     end
 end
 function C_QuestLog.GetNumQuestLogEntries()
     questLogGuard()
-    local quests = 0
+    local quests = #(WoW.questLogHidden or {})
     for _, q in ipairs(WoW.questLog) do if not q.header then quests = quests + 1 end end
-    -- questLogUnshown: quests under a collapsed header, counted but not listed.
-    return #WoW.questLog, quests + (WoW.questLogUnshown or 0)
+    return #WoW.questLog, quests
+end
+function C_QuestLog.GetLogIndexForQuestID(questID)
+    questLogGuard()
+    local _, index = questByID(questID)
+    return index
 end
 function C_QuestLog.GetInfo(index)
     questLogGuard()

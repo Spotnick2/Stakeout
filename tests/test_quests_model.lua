@@ -288,10 +288,10 @@ H.eq(StakeoutDB.questMutes["q200:c1:1"], true, "...and keeps the one still in th
 -- A quest under a collapsed header isn't among the shown rows, but the log
 -- still counts it: a read that found fewer quests than that is partial.
 StakeoutDB.questMutes.q300 = true
-WoW.questLogUnshown = 1
+WoW.questLogHidden = { { questID = 300, title = "Hidden", rows = {} } }
 Q.Rebuild()
 H.eq(StakeoutDB.questMutes.q300, true, "a partial read (a collapsed header) prunes nothing")
-WoW.questLogUnshown = nil
+WoW.questLogHidden = nil
 WoW.questLog = {}
 Q.Rebuild()
 H.eq(next(StakeoutDB.questMutes), nil, "a genuinely empty, initialized log prunes everything")
