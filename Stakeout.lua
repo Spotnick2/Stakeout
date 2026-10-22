@@ -58,6 +58,9 @@ local defaults = {
     lockFrame        = false,
     theme            = "forever",  -- the windows' look, "forever" or "glass" (Theme.lua; after a /reload)
     followGlassUI    = true,    -- with Glass UI loaded, wear its look (Theme.lua; after a /reload)
+    questTargets     = false,   -- experimental: buttons for what the quest log wants (Quests.lua)
+    questOther       = false,   -- ...and for other units the client relates to a quest
+    questMutes       = {},      -- [muteKey] = true; see SetQuestMute
 }
 
 -- Whether this session's settings came back from disk. svLoadCheck is written
@@ -109,6 +112,33 @@ end
 
 local function ClearNPCs()
     wipe(StakeoutDB.npcList)
+end
+
+-- Quest target mutes (Quests.lua). "q<questID>" mutes a whole quest, and
+-- "q<questID>:<objKey>:<npcId|name>" one target of one of its objectives.
+-- Returns false for a key of neither shape.
+local function SetQuestMute(key, on)
+    if type(key) ~= "string" or not key:find("^q%d+$") and not key:find("^q%d+:.+:.+$") then return false end
+    if type(StakeoutDB.questMutes) ~= "table" then StakeoutDB.questMutes = {} end
+    StakeoutDB.questMutes[key] = on and true or nil
+    return true
+end
+
+-- Forget the mutes of quests that left the log; activeIDs is [questID] = true.
+-- Quests.lua calls this only after a read of an initialized log, so a log that
+-- isn't loaded yet never wipes them. Returns how many went.
+local function PruneQuestMutes(activeIDs)
+    local mutes = StakeoutDB.questMutes
+    if type(mutes) ~= "table" or type(activeIDs) ~= "table" then return 0 end
+    local dropped = 0
+    for key in pairs(mutes) do
+        local id = type(key) == "string" and tonumber(key:match("^q(%d+)")) or nil
+        if not (id and activeIDs[id]) then
+            mutes[key] = nil
+            dropped = dropped + 1
+        end
+    end
+    return dropped
 end
 -- config-owner: end
 
@@ -1893,6 +1923,19 @@ SlashCmdList["STAKEOUT"] = function(input)
                 Theme.Following() and "Glass UI's" or Theme.LABELS[Theme.Active()])
         end
 
+    elseif cmd == "quests" then
+        -- Quests.lua owns the feature; the core only passes the command on.
+        local quests = ns.quests
+        if not (quests and quests.SetEnabled) then
+            Print("Quest targets aren't loaded.")
+            return
+        end
+        local arg = rest:lower()
+        if arg == "on" or arg == "off" then
+            quests.SetEnabled(arg == "on")
+        end
+        quests.PrintState()
+
     elseif cmd == "clear" then
         ClearWatchList()
 
@@ -1909,6 +1952,7 @@ SlashCmdList["STAKEOUT"] = function(input)
         Print("  /stakeout export              — Copy the list as /stakeout add lines")
         Print("  /stakeout macro on / off      — Keep the list in a character macro")
         Print("  /stakeout look forever/glass  — The windows' look (after a /reload)")
+        Print("  /stakeout quests on / off     — Quest target buttons (experimental)")
         Print("  /stakeout clear               — Remove all NPCs")
         Print("  /stakeout reset               — Clear detections & rescan")
     end
@@ -1923,6 +1967,7 @@ ns.core = {
     SetConfig = SetConfig, RequestFrameRefresh = RefreshTargetFrame, Rescan = Rescan,
     MacroSafeName = MacroSafeName, NAME_MAX = NAME_MAX, IsWatchDisplayed = IsWatchDisplayed,
     IsRefreshPending = function() return pendingRefresh end,
+    SetQuestMute = SetQuestMute, PruneQuestMutes = PruneQuestMutes, LINGER = LINGER,
     BUTTON_ICONS = BUTTON_ICONS, MARKER_ICONS = MARKER_ICONS, MARKER_NAMES = MARKER_NAMES,
 }
 
