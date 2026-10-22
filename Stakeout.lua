@@ -490,14 +490,11 @@ local function NewButton(i)
     ht:SetBlendMode("ADD")
     btn.highlight = ht
 
-    -- A quest button's name, under it (UpdateButtonLooks). A watch button's
-    -- is empty: the player typed those names.
+    -- A quest button's name, under it: placed by ApplyLayout, written by
+    -- UpdateButtonLooks. A watch button's is empty: the player typed those.
     btn.label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     btn.label:SetFontHeight(8)
-    btn.label:SetPoint("TOP", btn, "BOTTOM", 0, -1)
-    btn.label:SetWidth(BUTTON_SIZE + BUTTON_PAD)
     btn.label:SetWordWrap(false)
-    btn.label:SetJustifyH("CENTER")
     -- Only ever made by ApplyLayout, which runs out of combat.
     Theme.Button(btn)
 
@@ -532,15 +529,28 @@ local function ApplyLayout(list)
         col = col + 1
         cols = math.max(cols, col)
     end
-    local width  = cols * (BUTTON_SIZE + BUTTON_PAD) + BUTTON_PAD + 8
+    local pitch  = BUTTON_SIZE + BUTTON_PAD
+    local width  = math.max(cols * pitch + BUTTON_PAD + 8, 90)
     local height = HEADER_HEIGHT + y + lineHeight + BUTTON_PAD + 4
-    targetFrame:SetSize(math.max(width, 90), height)
+    targetFrame:SetSize(width, height)
 
     for i, e in ipairs(list) do
         local btn = targetButtons[i] or NewButton(i)
+        local x = 6 + spots[i].col * pitch
         btn:ClearAllPoints()
-        btn:SetPoint("TOPLEFT", targetFrame, "TOPLEFT",
-            6 + spots[i].col * (BUTTON_SIZE + BUTTON_PAD), -(HEADER_HEIGHT + 2 + spots[i].y))
+        btn:SetPoint("TOPLEFT", targetFrame, "TOPLEFT", x, -(HEADER_HEIGHT + 2 + spots[i].y))
+        -- A label fits under its own button, except the last of a line, whose
+        -- label runs to the frame's edge: a lone "Kul Tiras Sailor" fits whole.
+        btn.label:ClearAllPoints()
+        if not spots[i + 1] or spots[i + 1].line ~= spots[i].line then
+            btn.label:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -1)
+            btn.label:SetWidth(width - x - 4)
+            btn.label:SetJustifyH("LEFT")
+        else
+            btn.label:SetPoint("TOP", btn, "BOTTOM", 0, -1)
+            btn.label:SetWidth(pitch)
+            btn.label:SetJustifyH("CENTER")
+        end
         -- The key mechanic: a secure macro targets the NPC by exact name.
         btn:SetAttribute("type", "macro")
         btn:SetAttribute("macrotext", e.macrotext)

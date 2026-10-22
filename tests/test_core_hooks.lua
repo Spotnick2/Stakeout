@@ -160,6 +160,11 @@ T.RefreshTargetFrame()
 H.eq(T.buttons[2].label:GetText(), "Sailor", "Kul Tiras Sailor reads Sailor")
 H.eq(T.buttons[3].label:GetText(), "Marine", "...and Kul Tiras Marine reads Marine")
 H.eq(T.buttons[4].label:GetText(), "Lieutenant Benedict", "a name that shares nothing stays whole")
+H.eq(T.buttons[2].label.width, 28, "a label in the middle of a line fits under its button")
+specs = { spec("Kul Tiras Sailor", "enemy") }
+T.RefreshTargetFrame()
+H.eq(T.buttons[2].label:GetText(), "Kul Tiras Sailor", "a lone quest button keeps its whole name")
+H.eq(T.buttons[2].label.width, 90 - 6 - 4, "...and the last of its line runs its label to the frame's edge")
 
 -- The picture: the face while a token shows the NPC, kept while the button
 -- lingers after that, and never carried over to another NPC in that place.
