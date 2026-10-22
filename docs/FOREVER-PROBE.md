@@ -145,7 +145,9 @@ than the current value, and never lowers it.
 **Observed, not measured (2026-10-22, 70450, Durotar's coast, the owner's screenshots):** with the CVar at 100, hostile
 mobs about 80 yd away showed only the red NPC *name labels* (the Names setting), not nameplates, and a watch-list entry for
 one of them stayed undetected. A nearer one had a real plate. So the effective plate range on this client is below 100;
-how far it is wasn't measured. Addons can't read name labels: beyond plate range, only the target and the mouseover detect.
+how far it is wasn't measured. The owner's in-game estimate: **about 40 yd**, close to the 45 yd default, so raising the
+CVar may change nothing on this client. Addons can't read name labels: beyond plate range, only the target and the
+mouseover detect. To settle it: plates appearing at known distances (a ForeverProbe procedure), with the CVar at 45 and 100.
 
 ### 8. Sounds
 Every **numeric** entry plays: some as SoundKit IDs, while Horn of Cenarius, Horn: Dwarf, Foghorn and Boat Warning play only through the
