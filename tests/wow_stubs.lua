@@ -163,7 +163,9 @@ function Widget:SetClampedToScreen() end
 function Widget:SetMovable() end
 function Widget:EnableMouse(v) self.mouse = v end
 function Widget:SetFrameStrata() end
-function Widget:SetToplevel() end
+function Widget:SetToplevel(v) self.toplevel = v end
+-- Raise records the order: a later raise is over an earlier one in its strata.
+function Widget:Raise() WoW.raises = (WoW.raises or 0) + 1 self.raisedAt = WoW.raises end
 function Widget:StartMoving() guardProtected(self, "StartMoving") self.moving = true end
 function Widget:StopMovingOrSizing() guardProtected(self, "StopMovingOrSizing") self.moving = false end
 function Widget:RegisterForDrag() end

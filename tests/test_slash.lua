@@ -58,6 +58,14 @@ slash("add Mother Fang")
 slash("export")
 H.eq(StakeoutExportFrame.eb:GetText(), "/stakeout add Mother Fang", "export fills the copy box")
 
+-- Opened from the config window (same strata, which comes forward when its
+-- Export button is clicked): the export window must come out on top.
+H.eq(StakeoutExportFrame.toplevel, true, "the export window comes forward when clicked")
+H.check(StakeoutExportFrame.raisedAt ~= nil, "and is raised when it opens")
+local raised = StakeoutExportFrame.raisedAt
+slash("export")
+H.check(StakeoutExportFrame.raisedAt > raised, "and again each time it opens")
+
 ------------------------------------------------------------
 -- remove / list / reset / help
 ------------------------------------------------------------
