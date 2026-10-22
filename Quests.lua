@@ -667,11 +667,21 @@ local function OnPlateRemoved(token)
     Flush()
 end
 
+-- Departed GUIDs past their LINGER go (the tick, and before a death decides:
+-- one expired between ticks must not keep the sighting alive, Codex on #45).
+local function ExpireGuids(m, now)
+    for guid, held in pairs(m.guids) do
+        if type(held) == "number" and now - held > LINGER then m.guids[guid] = nil end
+    end
+end
+
 local function OnUnitDied(guid)
     if not Enabled() or C.IsSecret(guid) or type(guid) ~= "string" then return end
+    local now = GetTime()
     for _, m in pairs(members) do
         if m.guids[guid] then
             m.guids[guid] = nil
+            ExpireGuids(m, now)
             for token, g in pairs(m.tokens) do
                 if g == guid then
                     m.tokens[token] = nil
@@ -702,9 +712,7 @@ local function Tick()
             local name, guid = C.ReadNPC(token)
             if not Shows(m, name, guid) then Release(m, token) end
         end
-        for guid, held in pairs(m.guids) do
-            if type(held) == "number" and now - held > LINGER then m.guids[guid] = nil end
-        end
+        ExpireGuids(m, now)
         if next(m.tokens) then
             m.lastSeen = now
         elseif m.lastSeen and now - m.lastSeen > LINGER then

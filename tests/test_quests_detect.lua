@@ -213,6 +213,20 @@ WoW.units.nameplate2 = nil
 WoW.fire("UNIT_DIED", guid(3106, "2"))
 WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate2")
 H.eq(shown(), "", "the one in sight dies: over at once, whatever was seen before it")
+-- The same, with the death between ticks: the first one's GUID has expired
+-- by time but no tick has run since (Codex on #45).
+clean()
+WoW.questLog = { { questID = 1, title = "Crawlers", rows = { row("monster", "0/6 Pygmy Surf Crawler slain") } } }
+Q.Rebuild()
+plate("nameplate1", { name = "Pygmy Surf Crawler", guid = guid(3106, "1"), attackable = true })
+plate("nameplate2", { name = "Pygmy Surf Crawler", guid = guid(3106, "2"), attackable = true })
+WoW.units.nameplate1 = nil
+WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+WoW.advance(ns.core.LINGER + 0.5)
+WoW.units.nameplate2 = nil
+WoW.fire("UNIT_DIED", guid(3106, "2"))
+WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate2")
+H.eq(shown(), "", "a death between ticks: the expired GUID doesn't keep it")
 -- A death while it lingers still ends it at once (its GUID outlives the plate
 -- for LINGER, Codex on #45).
 clean()
