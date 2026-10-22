@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **The "Increase nameplate range" option is gone.** On Forever, nameplates appear at about 40 yards whatever the
+  setting says, so raising it never made plates reach further. Stakeout no longer changes it. Beyond nameplate range,
+  hover or target an NPC to detect it.
 - Hover a target button to see roughly how far its NPC is ("Distance: 25-30 yd"), updated as it moves. It shows
   while a nameplate, your target or your mouse shows the NPC. The method comes from NameplateDistance by Nedyar.
 - **Experimental: quest targets**, off by default. Type `/stakeout quests on` to try it: a mob you see whose

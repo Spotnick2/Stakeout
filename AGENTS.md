@@ -103,7 +103,8 @@ so act on it then. Bump `MEASURED_ON_BUILD` after re-measuring.
   defaults, the watch list too. Test persistence only with a **full client exit**, never `/reload`, and never by reading the SV file.
 - **`PlaySoundFile` refuses built-in game-file paths.** Use SoundKit IDs or FileDataIDs; paths into other
   addons' folders (DBM-Core) still work.
-- **`nameplateMaxDistance` defaults to 45.** Never lower it.
+- **Plates appear at about 40 yd**, whatever `nameplateMaxDistance` says (its default is 45; 100 changed nothing:
+  FOREVER-PROBE.md §7). Stakeout doesn't touch it. Beyond that, only the target and the mouseover detect.
 - All the UI templates the config uses exist (`UIDropDownMenuTemplate`, `OptionsSliderTemplate`, …).
 
 ## WoW API And Lua Rules

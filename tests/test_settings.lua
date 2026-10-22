@@ -74,24 +74,13 @@ SlashCmdList.STAKEOUT("add Fedfennel")
 H.eq(#StakeoutDB.npcList, 1, "the live list is its own table")
 
 ------------------------------------------------------------
--- Nameplate range: raised from the default 45, never lowered
+-- Nameplate range: left alone. Plates appear at about 40 yd on this client
+-- whatever the CVar says (FOREVER-PROBE.md §7), so Stakeout no longer sets it.
 ------------------------------------------------------------
-H.eq(WoW.cvars.nameplateMaxDistance, "100", "the 45 default is raised")
-WoW.cvars.nameplateMaxDistance = "120"
-T.ApplyNameplateDistance()
-H.eq(WoW.cvars.nameplateMaxDistance, "120", "a higher range is left alone")
--- The CVar is secure: in combat it waits for combat to end.
-WoW.cvars.nameplateMaxDistance = "45"
-WoW.inCombat = true
-T.ApplyNameplateDistance()
-H.eq(WoW.cvars.nameplateMaxDistance, "45", "not set in combat (secure CVar)")
-WoW.inCombat = false
+H.eq(WoW.cvars.nameplateMaxDistance, "45.000000", "the nameplate range is never touched at load")
 WoW.fire("PLAYER_REGEN_ENABLED")
-H.eq(WoW.cvars.nameplateMaxDistance, "100", "set when combat ends")
-StakeoutDB.maxNameplateDist = false
-WoW.cvars.nameplateMaxDistance = "45"
-T.ApplyNameplateDistance()
-H.eq(WoW.cvars.nameplateMaxDistance, "45", "the option off leaves the CVar alone")
+H.eq(WoW.cvars.nameplateMaxDistance, "45.000000", "nor when combat ends")
+H.eq(T.ApplyNameplateDistance, nil, "there is no nameplate range code left")
 
 ------------------------------------------------------------
 -- Event registration: throws and refusals are both reported
@@ -111,5 +100,11 @@ H.check(not code:find("COMBAT_LOG_EVENT_UNFILTERED", 1, true),
     "the addon never registers the combat log (forbidden on this client)")
 H.check(not code:find("SetRaidTarget", 1, true), "the addon never calls SetRaidTarget (forbidden)")
 H.check(not code:find("TargetUnit", 1, true), "no proximity trick (fires for every name)")
+H.check(not code:find("nameplateMaxDistance", 1, true), "the nameplate range CVar is never set (it changed nothing)")
+
+-- A profile from before keeps no trace of the removed option.
+WoW.events = {}
+WoW.loadAddon({ savedDB = { svLoadCheck = 1, maxNameplateDist = true } })
+H.eq(StakeoutDB.maxNameplateDist, nil, "an old saved maxNameplateDist is dropped at load")
 
 H.done("test_settings")

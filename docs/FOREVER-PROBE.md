@@ -148,7 +148,8 @@ one of them stayed undetected. A nearer one had a real plate. So the effective p
 The owner then checked it with NameplateDistance 0.4.2 (distances on the plates): **plates appear at about 40 yd**, with the
 CVar at 100. A unit with a real plate was detected; one showing only its red name label wasn't. So raising the CVar above
 the 45 yd default changes nothing on this client. Addons can't read name labels: beyond about 40 yd, only the target and
-the mouseover detect.
+the mouseover detect. **Decision (owner, 2026-10-22):** Stakeout's "Increase nameplate range" option is removed, and
+Stakeout no longer sets the CVar.
 
 ### 8. Sounds
 Every **numeric** entry plays: some as SoundKit IDs, while Horn of Cenarius, Horn: Dwarf, Foghorn and Boat Warning play only through the
