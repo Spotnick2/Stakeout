@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.2.0
+## v2.2.0 - 2026-10-22
 
 ### A choice of look
 
@@ -17,7 +17,7 @@ Forever beta still doesn't reload addon settings (a Blizzard bug). A `/reload` k
 
 ### The settings window, rearranged
 
-- Two columns: your watch list on the left, every setting on the right.
+- Two columns: your watch list and its macro option on the left, the other settings on the right.
 - An empty list says so ("No NPCs tracked"), and the count reads "3 tracked".
 - Checkboxes no longer run into the line below them.
 - A few names changed: **Keep the list in a character macro** is now **Save list in a character macro**,
