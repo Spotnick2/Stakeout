@@ -1076,6 +1076,10 @@ local function ShowExport()
         f:SetSize(460, 220)
         f:SetPoint("CENTER")
         f:SetFrameStrata("DIALOG")
+        -- The config window opens it, in the same strata, and comes forward
+        -- when its Export button is clicked: this one does too, and is raised
+        -- over it each time it opens.
+        f:SetToplevel(true)
         f:SetMovable(true)
         f:EnableMouse(true)
         f:RegisterForDrag("LeftButton")
@@ -1114,6 +1118,7 @@ local function ShowExport()
     -- lines make the boundaries obvious when selecting one.
     exportFrame.eb:SetText(table.concat(lines, "\n\n"))
     exportFrame:Show()
+    exportFrame:Raise()
     exportFrame.eb:SetFocus()
     exportFrame.eb:HighlightText()
 end
