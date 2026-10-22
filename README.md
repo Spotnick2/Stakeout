@@ -15,7 +15,6 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
 - Detects them on **nameplates**, as your **target**, or under your **mouse**
 - A small frame with one button per NPC found: **left-click** targets it, **right-click** targets and raid-marks it
 - Chat message, taskbar flash and sound alert (17 sounds, plus 7 more with DBM-Core)
-- Raises your nameplate range so plates reach further (Forever's default is 45 yards)
 - Two NPCs with the same name keep their button until both are dead
 - Movable, lockable, scalable frame
 
@@ -58,7 +57,6 @@ NPC names must match exactly, spaces included (`/stakeout add Captain Flat Tusk`
 
 ## Configuration
 
-- **Detection:** raise the nameplate range.
 - **Alerts:** taskbar flash, sound on/off, and which sound (it previews when you pick it).
 - **Raid marking:** turn the right-click mark on or off, and pick the marker. Right-clicking again clears the mark.
 - **Target frame:** lock the position (Alt+drag still moves it), the button icon, and the scale.

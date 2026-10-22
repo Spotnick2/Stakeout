@@ -22,7 +22,7 @@ Use the Lua **5.1** interpreter, not a newer Lua that may be first on `PATH`.
   `docs/FOREVER-PROBE.md`) first.
 - `test_detection.lua`: sightings, secret reads, `UNIT_DIED` with same-name NPCs, expiry, combat, marking.
 - `test_slash.lua`: bulk add, export lines (≤255 chars, round-trip), the commands.
-- `test_settings.lua`: the one write path (a source scan), the sentinel, the nameplate range, event reporting,
+- `test_settings.lua`: the one write path (a source scan), the sentinel, the nameplate range left alone, event reporting,
   and that the forbidden APIs are never called.
 - `test_login.lua`: a session where settings *did* load, on another build.
 - `test_macros.lua`: the watch list in character macros: on/off, following every change, spilling into

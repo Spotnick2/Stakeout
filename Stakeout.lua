@@ -53,7 +53,6 @@ local defaults = {
     flashOnFind      = true,    -- flash taskbar icon on detection
     soundOnFind      = true,    -- play sound on first detection
     soundChoice      = "Raid Warning",  -- alert sound name (see GetAlertSounds)
-    maxNameplateDist = true,    -- raise the nameplate range
     frameScale       = 1.0,
     lockFrame        = false,
     theme            = "forever",  -- the windows' look, "forever" or "glass" (Theme.lua; after a /reload)
@@ -74,6 +73,9 @@ StakeoutDB = StakeoutDB or {}
 local function EnsureDefaults()
     settingsLoaded = StakeoutDB.svLoadCheck ~= nil
     StakeoutDB.svLoadCheck = (tonumber(StakeoutDB.svLoadCheck) or 0) + 1
+    -- The "raise the nameplate range" option is gone: plates stop at about
+    -- 40 yd on this client whatever it was set to (FOREVER-PROBE.md §7).
+    StakeoutDB.maxNameplateDist = nil
     for k, v in pairs(defaults) do
         if StakeoutDB[k] == nil then
             -- Tables are copied: the default must not be the live list.
@@ -851,24 +853,6 @@ local function ResetDetections()
     Rescan()
 end
 
--- The nameplate range defaults to 45 on this client; only ever raise it. The
--- CVar is secure (measured), so it can't be set in combat: that waits for
--- combat to end.
-local NAMEPLATE_DISTANCE = 100
-local nameplateDistancePending = false
-local function ApplyNameplateDistance()
-    if not StakeoutDB.maxNameplateDist then return end
-    if InCombatLockdown() then
-        nameplateDistancePending = true
-        return
-    end
-    nameplateDistancePending = false
-    local current = tonumber(C_CVar.GetCVar("nameplateMaxDistance"))
-    if current and current < NAMEPLATE_DISTANCE then
-        C_CVar.SetCVar("nameplateMaxDistance", tostring(NAMEPLATE_DISTANCE))
-    end
-end
-
 -------------------------------------------------------------------------------
 -- Watch-list import / export
 --
@@ -1325,7 +1309,7 @@ end
 
 -- The config window (#34): the watch list on the left, the settings on the
 -- right. Each column is laid out down a y cursor, in px from the window's top.
-local CFG_W, CFG_H = 712, 584
+local CFG_W, CFG_H = 712, 540
 local COL_W = 324
 local LEFT, RIGHT = 16, 372   -- the columns' left edges
 local TOP = -50               -- where both columns start, under the title row
@@ -1612,13 +1596,9 @@ local function CreateConfigFrame()
     ---------------------------------------------------------------------------
     local x = RIGHT
     y = TOP
-    SectionTitle(f, x, y, "Detection & alerts")
+    SectionTitle(f, x, y, "Alerts")
 
     y = y - 26
-    MakeCheckbox(f, x, y, "Increase nameplate range", "maxNameplateDist", function(v)
-        if v then ApplyNameplateDistance() end
-    end, "Uses nameplates to find nearby NPCs.")
-    y = y - 44
     MakeCheckbox(f, x, y, "Flash taskbar on detection", "flashOnFind")
     y = y - 30
     MakeCheckbox(f, x, y, "Play sound on detection", "soundOnFind")
@@ -1862,7 +1842,6 @@ local function OnCombatEnd()
         end
         targetFrame:SetScale(StakeoutDB.frameScale or 1.0)
     end
-    if nameplateDistancePending then ApplyNameplateDistance() end
     if macroSyncPending then SyncMacros() end
     ApplyPendingMacroOn()
     RefreshTargetFrame()
@@ -1902,7 +1881,6 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         end)
         if why then Print("The glass look isn't available (%s); using the WoW Forever look.", why) end
         CreateTargetFrame()
-        ApplyNameplateDistance()
 
         RegisterEvents(self, "PLAYER_LOGIN", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
             "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
@@ -2069,7 +2047,7 @@ Stakeout._test = {
     NAME_MAX = NAME_MAX, MACRO_NAMES = MACRO_NAMES, MACRO_EMPTY = MACRO_EMPTY, MACRO_MARK = MACRO_MARK, SetMacroMode = SetMacroMode,
     macroMode = function() return macroMode end,
     CreateConfigFrame = CreateConfigFrame, ShowExport = ShowExport,
-    ApplyNameplateDistance = ApplyNameplateDistance, RegisterEvents = RegisterEvents,
+    RegisterEvents = RegisterEvents,
     buttons = targetButtons, frame = function() return targetFrame end,
     settingsLoaded = function() return settingsLoaded end,
     LINGER = LINGER, MEASURED_ON_BUILD = MEASURED_ON_BUILD,
