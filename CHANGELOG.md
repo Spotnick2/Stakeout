@@ -1,5 +1,34 @@
 # Changelog
 
+## v2.2.0 - 2026-10-22
+
+### A choice of look
+
+Stakeout's windows can now wear **Glass**, a smoked glass look shared with other glass addons, or stay
+**WoW Forever**, the look they always had and still the default. Pick it under **Look** at the bottom of the
+settings, or type `/stakeout look glass` (or `forever`). It applies to every Stakeout window after a `/reload`.
+
+**With Glass UI installed**, Stakeout wears Glass UI's look by default: its glass, its tint and its accent colour
+on the section titles. To use your own look instead, untick **Use Glass UI appearance** under Look (it shows
+only while Glass UI is loaded), then `/reload`.
+
+Like your other Stakeout settings, the look and that switch don't survive a full restart of the game while the
+Forever beta still doesn't reload addon settings (a Blizzard bug). A `/reload` keeps them.
+
+### The settings window, rearranged
+
+- Two columns: your watch list and its macro option on the left, the other settings on the right.
+- An empty list says so ("No NPCs tracked"), and the count reads "3 tracked".
+- Checkboxes no longer run into the line below them.
+- A few names changed: **Keep the list in a character macro** is now **Save list in a character macro**,
+  **Clear All** is **Clear list**, and **Raise nameplate range** is **Increase nameplate range**.
+
+### Also
+
+- The export window opens on top of the settings window instead of behind it.
+- Stakeout is now also published on Wago Addons and as GitHub releases, which addon managers like WowUp can
+  install from.
+
 ## v2.1.2 - 2026-10-04
 
 - No more "Client build changed: ... Check the API dump and re-measure." message at login. That note is meant for
