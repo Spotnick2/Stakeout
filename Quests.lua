@@ -333,8 +333,11 @@ end
 -------------------------------------------------------------------------------
 -- Reading the quest log
 -------------------------------------------------------------------------------
+-- The second return says whether the read found every quest the log counts.
+-- The first count is of the shown rows only, so a quest under a collapsed
+-- header may be missing from a read: such a read must never prune its mutes.
 local function ReadLogUnsafe()
-    local n = C_QuestLog.GetNumQuestLogEntries()
+    local n, total = C_QuestLog.GetNumQuestLogEntries()
     if type(n) ~= "number" then return nil end
     local list = {}
     for i = 1, n do
@@ -357,13 +360,14 @@ local function ReadLogUnsafe()
             }
         end
     end
-    return list
+    return list, type(total) == "number" and #list >= total
 end
 
--- The quests in the log, or nil when it couldn't be read.
+-- The quests in the log, or nil when it couldn't be read; then whether that
+-- was all of them.
 local function ReadLog()
-    local ok, list = pcall(ReadLogUnsafe)
-    if ok then return list end
+    local ok, list, whole = pcall(ReadLogUnsafe)
+    if ok then return list, whole end
     return nil
 end
 
@@ -440,7 +444,7 @@ function Rebuild()
         Flush()
         return
     end
-    local list = ReadLog()
+    local list, whole = ReadLog()
     if not list then return end   -- unreadable: keep what there is
 
     local wanted = {}   -- [key] = { npcId, dbName, refs }
@@ -534,7 +538,7 @@ function Rebuild()
         end
     end
 
-    if loggedIn and logReady then
+    if loggedIn and logReady and whole then
         local active = {}
         for _, quest in ipairs(list) do active[quest.questID] = true end
         C.PruneQuestMutes(active)

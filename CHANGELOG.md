@@ -5,7 +5,8 @@
 - **Experimental: quest targets**, off by default. Type `/stakeout quests on` to try it: a mob you see whose
   name is in one of your unfinished kill objectives gets its own button (left-click targets a live one,
   right-click also marks it). That's all it does for now. Turn-in NPCs and the mobs that drop quest items need
-  quest data from Questie, which comes later.
+  quest data from Questie, which comes later. Like your other settings, it's off again after a full restart
+  while the beta doesn't reload addon settings: type the command again.
 - A target button no longer lands on a corpse. Once you'd killed a few of a mob, clicking its button could target
   one of the dead ones lying nearby. Now the click targets a live one when one is in reach, and otherwise leaves
   you with no target. Right-click never marks a corpse either.

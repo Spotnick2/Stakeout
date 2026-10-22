@@ -387,7 +387,8 @@ function C_QuestLog.GetNumQuestLogEntries()
     questLogGuard()
     local quests = 0
     for _, q in ipairs(WoW.questLog) do if not q.header then quests = quests + 1 end end
-    return #WoW.questLog, quests
+    -- questLogUnshown: quests under a collapsed header, counted but not listed.
+    return #WoW.questLog, quests + (WoW.questLogUnshown or 0)
 end
 function C_QuestLog.GetInfo(index)
     questLogGuard()
