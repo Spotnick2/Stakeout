@@ -38,12 +38,14 @@ and the combat log. See below. Don't reintroduce them.
 
 ## Repository Layout
 
-- `Stakeout.toc`: manifest (interface, SavedVariables, load order): the embedded LibGlass-1.0, then
-  `Theme.lua`, then `Stakeout.lua`.
+- `Stakeout.toc`: manifest (interface, SavedVariables, `OptionalDeps: GlassUI`, load order): the embedded
+  LibGlass-1.0, then `Theme.lua`, then `Stakeout.lua`.
 - `Theme.lua`: the windows' look (#28). WoW Forever (the backdrops, the default) or LibGlass's reflective
   glass (`C:/Projects/WoW/References/Docs/LIBGLASS-WINDOW-STYLING.md`), fixed once a session from
   `StakeoutDB.theme`, so a new choice applies after a `/reload`. Every LibGlass call is here. Its helpers
-  return false under WoW Forever and the caller paints its own backdrop, unchanged.
+  return false under WoW Forever and the caller paints its own backdrop, unchanged. With Glass UI loaded it
+  follows Glass UI's suite by default (GlassUI#152: its material, body and accent; `StakeoutDB.followGlassUI`
+  turns it off, reported as `declined`). Not live: asked once at `ADDON_LOADED`, reported with `live = false`.
 - `Stakeout.lua`: the addon's core, in labelled sections (defaults and settings, target frame,
   detection, config GUI, events, slash commands).
 - `tests/`: Lua 5.1 unit tests, no game client. `pwsh tests/run.ps1`.
