@@ -326,6 +326,7 @@ local BUTTONS_PER_ROW = 5
 local BUTTON_SIZE     = 26
 local BUTTON_PAD      = 2
 local HEADER_HEIGHT   = 16
+local LABEL_HEIGHT    = 9    -- the name under a quest button (groups 2 and 3)
 
 local function CreateTargetFrame()
     if targetFrame then return end
@@ -488,6 +489,15 @@ local function NewButton(i)
     ht:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
     ht:SetBlendMode("ADD")
     btn.highlight = ht
+
+    -- A quest button's name, under it (UpdateButtonLooks). A watch button's
+    -- is empty: the player typed those names.
+    btn.label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    btn.label:SetFontHeight(8)
+    btn.label:SetPoint("TOP", btn, "BOTTOM", 0, -1)
+    btn.label:SetWidth(BUTTON_SIZE + BUTTON_PAD)
+    btn.label:SetWordWrap(false)
+    btn.label:SetJustifyH("CENTER")
     -- Only ever made by ApplyLayout, which runs out of combat.
     Theme.Button(btn)
 
@@ -508,26 +518,29 @@ local function ApplyLayout(list)
         return
     end
 
-    -- Each group starts a new line, and a line holds BUTTONS_PER_ROW.
+    -- Each group starts a new line, and a line holds BUTTONS_PER_ROW. A quest
+    -- line is taller by its labels.
     local spots, line, col, cols, group = {}, -1, BUTTONS_PER_ROW, 0, nil
+    local y, lineHeight = 0, 0
     for i, e in ipairs(list) do
         if e.group ~= group or col == BUTTONS_PER_ROW then
+            y = y + lineHeight
             line, col, group = line + 1, 0, e.group
+            lineHeight = BUTTON_SIZE + BUTTON_PAD + (e.group > 1 and LABEL_HEIGHT or 0)
         end
-        spots[i] = { line = line, col = col }
+        spots[i] = { line = line, col = col, y = y }
         col = col + 1
         cols = math.max(cols, col)
     end
     local width  = cols * (BUTTON_SIZE + BUTTON_PAD) + BUTTON_PAD + 8
-    local height = HEADER_HEIGHT + (line + 1) * (BUTTON_SIZE + BUTTON_PAD) + BUTTON_PAD + 4
+    local height = HEADER_HEIGHT + y + lineHeight + BUTTON_PAD + 4
     targetFrame:SetSize(math.max(width, 90), height)
 
     for i, e in ipairs(list) do
         local btn = targetButtons[i] or NewButton(i)
         btn:ClearAllPoints()
         btn:SetPoint("TOPLEFT", targetFrame, "TOPLEFT",
-            6 + spots[i].col * (BUTTON_SIZE + BUTTON_PAD),
-            -(HEADER_HEIGHT + 2 + spots[i].line * (BUTTON_SIZE + BUTTON_PAD)))
+            6 + spots[i].col * (BUTTON_SIZE + BUTTON_PAD), -(HEADER_HEIGHT + 2 + spots[i].y))
         -- The key mechanic: a secure macro targets the NPC by exact name.
         btn:SetAttribute("type", "macro")
         btn:SetAttribute("macrotext", e.macrotext)
@@ -544,9 +557,33 @@ local function ApplyLayout(list)
     targetFrame:Show()
 end
 
--- The insecure part, on every refresh: who each button is for, its tooltip
--- and its picture (the NPC's portrait while a unit token still shows it).
+-- A quest button's label: its name without the words it shares with another
+-- quest button's ("Kul Tiras Sailor" and "Kul Tiras Marine" read "Sailor" and
+-- "Marine"), or the whole name when nothing would be left. By words, so no
+-- language's own rules are assumed.
+local function ShortLabel(name, others)
+    local shared = {}
+    for _, other in ipairs(others) do
+        if other ~= name then
+            for word in other:gmatch("%S+") do shared[word] = true end
+        end
+    end
+    local kept = {}
+    for word in name:gmatch("%S+") do
+        if not shared[word] then kept[#kept + 1] = word end
+    end
+    return #kept > 0 and table.concat(kept, " ") or name
+end
+
+-- The insecure part, on every refresh: who each button is for, its tooltip,
+-- its label and its picture. The picture is the NPC's portrait while a unit
+-- token shows it, and stays while the button lingers after that (the portrait
+-- is of that NPC, at most LINGER seconds old); otherwise the button's icon.
 local function UpdateButtonLooks(list)
+    local questNames = {}
+    for _, e in ipairs(list) do
+        if e.group > 1 then questNames[#questNames + 1] = e.name end
+    end
     for i, e in ipairs(list) do
         local btn = targetButtons[i]
         btn.npcName = e.name
@@ -554,9 +591,12 @@ local function UpdateButtonLooks(list)
         btn.friendly = e.friendly
         if e.unit and ReadNPC(e.unit) == e.name then
             SetPortraitTexture(btn.icon, e.unit)
-        else
+            btn.portraitOf = e.name
+        elseif btn.portraitOf ~= e.name then
             btn.icon:SetTexture(e.icon or GetButtonIcon())
+            btn.portraitOf = nil
         end
+        btn.label:SetText(e.group > 1 and ShortLabel(e.name, questNames) or "")
     end
 end
 

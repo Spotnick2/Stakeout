@@ -205,6 +205,7 @@ function Widget:GetAttribute(k) return self.attrs[k] end
 function Widget:RegisterForClicks(...) guardProtected(self, "RegisterForClicks") self.clicks = { ... } end
 -- Text, check buttons, sliders, edit boxes
 function Widget:SetText(t) self._text = t end
+function Widget:SetFontHeight(h) self.fontHeight = h end
 function Widget:GetText() return self._text end
 function Widget:SetFontObject() end
 function Widget:SetTextColor(r, g, b, a) self.textColor = { r, g, b, a } end
