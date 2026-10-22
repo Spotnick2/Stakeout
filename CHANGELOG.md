@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- A target button no longer lands on a corpse. Once you'd killed a few of a mob, clicking its button could target
+  one of the dead ones lying nearby. Now the click targets a live one when one is in reach, and otherwise leaves
+  you with no target. Right-click never marks a corpse either.
+
 ## v2.2.0 - 2026-10-22
 
 ### A choice of look

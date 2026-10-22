@@ -156,7 +156,7 @@ SlashCmdList.STAKEOUT("add Rare Mob; Other Mob")
 detect("nameplate1", "Rare Mob")
 local btn = T.buttons[1]
 H.eq(btn.template, "SecureActionButtonTemplate", "the button is still the secure button")
-H.eq(btn:GetAttribute("macrotext"), "/cleartarget\n/targetexact Rare Mob", "with its macro")
+H.eq(btn:GetAttribute("macrotext"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]", "with its macro")
 H.eq(table.concat(btn.clicks, ","), "AnyUp,AnyDown", "and both click edges")
 local pill = btn.glassPill
 H.check(pill and pill.parent == btn, "a glass pill on the button")
@@ -195,8 +195,10 @@ WoW.fire("PLAYER_REGEN_ENABLED")
 H.eq(#T.buttons, 2, "the second button is made when combat ends")
 H.check(T.buttons[2].glassPill ~= nil, "with its glass")
 -- Sorted by name: the new one takes the first button, the old one moves on.
-H.eq(T.buttons[1]:GetAttribute("macrotext"), "/cleartarget\n/targetexact Other Mob", "the new name's macro")
-H.eq(T.buttons[2]:GetAttribute("macrotext"), "/cleartarget\n/targetexact Rare Mob", "and the first one's")
+H.eq(T.buttons[1]:GetAttribute("macrotext"), "/cleartarget\n/targetexact Other Mob\n/cleartarget [dead]",
+    "the new name's macro")
+H.eq(T.buttons[2]:GetAttribute("macrotext"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]",
+    "and the first one's")
 
 -- The config window: the large shell, a reading region under the list, the
 -- add box a control.
