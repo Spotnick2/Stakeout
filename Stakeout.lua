@@ -53,7 +53,6 @@ local defaults = {
     flashOnFind      = true,    -- flash taskbar icon on detection
     soundOnFind      = true,    -- play sound on first detection
     soundChoice      = "Raid Warning",  -- alert sound name (see GetAlertSounds)
-    maxNameplateDist = true,    -- raise the nameplate range
     frameScale       = 1.0,
     lockFrame        = false,
     theme            = "forever",  -- the windows' look, "forever" or "glass" (Theme.lua; after a /reload)
@@ -74,6 +73,9 @@ StakeoutDB = StakeoutDB or {}
 local function EnsureDefaults()
     settingsLoaded = StakeoutDB.svLoadCheck ~= nil
     StakeoutDB.svLoadCheck = (tonumber(StakeoutDB.svLoadCheck) or 0) + 1
+    -- The "raise the nameplate range" option is gone: plates stop at about
+    -- 40 yd on this client whatever it was set to (FOREVER-PROBE.md §7).
+    StakeoutDB.maxNameplateDist = nil
     for k, v in pairs(defaults) do
         if StakeoutDB[k] == nil then
             -- Tables are copied: the default must not be the live list.
@@ -387,6 +389,20 @@ local function CreateTargetFrame()
     f:SetScale(StakeoutDB.frameScale or 1.0)
 end
 
+-- How far the button's NPC is (Range.lua), while a token still shows it.
+local function DistanceText(btn)
+    local range = ns.range
+    if not (range and btn.unit and ReadNPC(btn.unit) == btn.npcName) then return nil end
+    local ok, text = pcall(range.Text, btn.unit)
+    return ok and text or nil
+end
+
+-- While a button's tooltip is up, the distance is read again twice a second,
+-- and the tooltip rebuilt only when it changed. A plain frame, never the
+-- protected button: its scripts can't change in combat.
+local tooltipRefresh = CreateFrame("Frame")
+tooltipRefresh:Hide()
+
 local function BtnOnEnter(self)
     if self:IsForbidden() or not self.npcName then return end
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
@@ -397,20 +413,41 @@ local function BtnOnEnter(self)
         else
             GameTooltip:AddLine(self.npcName, 1, 0.2, 0.2)
         end
-        for _, line in ipairs(self.tooltipLines) do GameTooltip:AddLine(line, 0.7, 0.7, 0.7) end
     else
         GameTooltip:AddLine(self.npcName, 1, 0.2, 0.2)
+    end
+    local distance = DistanceText(self)
+    if distance then GameTooltip:AddLine("Distance: " .. distance, 1, 1, 1) end
+    if self.tooltipLines then
+        for _, line in ipairs(self.tooltipLines) do GameTooltip:AddLine(line, 0.7, 0.7, 0.7) end
+    else
         GameTooltip:AddLine("Left-click: target", 0.7, 0.7, 0.7)
         if StakeoutDB.enableMarking then
             GameTooltip:AddLine("Right-click: target and mark (again: clear the mark)", 0.7, 0.7, 0.7)
         end
     end
     GameTooltip:Show()
+    tooltipRefresh.button, tooltipRefresh.distance, tooltipRefresh.elapsed = self, distance, 0
+    tooltipRefresh:Show()
 end
 
 local function BtnOnLeave()
+    tooltipRefresh.button = nil
+    tooltipRefresh:Hide()
     GameTooltip:Hide()
 end
+
+tooltipRefresh:SetScript("OnUpdate", function(f, elapsed)
+    f.elapsed = (f.elapsed or 0) + (elapsed or 0)
+    if f.elapsed < 0.5 then return end
+    f.elapsed = 0
+    local btn = f.button
+    if not (btn and btn:IsShown()) then
+        f:Hide()
+    elseif DistanceText(btn) ~= f.distance then
+        BtnOnEnter(btn)
+    end
+end)
 
 -- The watch list shows a button for every detected name.
 local function IsWatchDisplayed(name)
@@ -597,6 +634,7 @@ local function UpdateButtonLooks(list)
     for i, e in ipairs(list) do
         local btn = targetButtons[i]
         btn.npcName = e.name
+        btn.unit = e.unit
         btn.tooltipLines = e.tooltip
         btn.friendly = e.friendly
         if e.unit and ReadNPC(e.unit) == e.name then
@@ -813,24 +851,6 @@ local function ResetDetections()
     wipe(announced)
     RefreshTargetFrame()
     Rescan()
-end
-
--- The nameplate range defaults to 45 on this client; only ever raise it. The
--- CVar is secure (measured), so it can't be set in combat: that waits for
--- combat to end.
-local NAMEPLATE_DISTANCE = 100
-local nameplateDistancePending = false
-local function ApplyNameplateDistance()
-    if not StakeoutDB.maxNameplateDist then return end
-    if InCombatLockdown() then
-        nameplateDistancePending = true
-        return
-    end
-    nameplateDistancePending = false
-    local current = tonumber(C_CVar.GetCVar("nameplateMaxDistance"))
-    if current and current < NAMEPLATE_DISTANCE then
-        C_CVar.SetCVar("nameplateMaxDistance", tostring(NAMEPLATE_DISTANCE))
-    end
 end
 
 -------------------------------------------------------------------------------
@@ -1289,7 +1309,7 @@ end
 
 -- The config window (#34): the watch list on the left, the settings on the
 -- right. Each column is laid out down a y cursor, in px from the window's top.
-local CFG_W, CFG_H = 712, 584
+local CFG_W, CFG_H = 712, 540
 local COL_W = 324
 local LEFT, RIGHT = 16, 372   -- the columns' left edges
 local TOP = -50               -- where both columns start, under the title row
@@ -1576,13 +1596,9 @@ local function CreateConfigFrame()
     ---------------------------------------------------------------------------
     local x = RIGHT
     y = TOP
-    SectionTitle(f, x, y, "Detection & alerts")
+    SectionTitle(f, x, y, "Alerts")
 
     y = y - 26
-    MakeCheckbox(f, x, y, "Increase nameplate range", "maxNameplateDist", function(v)
-        if v then ApplyNameplateDistance() end
-    end, "Uses nameplates to find nearby NPCs.")
-    y = y - 44
     MakeCheckbox(f, x, y, "Flash taskbar on detection", "flashOnFind")
     y = y - 30
     MakeCheckbox(f, x, y, "Play sound on detection", "soundOnFind")
@@ -1826,7 +1842,6 @@ local function OnCombatEnd()
         end
         targetFrame:SetScale(StakeoutDB.frameScale or 1.0)
     end
-    if nameplateDistancePending then ApplyNameplateDistance() end
     if macroSyncPending then SyncMacros() end
     ApplyPendingMacroOn()
     RefreshTargetFrame()
@@ -1866,11 +1881,11 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         end)
         if why then Print("The glass look isn't available (%s); using the WoW Forever look.", why) end
         CreateTargetFrame()
-        ApplyNameplateDistance()
 
         RegisterEvents(self, "PLAYER_LOGIN", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
             "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
-            "UPDATE_MOUSEOVER_UNIT", "UNIT_NAME_UPDATE", "UNIT_DIED", "UPDATE_MACROS")
+            "UPDATE_MOUSEOVER_UNIT", "UNIT_NAME_UPDATE", "UNIT_DIED", "UPDATE_MACROS",
+            "SPELLS_CHANGED")
         C_Timer.NewTicker(1, Tick)
 
         Rescan()
@@ -1908,6 +1923,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "UNIT_NAME_UPDATE" then
         NameUpdated(...)
+
+    elseif event == "SPELLS_CHANGED" then
+        ns.range.Invalidate()
 
     elseif event == "PLAYER_REGEN_DISABLED" then
         OnCombatStart()
@@ -2033,7 +2051,7 @@ Stakeout._test = {
     NAME_MAX = NAME_MAX, MACRO_NAMES = MACRO_NAMES, MACRO_EMPTY = MACRO_EMPTY, MACRO_MARK = MACRO_MARK, SetMacroMode = SetMacroMode,
     macroMode = function() return macroMode end,
     CreateConfigFrame = CreateConfigFrame, ShowExport = ShowExport,
-    ApplyNameplateDistance = ApplyNameplateDistance, RegisterEvents = RegisterEvents,
+    RegisterEvents = RegisterEvents,
     buttons = targetButtons, frame = function() return targetFrame end,
     settingsLoaded = function() return settingsLoaded end,
     LINGER = LINGER, MEASURED_ON_BUILD = MEASURED_ON_BUILD,

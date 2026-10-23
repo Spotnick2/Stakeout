@@ -46,6 +46,9 @@ and the combat log. See below. Don't reintroduce them.
   return false under WoW Forever and the caller paints its own backdrop, unchanged. With Glass UI loaded it
   follows Glass UI's suite by default (GlassUI#152: its material, body and accent; `StakeoutDB.followGlassUI`
   turns it off, reported as `declined`). Not live: asked once at `ADDON_LOADED`, reported with `live = false`.
+- `Range.lua`: how far a button's NPC is, for its tooltip (#46). Brackets the distance with spell, item and
+  interaction range checks (addons can't read other units' positions), from NameplateDistance 0.4.2 (MIT,
+  its notice kept in the file). In combat a friendly unit gets only spell checks.
 - `Stakeout.lua`: the addon's core, in labelled sections (defaults and settings, target frame,
   detection, config GUI, events, slash commands).
 - `Quests.lua`: quest targets (#24), **experimental and off by default** (`StakeoutDB.questTargets`,
@@ -100,7 +103,8 @@ so act on it then. Bump `MEASURED_ON_BUILD` after re-measuring.
   defaults, the watch list too. Test persistence only with a **full client exit**, never `/reload`, and never by reading the SV file.
 - **`PlaySoundFile` refuses built-in game-file paths.** Use SoundKit IDs or FileDataIDs; paths into other
   addons' folders (DBM-Core) still work.
-- **`nameplateMaxDistance` defaults to 45.** Never lower it.
+- **Plates appear at about 40 yd**, whatever `nameplateMaxDistance` says (its default is 45; 100 changed nothing:
+  FOREVER-PROBE.md §7). Stakeout doesn't touch it. Beyond that, only the target and the mouseover detect.
 - All the UI templates the config uses exist (`UIDropDownMenuTemplate`, `OptionsSliderTemplate`, …).
 
 ## WoW API And Lua Rules

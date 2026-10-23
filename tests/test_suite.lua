@@ -112,7 +112,7 @@ do
     H.check(StakeoutConfigFrame.followCheck and StakeoutConfigFrame.followCheck:GetChecked(),
         "the settings show the switch, on")
     local w, h = StakeoutConfigFrame:GetSize()
-    H.eq(h, 628, "and the window makes room for it")
+    H.eq(h, 584, "and the window makes room for it")
 
     -- The saved look is kept while following, and says so.
     SlashCmdList.STAKEOUT("look glass")
@@ -226,7 +226,7 @@ do
     SlashCmdList.STAKEOUT("config")
     H.eq(StakeoutConfigFrame.followCheck, nil, "and no switch in the settings")
     local _, h = StakeoutConfigFrame:GetSize()
-    H.eq(h, 584, "nor room for one")
+    H.eq(h, 540, "nor room for one")
 end
 
 do

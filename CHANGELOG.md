@@ -1,15 +1,30 @@
 # Changelog
 
-## Unreleased
+## v2.3.0 - 2026-10-22
 
-- **Experimental: quest targets**, off by default. Type `/stakeout quests on` to try it: a mob you see whose
-  name is in one of your unfinished kill objectives gets its own button (left-click targets a live one,
-  right-click also marks it). That's all it does for now. Turn-in NPCs and the mobs that drop quest items need
-  quest data from Questie, which comes later. Like your other settings, it's off again after a full restart
-  while the beta doesn't reload addon settings: type the command again.
-- A target button no longer lands on a corpse. Once you'd killed a few of a mob, clicking its button could target
-  one of the dead ones lying nearby. Now the click targets a live one when one is in reach, and otherwise leaves
-  you with no target. Right-click never marks a corpse either.
+### The nameplate range setting is gone
+
+On Forever, nameplates appear at about 40 yards whatever the setting says, so raising it never made plates
+reach further. Stakeout no longer changes it. Beyond nameplate range, hover over or target an NPC to detect it.
+
+### Distance in target tooltips
+
+Hover a target button to see roughly how far its NPC is (for example, "Distance: 25-30 yd"). It updates as
+the NPC moves while a nameplate, your target or your mouse shows it. The method comes from NameplateDistance by Nedyar.
+
+### Experimental quest targets
+
+Off by default. Type `/stakeout quests on` to try it: a mob you see whose
+name is in one of your unfinished kill objectives gets its own button (left-click targets a live one,
+right-click also marks it). That's all it does for now. Turn-in NPCs and the mobs that drop quest items need
+quest data from Questie, which comes later. Like your other settings, it's off again after a full restart
+while the beta doesn't reload addon settings: type the command again.
+
+### Target buttons skip corpses
+
+Once you'd killed a few of a mob, clicking its button could target one of the dead ones lying nearby.
+Now the click targets a live one when one is in reach, and otherwise leaves you with no target.
+Right-click never marks a corpse either.
 
 ## v2.2.0 - 2026-10-22
 

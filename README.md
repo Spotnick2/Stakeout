@@ -15,7 +15,8 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
 - Detects them on **nameplates**, as your **target**, or under your **mouse**
 - A small frame with one button per NPC found: **left-click** targets it, **right-click** targets and raid-marks it
 - Chat message, taskbar flash and sound alert (17 sounds, plus 7 more with DBM-Core)
-- Raises your nameplate range so plates reach further (Forever's default is 45 yards)
+- Experimental quest buttons for mobs named in unfinished kill objectives (`/stakeout quests on`)
+- An approximate distance in a button's tooltip while its NPC is visible
 - Two NPCs with the same name keep their button until both are dead
 - Movable, lockable, scalable frame
 
@@ -50,6 +51,7 @@ login, with nothing to click. It uses one character macro slot, or up to three f
 /stakeout list                   List the watch list in chat
 /stakeout export                 Copy the list as /stakeout add lines
 /stakeout macro on / off         Keep the list in a character macro (restored at login)
+/stakeout quests on / off        Show experimental quest target buttons
 /stakeout clear                  Remove every NPC
 /stakeout reset                  Clear current detections and rescan
 ```
@@ -58,7 +60,6 @@ NPC names must match exactly, spaces included (`/stakeout add Captain Flat Tusk`
 
 ## Configuration
 
-- **Detection:** raise the nameplate range.
 - **Alerts:** taskbar flash, sound on/off, and which sound (it previews when you pick it).
 - **Raid marking:** turn the right-click mark on or off, and pick the marker. Right-clicking again clears the mark.
 - **Target frame:** lock the position (Alt+drag still moves it), the button icon, and the scale.
@@ -81,3 +82,14 @@ Blizzard's Forever client doesn't allow some of what Stakeout did on TBC:
 
 - Stakeout never moves, shows or hides its frame during combat. Changes wait for the fight to end.
 - It's designed for your own list, not a built-in rare database.
+- Quest targets are off by default and do not play alerts. Without quest data, they cover only mobs named in
+  unfinished kill objectives; turn-in NPCs and item droppers are not included yet.
+- Hover a button to see roughly how far its NPC is (e.g. "25-30 yd"), while a nameplate, your target or your
+  mouse shows it. Addons can't read other units' positions, so it's bracketed with range checks, as
+  NameplateDistance by Nedyar does (MIT; its notice is
+  in `Range.lua`).
+
+## License
+
+Stakeout is licensed under the MIT License. See the
+[license and third-party notices](https://github.com/Spotnick2/Stakeout/blob/main/LICENSE).
