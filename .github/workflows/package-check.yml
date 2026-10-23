@@ -95,7 +95,7 @@ jobs:
         with:
           args: -d
 
-      # Players get exactly the TOC, the Lua it loads, and under
+      # Players get exactly the TOC, our LICENSE, the Lua it loads, and under
       # Libs/LibGlass-1.0 exactly what the library ships: its XML, every file
       # the XML loads, LICENSE and Media/*.tga. Anything else in the zip means
       # .pkgmeta's ignore list missed something (tests, tools, notes). The
@@ -107,6 +107,7 @@ jobs:
           lib=Stakeout/Libs/LibGlass-1.0
           {
             echo Stakeout/Stakeout.toc
+            echo Stakeout/LICENSE
             tr -d '\r' < Stakeout.toc | grep -v '^#' | grep -v '^$' | tr '\' '/' | sed 's|^|Stakeout/|'
             echo "$lib/LICENSE"
             # Comments stripped non-greedily (a sed range would swallow the
