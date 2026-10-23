@@ -1884,7 +1884,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
         RegisterEvents(self, "PLAYER_LOGIN", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
             "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
-            "UPDATE_MOUSEOVER_UNIT", "UNIT_NAME_UPDATE", "UNIT_DIED", "UPDATE_MACROS")
+            "UPDATE_MOUSEOVER_UNIT", "UNIT_NAME_UPDATE", "UNIT_DIED", "UPDATE_MACROS",
+            "SPELLS_CHANGED")
         C_Timer.NewTicker(1, Tick)
 
         Rescan()
@@ -1922,6 +1923,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "UNIT_NAME_UPDATE" then
         NameUpdated(...)
+
+    elseif event == "SPELLS_CHANGED" then
+        ns.range.Invalidate()
 
     elseif event == "PLAYER_REGEN_DISABLED" then
         OnCombatStart()

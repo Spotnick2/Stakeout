@@ -267,8 +267,8 @@ function Range.Text(unit)
     return ("%d-%d yd"):format(low, high)
 end
 
-local events = CreateFrame("Frame")
-events:RegisterEvent("SPELLS_CHANGED")
-events:SetScript("OnEvent", function() checks = nil end)
+function Range.Invalidate()
+    checks = nil
+end
 
 Range._test = { known = knownItems, checks = function() return checks end }
