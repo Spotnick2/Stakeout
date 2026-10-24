@@ -10,7 +10,7 @@
         pwsh Tools/deploy.ps1               # Stakeout and its LibGlass
         pwsh Tools/deploy.ps1 -Probe        # ...and StakeoutProbe
         pwsh Tools/deploy.ps1 -ProbeOnly    # just StakeoutProbe
-        pwsh Tools/deploy.ps1 -AddOnsPath "D:\...\_classic_beta_\Interface\AddOns"
+        pwsh Tools/deploy.ps1 -AddOnsPath "D:\...\_forever_\Interface\AddOns"
 
     StakeoutProbe is a ForeverProbe module, so -Probe and -ProbeOnly deploy the
     ForeverProbe checkout first ($env:FOREVERPROBE, else ..\ForeverProbe).
@@ -23,7 +23,7 @@
 #>
 
 param(
-    [string]$AddOnsPath = "C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns",
+    [string]$AddOnsPath = "C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns",
     [switch]$Probe,
     [switch]$ProbeOnly
 )
