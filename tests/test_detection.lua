@@ -33,10 +33,11 @@ H.check(WoW.chat():find("Detected: Rare Mob", 1, true), "the chat names it")
 local btn = T.buttons[1]
 H.check(btn and btn.shown, "a target button is shown")
 H.eq(btn:GetAttribute("type"), "macro", "left-click runs a macro")
-H.eq(btn:GetAttribute("macrotext"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]",
-    "left-click targets by exact name, never a corpse (the corpse probe)")
-H.eq(btn:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]\n/tm 6",
-    "right-click targets and marks: SetRaidTarget is forbidden to addon code, the click does it")
+H.eq(btn:GetAttribute("macrotext"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]\n/tm !6",
+    "left-click targets by exact name, never a corpse (the corpse probe), and marks: SetRaidTarget is " ..
+    "forbidden to addon code, the click does it; ! keeps the mark on a second click")
+H.eq(btn:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]",
+    "right-click only targets")
 H.eq(btn:GetAttribute("typerelease"), nil, "no typerelease: it would double-fire")
 H.eq(btn.clicks and btn.clicks[1], "AnyUp", "both edges registered (the secure handler picks one)")
 H.eq(btn.clicks and btn.clicks[2], "AnyDown", "both edges registered")
@@ -192,7 +193,7 @@ H.check(ok, "a death in combat doesn't touch the protected frame (" .. tostring(
 WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 WoW.inCombat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
-H.eq(T.buttons[1]:GetAttribute("macrotext"), "/cleartarget\n/targetexact Twin Mob\n/cleartarget [dead]",
+H.eq(T.buttons[1]:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Twin Mob\n/cleartarget [dead]",
     "the buttons are rebuilt when combat ends")
 
 ------------------------------------------------------------

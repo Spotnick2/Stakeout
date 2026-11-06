@@ -177,7 +177,7 @@ Q.Rebuild()
 see("Cook Torka", 3087, { attackable = false })
 local b = button("Cook Torka")
 H.check(b and b.friendly, "the trainer of a type-14 objective is a friendly talk target, not a kill")
-H.eq(b and b:GetAttribute("macrotext"), "/cleartarget\n/targetexact Cook Torka", "...with the NPC macro")
+H.eq(b and b:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Cook Torka", "...with the NPC macro")
 
 ------------------------------------------------------------
 -- Same-name aggregation: one button, one place under the cap

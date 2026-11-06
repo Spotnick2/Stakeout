@@ -13,7 +13,8 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
 
 - Watch a list of NPCs by exact name
 - Detects them on **nameplates**, as your **target**, or under your **mouse**
-- A small frame with one button per NPC found: **left-click** targets it, **right-click** targets and raid-marks it
+- A small frame with one button per NPC found: **left-click** targets it and puts your raid marker on it,
+  **right-click** only targets it
 - Chat message, taskbar flash and sound alert (17 sounds, plus 7 more with DBM-Core)
 - Experimental quest buttons (a checkbox in the config, or `/stakeout quests on`): mobs named in unfinished kill
   objectives, and with Questie installed, the mobs that drop quest items and the NPC to turn a finished quest in to
@@ -61,7 +62,8 @@ NPC names must match exactly, spaces included (`/stakeout add Captain Flat Tusk`
 ## Configuration
 
 - **Alerts:** taskbar flash, sound on/off, and which sound (it previews when you pick it).
-- **Raid marking:** turn the right-click mark on or off, and pick the marker. Right-clicking again clears the mark.
+- **Raid marking:** left-click a button to target the NPC and put your marker on it (clicking again keeps the
+  mark); right-click only targets. Turn the mark off, or pick the marker.
 - **Target frame:** lock the position (Alt+drag still moves it), the button icon, and the scale.
 - **Look:** WoW Forever (the default) or Glass, a smoked glass look shared with other glass addons. It
   applies to every Stakeout window after a `/reload`.
@@ -76,8 +78,8 @@ Blizzard's Forever client doesn't allow some of what Stakeout did on TBC:
 
 - **No proximity scanning.** The targeting trick that sensed NPCs outside nameplate range fires for every
   name on Forever, so it can't detect anything. Nameplates, target and mouseover do the detecting now.
-- **Marks come from your click.** Addons can't place raid marks by themselves any more, so right-click
-  a button to mark.
+- **Marks come from your click.** Addons can't place raid marks by themselves any more, so the mark goes on
+  when you left-click a button.
 - **The combat log is closed to addons.** Deaths are tracked another way, with the same result for you.
 
 ## Notes

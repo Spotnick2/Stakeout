@@ -136,14 +136,14 @@ data.names[3142] = "Orgnil Soulscar"
 Q.Rebuild()
 plate("nameplate1", { name = "Bloodtalon Matriarch ", guid = guid(3247), attackable = true })
 H.eq(shown(), "Bloodtalon Matriarch ", "matched by NPC ID; the observed name is what /targetexact uses")
-H.eq(button("Bloodtalon Matriarch ") and button("Bloodtalon Matriarch "):GetAttribute("macrotext"),
+H.eq(button("Bloodtalon Matriarch ") and button("Bloodtalon Matriarch "):GetAttribute("macrotext2"),
     "/cleartarget\n/targetexact Bloodtalon Matriarch \n/cleartarget [dead]", "...in the macro")
 -- A secret GUID: matched by the provider's name instead.
 WoW.SetUnit("target", { name = "Orgnil Soulscar", secretGuid = true, attackable = false })
 WoW.fire("PLAYER_TARGET_CHANGED")
 H.check(button("Orgnil Soulscar") and button("Orgnil Soulscar").friendly,
     "an unreadable GUID falls back to the name; a turn-in is an NPC")
-H.eq(button("Orgnil Soulscar"):GetAttribute("macrotext"), "/cleartarget\n/targetexact Orgnil Soulscar",
+H.eq(button("Orgnil Soulscar"):GetAttribute("macrotext2"), "/cleartarget\n/targetexact Orgnil Soulscar",
     "...whose left click has no /cleartarget [dead]")
 
 ------------------------------------------------------------
