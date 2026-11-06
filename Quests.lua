@@ -1038,16 +1038,22 @@ local function ButtonSpecs()
         local tooltip = {}
         for _, ref in ipairs(nt.refs) do tooltip[#tooltip + 1] = Progress(ref) end
         if nt.other then tooltip[#tooltip + 1] = "Related to one of your quests" end
-        tooltip[#tooltip + 1] = "Left-click: target"
+        local mark
         if StakeoutDB.enableMarking then
             local marks = Marks(nt.row)
             count[nt.row] = count[nt.row] + 1
-            local mark = marks[(count[nt.row] - 1) % #marks + 1]
-            if mark then
-                -- !N keeps the mark on a second click; /tm N would take it off.
-                right = fmt("%s\n/tm !%d", left, mark)
-                tooltip[#tooltip + 1] = "Right-click: target and mark"
-            end
+            mark = marks[(count[nt.row] - 1) % #marks + 1]
+        end
+        if mark then
+            -- Left-click targets and marks, right-click only targets, as the
+            -- watch list's do. !N keeps the mark on a second click; /tm N
+            -- would take it off.
+            right = left
+            left = fmt("%s\n/tm !%d", left, mark)
+            tooltip[#tooltip + 1] = "Left-click: target and mark"
+            tooltip[#tooltip + 1] = "Right-click: target only"
+        else
+            tooltip[#tooltip + 1] = "Left-click: target"
         end
         specs[#specs + 1] = {
             row = nt.row, name = nt.name, macrotext = left, macrotext2 = right,

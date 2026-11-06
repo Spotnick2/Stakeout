@@ -174,7 +174,7 @@ stand(52, 43, 70)
 rebuild()
 H.eq(order(), "Orgnil Soulscar", "a finished quest's NPC, 70 yd from his spawn: a button, with no plate in sight")
 local o = T.buttons[1]
-H.eq(o:GetAttribute("macrotext"), "/cleartarget\n/targetexact Orgnil Soulscar", "...that targets him by name")
+H.eq(o:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Orgnil Soulscar", "...that targets him by name")
 H.check(o.friendly, "...in the NPC row")
 
 stand(52, 43, 90); Q.Tick()

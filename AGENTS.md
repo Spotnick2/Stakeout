@@ -105,7 +105,8 @@ so act on it then. Bump `MEASURED_ON_BUILD` after re-measuring.
   *every* call, for names that don't exist too, so it can't detect anything. RXPGuides disables it on Forever
   for the same reason. Don't bring it back.
 - **No addon-placed raid marks.** `SetRaidTarget` from addon code is forbidden. Marking happens through the
-  player's click on a secure button (`type2="macro"`, `macrotext2="/tm <index>"`).
+  player's click on a secure button: the left-click macro ends with `/tm !<index>` (`!` keeps the mark on a second
+  click; plain `/tm N` toggles it off, §12 `range`), and the right-click macro only targets (#70).
 - **No combat log.** Registering `COMBAT_LOG_EVENT_UNFILTERED` is forbidden (returns `false` and raises a
   forbidden action), and there is no reader. Deaths come from the **`UNIT_DIED`** event (payload: GUID).
 - **SavedVariables are written but never read back**, per-character included. Every session starts from
@@ -235,6 +236,6 @@ pwsh Tools\deploy.ps1            # refuses a TOC that isn't 16001
 
 - AddOn list: enabled **and not flagged out of date** (this client doesn't hard-block a wrong interface
   number, so "it loaded" proves nothing).
-- Add a nearby NPC → nameplate detection, alert, button. Left-click targets it; right-click marks it. Test in and out of combat.
+- Add a nearby NPC → nameplate detection, alert, button. Left-click targets and marks it; right-click only targets. Test in and out of combat.
 - Kill it → its button clears. Two NPCs with the same name → the button stays until both are dead.
 - Combat: no Lua errors, and the frame isn't touched until combat ends.

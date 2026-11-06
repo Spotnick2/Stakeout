@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Left-click marks the target
+
+A button's left-click now targets the NPC and puts your raid marker on it, as RestedXP's buttons do, and clicking
+again keeps the mark. Right-click only targets, for when you don't want to change a group's marks. The setting is
+now called "Mark the target when you click"; turn it off to never mark.
+
+### Buttons are centred
+
+The buttons in the Stakeout frame are centred, and a lone quest button's name has the frame's full width.
+
 ### Quest targets use Questie's data
 
 With Questie installed, the experimental quest targets now know more: the mobs that drop a quest item get a

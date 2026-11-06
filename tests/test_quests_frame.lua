@@ -89,30 +89,30 @@ see("Mob A", 100); see("Mob B", 101); see("Mob C", 102)
 see("Orgnil Soulscar", 3142, false); see("Gornek", 3143, false)
 H.eq(order(), "Orgnil Soulscar,Gornek,Mob A,Mob B,Mob C", "NPCs (friendly row) first, then mobs, each in the order seen")
 local b = button("Mob A")
-H.eq(b:GetAttribute("macrotext"), "/cleartarget\n/targetexact Mob A\n/cleartarget [dead]",
+H.eq(b:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Mob A\n/cleartarget [dead]",
     "a mob's left click never ends on a corpse")
-H.eq(b:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Mob A\n/cleartarget [dead]\n/tm !8",
-    "right click adds /tm !8 (skull; ! keeps the mark on a second click)")
+H.eq(b:GetAttribute("macrotext"), "/cleartarget\n/targetexact Mob A\n/cleartarget [dead]\n/tm !8",
+    "left click adds /tm !8 (skull; ! keeps the mark on a second click); right click only targets")
 H.eq(b:GetAttribute("type2"), "macro", "...as a right-click macro")
 H.eq(b:GetAttribute("typerelease"), nil, "no typerelease")
-H.eq(button("Mob B"):GetAttribute("macrotext2"):match("/tm !(%d)$"), "7", "the second mob gets the cross")
-H.eq(button("Mob C"):GetAttribute("macrotext2"):match("/tm !(%d)$"), "8",
+H.eq(button("Mob B"):GetAttribute("macrotext"):match("/tm !(%d)$"), "7", "the second mob gets the cross")
+H.eq(button("Mob C"):GetAttribute("macrotext"):match("/tm !(%d)$"), "8",
     "the third cycles back to skull: the square is the watch list's marker (6)")
 local o = button("Orgnil Soulscar")
-H.eq(o:GetAttribute("macrotext"), "/cleartarget\n/targetexact Orgnil Soulscar", "an NPC's left click")
-H.eq(o:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Orgnil Soulscar\n/tm !1", "...right click: the star")
-H.eq(button("Gornek"):GetAttribute("macrotext2"):match("/tm !(%d)$"), "2", "the next NPC: the circle")
+H.eq(o:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Orgnil Soulscar", "an NPC's right click")
+H.eq(o:GetAttribute("macrotext"), "/cleartarget\n/targetexact Orgnil Soulscar\n/tm !1", "...left click: the star")
+H.eq(button("Gornek"):GetAttribute("macrotext"):match("/tm !(%d)$"), "2", "the next NPC: the circle")
 H.check(o.friendly and not b.friendly, "turn-ins are NPCs, kills are mobs")
 H.eq(#WoW.sounds, 0, "quest targets never alert")
 
 StakeoutDB.markerIndex = 8
 T.RefreshTargetFrame()
-H.eq(button("Mob A"):GetAttribute("macrotext2"):match("/tm !(%d)$"), "7", "watch marker skull: mobs start at the cross")
-H.eq(button("Mob B"):GetAttribute("macrotext2"):match("/tm !(%d)$"), "6", "...then the square")
+H.eq(button("Mob A"):GetAttribute("macrotext"):match("/tm !(%d)$"), "7", "watch marker skull: mobs start at the cross")
+H.eq(button("Mob B"):GetAttribute("macrotext"):match("/tm !(%d)$"), "6", "...then the square")
 StakeoutDB.markerIndex = 1
 T.RefreshTargetFrame()
-H.eq(button("Gornek"):GetAttribute("macrotext2"):match("/tm !(%d)$"), "2", "watch marker star: NPCs use the circle")
-H.eq(button("Orgnil Soulscar"):GetAttribute("macrotext2"):match("/tm !(%d)$"), "2", "...only")
+H.eq(button("Gornek"):GetAttribute("macrotext"):match("/tm !(%d)$"), "2", "watch marker star: NPCs use the circle")
+H.eq(button("Orgnil Soulscar"):GetAttribute("macrotext"):match("/tm !(%d)$"), "2", "...only")
 StakeoutDB.enableMarking = false
 T.RefreshTargetFrame()
 H.eq(button("Mob A"):GetAttribute("macrotext2"), nil, "marking off: no right-click macro")
