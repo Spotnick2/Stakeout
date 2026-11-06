@@ -57,6 +57,10 @@ function WoW.reset()
     -- header = true for a header line }. questLogThrows: every C_QuestLog read errors.
     WoW.questLog     = {}
     WoW.questLogThrows = false
+    -- Where the player is (C_Map): { map = uiMapID, x, y } in 0..1, or nil
+    -- (no map). mapSizes: [uiMapID] = { width, height } in yards.
+    WoW.position     = nil
+    WoW.mapSizes     = {}
 end
 
 -- A macro as the client would hold it (for tests that start with one).
@@ -570,6 +574,23 @@ C_CVar = {}
 function C_CVar.GetCVar(name) return WoW.cvars[name] end
 function C_CVar.SetCVar(name, value) WoW.cvars[name] = value return true end
 
+-- C_Map, the three reads quest proximity uses (forever-api-1.60.1.70790.md).
+C_Map = {}
+function C_Map.GetBestMapForUnit(unit)
+    if unit == "player" and WoW.position then return WoW.position.map end
+    return nil
+end
+function C_Map.GetPlayerMapPosition(map, unit)
+    local p = WoW.position
+    if unit ~= "player" or not p or p.map ~= map then return nil end
+    return { GetXY = function() return p.x, p.y end }
+end
+function C_Map.GetMapWorldSize(map)
+    local size = WoW.mapSizes[map]
+    if not size then return 0, 0 end
+    return size[1], size[2]
+end
+
 C_Timer = {}
 function C_Timer.After(seconds, fn) WoW.timers[#WoW.timers + 1] = { fn = fn, delay = seconds } end
 function C_Timer.NewTicker(_, fn) local t = { fn = fn } WoW.ticker = t return t end
@@ -586,6 +607,8 @@ local KNOWN_ABSENT = {
     Stakeout = true, StakeoutDB = true,
     -- Nil until the embedded library's LibStub.lua runs (it checks for a copy).
     LibStub = true,
+    -- Other addons' globals, nil unless that addon is loaded (QuestieData.lua).
+    LibQuestieDB = true, Questie = true,
 }
 
 function WoW.allowGlobal(name) KNOWN_ABSENT[name] = true end

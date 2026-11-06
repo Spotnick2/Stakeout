@@ -72,7 +72,16 @@ end
 
 -- The y offset of a button's anchor: which line it is on.
 local function lineOf(btn) return math.floor((-(btn.points[#btn.points][5]) - 18) / 28 + 0.5) end
-local function colOf(btn) return math.floor((btn.points[#btn.points][4] - 6) / 28 + 0.5) end
+-- Its place in its line: lines are centred, so it's how many shown buttons
+-- of the same line sit to its left.
+local function colOf(btn)
+    local line, x, col = lineOf(btn), btn.points[#btn.points][4], 0
+    for _, b in ipairs(T.buttons) do
+        if b ~= btn and b.shown and lineOf(b) == line and b.points[#b.points][4] < x then col = col + 1 end
+    end
+    return col
+end
+local function xOf(btn) return btn.points[#btn.points][4] end
 
 SlashCmdList.STAKEOUT("add Rare Mob; Twin Mob")
 
@@ -164,7 +173,9 @@ H.eq(T.buttons[2].label.width, 28, "a label in the middle of a line fits under i
 specs = { spec("Kul Tiras Sailor", "enemy") }
 T.RefreshTargetFrame()
 H.eq(T.buttons[2].label:GetText(), "Kul Tiras Sailor", "a lone quest button keeps its whole name")
-H.eq(T.buttons[2].label.width, 90 - 6 - 4, "...and the last of its line runs its label to the frame's edge")
+H.eq(T.buttons[2].label.width, 90 - 8, "...and alone on its line, its label may use the frame's width")
+H.eq(xOf(T.buttons[2]), (90 - 26) / 2, "a lone button is centred in the frame")
+H.eq(xOf(T.buttons[1]), (90 - 26) / 2, "...and so is a lone watch button on its own line")
 
 -- The picture: the face while a token shows the NPC, kept while the button
 -- lingers after that, and never carried over to another NPC in that place.

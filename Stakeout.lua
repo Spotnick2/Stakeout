@@ -47,7 +47,7 @@ local issecretvalue    = issecretvalue
 -------------------------------------------------------------------------------
 local defaults = {
     npcList          = {},      -- { "Mob Name One", "Mob Name Two", ... }
-    enableMarking    = true,    -- right-click a button: target and raid-mark
+    enableMarking    = true,    -- left-click a button: target and raid-mark (right-click: target only)
     markerIndex      = 6,       -- blue square (1=star, 2=circle, ... 8=skull)
     buttonIcon       = 1,       -- target frame button icon (see BUTTON_ICONS)
     flashOnFind      = true,    -- flash taskbar icon on detection
@@ -421,9 +421,11 @@ local function BtnOnEnter(self)
     if self.tooltipLines then
         for _, line in ipairs(self.tooltipLines) do GameTooltip:AddLine(line, 0.7, 0.7, 0.7) end
     else
-        GameTooltip:AddLine("Left-click: target", 0.7, 0.7, 0.7)
         if StakeoutDB.enableMarking then
-            GameTooltip:AddLine("Right-click: target and mark (again: clear the mark)", 0.7, 0.7, 0.7)
+            GameTooltip:AddLine("Left-click: target and mark", 0.7, 0.7, 0.7)
+            GameTooltip:AddLine("Right-click: target only", 0.7, 0.7, 0.7)
+        else
+            GameTooltip:AddLine("Left-click: target", 0.7, 0.7, 0.7)
         end
     end
     GameTooltip:Show()
@@ -472,9 +474,13 @@ local function DesiredButtons()
         local target = fmt("/cleartarget\n/targetexact %s\n/cleartarget [dead]", name)
         local entry = { group = 1, name = name, unit = detected[name].unitId, macrotext = target }
         -- SetRaidTarget is forbidden to addon code here, so the mark is the
-        -- player's click: right-click targets and marks in one press.
+        -- player's click: left-click targets and marks in one press, as
+        -- RestedXP's buttons do, and right-click only targets. /tm !N keeps
+        -- the mark on a second click (/tm N would take it off: the `range`
+        -- probe), and does nothing without a target.
         if StakeoutDB.enableMarking then
-            entry.macrotext2 = fmt("%s\n/tm %d", target, StakeoutDB.markerIndex)
+            entry.macrotext = fmt("%s\n/tm !%d", target, StakeoutDB.markerIndex)
+            entry.macrotext2 = target
         end
         list[#list + 1] = entry
     end
@@ -570,24 +576,23 @@ local function ApplyLayout(list)
     local width  = math.max(cols * pitch + BUTTON_PAD + 8, 90)
     local height = HEADER_HEIGHT + y + lineHeight + BUTTON_PAD + 4
     targetFrame:SetSize(width, height)
+    local perLine = {}
+    for _, s in ipairs(spots) do perLine[s.line] = (perLine[s.line] or 0) + 1 end
 
     for i, e in ipairs(list) do
         local btn = targetButtons[i] or NewButton(i)
-        local x = 6 + spots[i].col * pitch
+        -- Each line is centred in the frame (the widest keeps 6 px a side).
+        local n = perLine[spots[i].line]
+        local x = math.floor((width - (n * pitch - BUTTON_PAD)) / 2) + spots[i].col * pitch
         btn:ClearAllPoints()
         btn:SetPoint("TOPLEFT", targetFrame, "TOPLEFT", x, -(HEADER_HEIGHT + 2 + spots[i].y))
-        -- A label fits under its own button, except the last of a line, whose
-        -- label runs to the frame's edge: a lone "Kul Tiras Sailor" fits whole.
+        -- A label is centred under its button and fits its pitch, except a
+        -- button alone on its line, whose label may use the frame's width: a
+        -- lone "Kul Tiras Sailor" fits whole.
         btn.label:ClearAllPoints()
-        if not spots[i + 1] or spots[i + 1].line ~= spots[i].line then
-            btn.label:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -1)
-            btn.label:SetWidth(width - x - 4)
-            btn.label:SetJustifyH("LEFT")
-        else
-            btn.label:SetPoint("TOP", btn, "BOTTOM", 0, -1)
-            btn.label:SetWidth(pitch)
-            btn.label:SetJustifyH("CENTER")
-        end
+        btn.label:SetPoint("TOP", btn, "BOTTOM", 0, -1)
+        btn.label:SetWidth(n == 1 and width - 8 or pitch)
+        btn.label:SetJustifyH("CENTER")
         -- The key mechanic: a secure macro targets the NPC by exact name.
         btn:SetAttribute("type", "macro")
         btn:SetAttribute("macrotext", e.macrotext)
@@ -1651,8 +1656,8 @@ local function CreateConfigFrame()
     SectionTitle(f, x, y, "Raid marking")
 
     y = y - 26
-    MakeCheckbox(f, x, y, "Right-click to target and mark", "enableMarking",
-        function() RefreshTargetFrame() end, "On a tracked NPC button.")
+    MakeCheckbox(f, x, y, "Mark the target when you click", "enableMarking",
+        function() RefreshTargetFrame() end, "Left-click marks; right-click only targets.")
 
     y = y - 44
     RowLabel(f, x + 4, y - 13, "Marker")
@@ -1773,7 +1778,7 @@ local function CreateConfigFrame()
         SectionTitle(f, x, y, "Quest targets")
         y = y - 26
         local questCheck = Check(f, x, y, "Show buttons for quest mobs",
-            "Experimental: for now, mobs named in kill objectives.")
+            "Experimental. With Questie: droppers and turn-ins too.")
         questCheck:SetScript("OnClick", function(self)
             quests.SetEnabled(self:GetChecked() and true or false)
             ShowQuestCheck()

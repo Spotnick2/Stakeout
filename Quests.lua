@@ -11,9 +11,9 @@
 --   * The quest log, always. Without anything else this is a reduced subset: a
 --     unit you see whose name appears in an unfinished kill objective gets a
 --     button. No turn-in buttons, no item droppers.
---   * A data provider, ns.questData, when one is set (Phase 3: QuestieDB). It
---     knows each objective's NPCs, the droppers of an item and who ends a
---     quest. Its interface is described below.
+--   * A data provider, ns.questData, when one is set (QuestieData.lua reads
+--     QuestieDB). It knows each objective's NPCs, the droppers of an item, who
+--     ends a quest and where an NPC stands. Its interface is described below.
 -------------------------------------------------------------------------------
 local _, ns = ...
 local C = ns.core
@@ -26,9 +26,15 @@ local LINGER    = C.LINGER   -- the watch list's: seconds a target stays after i
 local QUEST_MAX = 8          -- quest buttons at most; the watch list's are outside this
 local REBUILD_DELAY = 0.2    -- quest events come in bursts (FOREVER-PROBE.md, `events`)
 
--- The tiers a target can be in. NEAR is the "near its spawn" signal Phase 3
--- adds; nothing sets it yet, but the selection already ranks it.
+-- The tiers a target can be in. NEAR is "the player is near a known spawn",
+-- from the provider's Spawns, for the NPCs to turn in to or talk to.
 local VISIBLE, LINGERING, NEAR, NONE = 3, 2, 1, 0
+
+-- Yards. An NPC is near within NEAR_IN of one of its spawns and stays near
+-- until NEAR_OUT, so standing at the edge doesn't flicker the button. A click
+-- reaches a friendly NPC with no nameplate at 100 yd and more (FOREVER-PROBE.md,
+-- `range`). Mobs get no NEAR: reaching a live hostile with no plate is unmeasured.
+local NEAR_IN, NEAR_OUT = 80, 100
 
 -- Raid markers for the right-click /tm: skull, cross, square for mobs; star,
 -- circle for NPCs. The watch list's own marker is skipped.
@@ -57,6 +63,8 @@ local FRIENDLY_MARKS = { 1, 2 }
 --   NpcName(npcID)        -> string: the NPC's name, for /targetexact until the
 --                            unit is seen (the observed name wins then)
 --   FinishedBy(questID)   -> { npcId, ... }: who the quest is turned in to
+--   Spawns(npcID)         -> { [uiMapID] = { { x, y }, ... } }: where the NPC
+--                            stands, x and y in 0..1 of that map (for NEAR)
 -------------------------------------------------------------------------------
 local function Ask(method, ...)
     local provider = ns.questData
@@ -202,7 +210,8 @@ end
 --           ("progress unknown")
 -- A Member is one NPC ID (or one name, with no ID) and the refs it serves, with
 -- its sighting state: { npcId, dbName, observed, refs, tokens, guids,
--- lastSeen, near, nearSince, dist }. tokens are the unit tokens showing it now
+-- lastSeen, near, dist, spawns }. dist is the yards to its nearest known spawn
+-- on the player's map, while it is wanted near (turn-in, talk). tokens are the unit tokens showing it now
 -- (plates, target, mouseover) -> its GUID or true.
 -- A NameTarget (built in ButtonSpecs) is every member that shares one
 -- /targetexact name: one button, one place under the cap.
@@ -328,6 +337,91 @@ local function Shows(m, name, guid)
     local id = NpcIdFromGuid(guid)
     if m.npcId and id then return id == m.npcId end
     return name == NameOf(m) or name == m.dbName
+end
+
+-------------------------------------------------------------------------------
+-- Near: the player's distance to a known spawn of an NPC to turn in to or talk
+-- to (FOREVER-PROBE.md, `quests` P3: map position times the map's size in
+-- yards matches the world distance).
+-------------------------------------------------------------------------------
+-- Where the player is: { map, x, y, w, h } (x, y in 0..1; w, h in yards), or
+-- nil (no map, an instance, anything unreadable).
+local function PlayerPosition()
+    local ok, pos = pcall(function()
+        local map = C_Map.GetBestMapForUnit("player")
+        if type(map) ~= "number" or C.IsSecret(map) then return nil end
+        local v = C_Map.GetPlayerMapPosition(map, "player")
+        if not v or C.IsSecret(v) then return nil end
+        local x, y = v:GetXY()
+        local w, h = C_Map.GetMapWorldSize(map)
+        for _, n in ipairs({ x, y, w, h }) do
+            if type(n) ~= "number" or C.IsSecret(n) then return nil end
+        end
+        if w <= 0 or h <= 0 then return nil end
+        return { map = map, x = x, y = y, w = w, h = h }
+    end)
+    return ok and pos or nil
+end
+
+-- Whether a member is someone to find by their spawn: an NPC to turn a quest
+-- in to, or to talk to, that a quest still wants.
+local function WantsNear(m)
+    if not m.npcId then return false end
+    for _, ref in ipairs(m.refs) do
+        if ref.eligible and (ref.kind == "turnin" or ref.kind == "talk") then return true end
+    end
+    return false
+end
+
+local function UpdateNear(m, pos)
+    local best
+    if pos and WantsNear(m) then
+        if m.spawns == nil then
+            local spawns = Ask("Spawns", m.npcId)
+            m.spawns = type(spawns) == "table" and spawns or false
+        end
+        local points = m.spawns and m.spawns[pos.map]
+        for _, pt in ipairs(type(points) == "table" and points or {}) do
+            local sx, sy = type(pt) == "table" and pt[1], type(pt) == "table" and pt[2]
+            if type(sx) == "number" and type(sy) == "number" then
+                local d = math.sqrt(((pos.x - sx) * pos.w) ^ 2 + ((pos.y - sy) * pos.h) ^ 2)
+                if not best or d < best then best = d end
+            end
+        end
+    end
+    m.dist = best
+    m.near = best ~= nil and best <= (m.near and NEAR_OUT or NEAR_IN)
+end
+
+-- Every member's NEAR, from one read of the player's position (only when one
+-- of them wants it). Touch only notices a tier change, but the selection also
+-- ranks near members by distance (the reserved turn-in slot, Prefer): when the
+-- order of the near ones changes, the buttons are picked again (Codex on #69).
+local nearOrder = ""
+local function UpdateAllNear()
+    local pos
+    for _, m in pairs(members) do
+        if WantsNear(m) then
+            pos = PlayerPosition()
+            break
+        end
+    end
+    local near = {}
+    for _, m in pairs(members) do
+        UpdateNear(m, pos)
+        if m.near then near[#near + 1] = m end
+    end
+    tsort(near, function(a, b)
+        if a.dist ~= b.dist then return a.dist < b.dist end
+        return a.key < b.key
+    end)
+    local keys = {}
+    for i, m in ipairs(near) do keys[i] = m.key end
+    local order = table.concat(keys, ",")
+    if order ~= nearOrder then
+        nearOrder = order
+        dirty = true
+    end
 end
 
 -------------------------------------------------------------------------------
@@ -554,7 +648,7 @@ function Rebuild()
     for key, w in pairs(wanted) do
         local m = members[key] or NewMember(key, w.npcId)
         members[key] = m
-        m.dbName, m.refs = w.dbName, w.refs
+        m.dbName, m.refs, m.spawns = w.dbName, w.refs, nil
         if m.dbName then
             byName[m.dbName] = byName[m.dbName] or {}
             tinsert(byName[m.dbName], m)
@@ -590,6 +684,10 @@ function Rebuild()
         for _, quest in ipairs(list) do active[quest.questID] = true end
         C.PruneQuestMutes(active)
     end
+
+    -- A turn-in just completed, near its NPC, shows now rather than at the tick.
+    UpdateAllNear()
+    for _, m in pairs(members) do m.tier = Tier(m, GetTime()) end
 
     -- Units already on screen match the new set now, not at their next event.
     -- The core's watch state is untouched, so a watched unit doesn't alert again.
@@ -707,6 +805,7 @@ end
 local function Tick()
     if not Enabled() then return end
     local now = GetTime()
+    UpdateAllNear()
     for _, m in pairs(members) do
         for token in pairs(m.tokens) do
             local name, guid = C.ReadNPC(token)
@@ -939,16 +1038,22 @@ local function ButtonSpecs()
         local tooltip = {}
         for _, ref in ipairs(nt.refs) do tooltip[#tooltip + 1] = Progress(ref) end
         if nt.other then tooltip[#tooltip + 1] = "Related to one of your quests" end
-        tooltip[#tooltip + 1] = "Left-click: target"
+        local mark
         if StakeoutDB.enableMarking then
             local marks = Marks(nt.row)
             count[nt.row] = count[nt.row] + 1
-            local mark = marks[(count[nt.row] - 1) % #marks + 1]
-            if mark then
-                -- !N keeps the mark on a second click; /tm N would take it off.
-                right = fmt("%s\n/tm !%d", left, mark)
-                tooltip[#tooltip + 1] = "Right-click: target and mark"
-            end
+            mark = marks[(count[nt.row] - 1) % #marks + 1]
+        end
+        if mark then
+            -- Left-click targets and marks, right-click only targets, as the
+            -- watch list's do. !N keeps the mark on a second click; /tm N
+            -- would take it off.
+            right = left
+            left = fmt("%s\n/tm !%d", left, mark)
+            tooltip[#tooltip + 1] = "Left-click: target and mark"
+            tooltip[#tooltip + 1] = "Right-click: target only"
+        else
+            tooltip[#tooltip + 1] = "Left-click: target"
         end
         specs[#specs + 1] = {
             row = nt.row, name = nt.name, macrotext = left, macrotext2 = right,
@@ -992,7 +1097,9 @@ local function PrintState()
     end
     C.Print("Quest targets (experimental): |cff00ff00on|r, %d quests read. |cff00ff00/stakeout quests off|r " ..
         "turns them off.", #questList)
-    if not HasProvider() then
+    if HasProvider() then
+        C.Print("With Questie's data: objective mobs, item droppers, and the NPC to turn in to when you're near.")
+    else
         C.Print("Without quest data (Questie), only mobs you see whose name is in a kill objective get a button.")
     end
 end
@@ -1024,7 +1131,7 @@ ns.quests = {
 -- Test seam (tests/). Harmless in game.
 ns.quests._test = {
     members = members, holders = holders, Associate = Associate, Select = Select,
-    NpcIdFromGuid = NpcIdFromGuid, QUEST_MAX = QUEST_MAX,
+    NpcIdFromGuid = NpcIdFromGuid, QUEST_MAX = QUEST_MAX, NEAR_IN = NEAR_IN, NEAR_OUT = NEAR_OUT,
     initialized = function() return loggedIn and logReady end,
     nameRows = function() return nameRows end,
     lastShown = function() return lastShown end,

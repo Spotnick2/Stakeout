@@ -13,9 +13,11 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
 
 - Watch a list of NPCs by exact name
 - Detects them on **nameplates**, as your **target**, or under your **mouse**
-- A small frame with one button per NPC found: **left-click** targets it, **right-click** targets and raid-marks it
+- A small frame with one button per NPC found: **left-click** targets it and puts your raid marker on it,
+  **right-click** only targets it
 - Chat message, taskbar flash and sound alert (17 sounds, plus 7 more with DBM-Core)
-- Experimental quest buttons for mobs named in unfinished kill objectives (a checkbox in the config, or `/stakeout quests on`)
+- Experimental quest buttons (a checkbox in the config, or `/stakeout quests on`): mobs named in unfinished kill
+  objectives, and with Questie installed, the mobs that drop quest items and the NPC to turn a finished quest in to
 - An approximate distance in a button's tooltip while its NPC is visible
 - Two NPCs with the same name keep their button until both are dead
 - Movable, lockable, scalable frame
@@ -60,7 +62,8 @@ NPC names must match exactly, spaces included (`/stakeout add Captain Flat Tusk`
 ## Configuration
 
 - **Alerts:** taskbar flash, sound on/off, and which sound (it previews when you pick it).
-- **Raid marking:** turn the right-click mark on or off, and pick the marker. Right-clicking again clears the mark.
+- **Raid marking:** left-click a button to target the NPC and put your marker on it (clicking again keeps the
+  mark); right-click only targets. Turn the mark off, or pick the marker.
 - **Target frame:** lock the position (Alt+drag still moves it), the button icon, and the scale.
 - **Look:** WoW Forever (the default) or Glass, a smoked glass look shared with other glass addons. It
   applies to every Stakeout window after a `/reload`.
@@ -75,16 +78,18 @@ Blizzard's Forever client doesn't allow some of what Stakeout did on TBC:
 
 - **No proximity scanning.** The targeting trick that sensed NPCs outside nameplate range fires for every
   name on Forever, so it can't detect anything. Nameplates, target and mouseover do the detecting now.
-- **Marks come from your click.** Addons can't place raid marks by themselves any more, so right-click
-  a button to mark.
+- **Marks come from your click.** Addons can't place raid marks by themselves any more, so the mark goes on
+  when you left-click a button.
 - **The combat log is closed to addons.** Deaths are tracked another way, with the same result for you.
 
 ## Notes
 
 - Stakeout never moves, shows or hides its frame during combat. Changes wait for the fight to end.
 - It's designed for your own list, not a built-in rare database.
-- Quest targets are off by default and do not play alerts. Without quest data, they cover only mobs named in
-  unfinished kill objectives; turn-in NPCs and item droppers are not included yet.
+- Quest targets are off by default and do not play alerts. Without Questie, they cover only mobs named in
+  unfinished kill objectives. With Questie, a mob that drops a quest item gets a button once you see it, and the
+  NPC to turn a finished quest in to gets one while you're within about 80 yards of where Questie says they stand.
+  Questie has no droppers for many of Forever's own quest items; those get no button.
 - Hover a button to see roughly how far its NPC is (e.g. "25-30 yd"), while a nameplate, your target or your
   mouse shows it. Addons can't read other units' positions, so it's bracketed with range checks, as
   NameplateDistance by Nedyar does (MIT; its notice is

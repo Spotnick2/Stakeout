@@ -38,8 +38,8 @@ and the combat log. See below. Don't reintroduce them.
 
 ## Repository Layout
 
-- `Stakeout.toc`: manifest (interface, SavedVariables, `OptionalDeps: GlassUI`, load order): the embedded
-  LibGlass-1.0, then `Theme.lua`, then `Stakeout.lua`, then `Quests.lua`.
+- `Stakeout.toc`: manifest (interface, SavedVariables, `OptionalDeps: GlassUI, QuestieDB`, load order): the
+  embedded LibGlass-1.0, then `Theme.lua`, `Range.lua`, `Stakeout.lua`, `Quests.lua`, then `QuestieData.lua`.
 - `Theme.lua`: the windows' look (#28). WoW Forever (the backdrops, the default) or LibGlass's reflective
   glass (`C:/Projects/WoW/References/Docs/LIBGLASS-WINDOW-STYLING.md`), fixed once a session from
   `StakeoutDB.theme`, so a new choice applies after a `/reload`. Every LibGlass call is here. Its helpers
@@ -54,9 +54,16 @@ and the combat log. See below. Don't reintroduce them.
 - `Quests.lua`: quest targets (#24), **experimental and off by default** (`StakeoutDB.questTargets`,
   `/stakeout quests on`, or the settings window's "Quest targets" checkbox, #61). Reads the quest log, matches the units the core sees (its `ns.core` hooks) and hands
   the core up to 8 quest buttons (`ns.quests.ButtonSpecs`). Objective NPCs, item droppers and turn-in NPCs
-  come from a data provider, `ns.questData`, whose interface the file documents (Phase 3's QuestieDB adapter).
-  Without one it is a reduced subset: a mob you see whose name is literally in an unfinished kill objective gets
-  a button, nothing else (no turn-ins, no droppers; "other quest units", `questOther`, is opt-in).
+  come from a data provider, `ns.questData`, whose interface the file documents. Without one it is a reduced
+  subset: a mob you see whose name is literally in an unfinished kill objective gets a button, nothing else (no
+  turn-ins, no droppers; "other quest units", `questOther`, is opt-in). The NEAR tier is the player's distance to
+  a known spawn (the provider's `Spawns`), for turn-in and "talk to" NPCs only: near within 80 yd, until 100 yd.
+  Mobs get no NEAR: reaching a live hostile with no plate is unmeasured (FOREVER-PROBE.md §12, `hostile`).
+- `QuestieData.lua`: the provider (#68), from `LibQuestieDB` when it's loaded and `RequireContract(4)` holds;
+  nothing is set otherwise. Objectives in Questie's own order (`QuestieDB.lua`'s `ObjectiveData`: groups in
+  order, `ObjectiveFirst` inserted at the front one at a time), unit objectives only. Spawns through ZoneDB's
+  `areaIdToUiMapId` (+ `Override`) strings, parsed as data with the probe's strict parser; coordinates as stored,
+  **never `EraToForever`** (§12, `mulgore`). One rebuild when `Questie.API.isReady` turns true.
 - `tests/`: Lua 5.1 unit tests, no game client. `pwsh tests/run.ps1`.
 - `Tools/deploy.ps1`: deploys to the local Forever AddOns folder (`-Probe` / `-ProbeOnly` add the probe).
 - `Tools/StakeoutProbe/`: the in-game probe, a ForeverProbe module (`/fp so`, never packaged). It measures what quest
@@ -98,7 +105,8 @@ so act on it then. Bump `MEASURED_ON_BUILD` after re-measuring.
   *every* call, for names that don't exist too, so it can't detect anything. RXPGuides disables it on Forever
   for the same reason. Don't bring it back.
 - **No addon-placed raid marks.** `SetRaidTarget` from addon code is forbidden. Marking happens through the
-  player's click on a secure button (`type2="macro"`, `macrotext2="/tm <index>"`).
+  player's click on a secure button: the left-click macro ends with `/tm !<index>` (`!` keeps the mark on a second
+  click; plain `/tm N` toggles it off, §12 `range`), and the right-click macro only targets (#70).
 - **No combat log.** Registering `COMBAT_LOG_EVENT_UNFILTERED` is forbidden (returns `false` and raises a
   forbidden action), and there is no reader. Deaths come from the **`UNIT_DIED`** event (payload: GUID).
 - **SavedVariables are written but never read back**, per-character included. Every session starts from
@@ -228,6 +236,6 @@ pwsh Tools\deploy.ps1            # refuses a TOC that isn't 16001
 
 - AddOn list: enabled **and not flagged out of date** (this client doesn't hard-block a wrong interface
   number, so "it loaded" proves nothing).
-- Add a nearby NPC → nameplate detection, alert, button. Left-click targets it; right-click marks it. Test in and out of combat.
+- Add a nearby NPC → nameplate detection, alert, button. Left-click targets and marks it; right-click only targets. Test in and out of combat.
 - Kill it → its button clears. Two NPCs with the same name → the button stays until both are dead.
 - Combat: no Lua errors, and the frame isn't touched until combat ends.
