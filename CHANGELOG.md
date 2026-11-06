@@ -7,11 +7,6 @@
 The experimental quest target buttons now have a checkbox in the settings window (`/stakeout`), under
 "Quest targets". It's the same switch as `/stakeout quests on`, and still off by default.
 
-### Your settings are kept again
-
-The Forever client loads addon settings back after a restart again, so your watch list and options, the quest
-targets switch included, stay as you left them. Saving the list in a character macro still works, as a backup.
-
 ## v2.3.0 - 2026-10-22
 
 ### The nameplate range setting is gone
