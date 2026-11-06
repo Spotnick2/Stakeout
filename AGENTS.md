@@ -80,7 +80,9 @@ re-levelled or resized afterwards. Keep it that way: the frame is protected once
 
 ## What the Client Allows (measured, build 1.60.1.70450)
 
-Details and raw captures are in `docs/FOREVER-PROBE.md`. Don't re-derive these. If the build changes, run
+Details and raw captures are in `docs/FOREVER-PROBE.md`. Don't re-derive these. Still current on **70790**
+(`MEASURED_ON_BUILD`, #65): the API diff from 70450 touches nothing Stakeout uses, and the owner has played with it on
+that build since it went live, so it was confirmed by use rather than re-probed. If the build changes, run
 `/fp steps so core` (`Tools/StakeoutProbe`) to re-check the buttons, and restore the old probe from history (see that
 file) for anything deeper.
 
