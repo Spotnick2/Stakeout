@@ -102,4 +102,34 @@ H.eq(StakeoutDB.questTargets, false, "/stakeout quests off (any case)")
 slash("quests maybe")
 H.eq(StakeoutDB.questTargets, false, "anything else only reports")
 
+------------------------------------------------------------
+-- The settings window's quest targets checkbox (#61): the same switch
+------------------------------------------------------------
+slash("config")
+local qc = StakeoutConfigFrame.questCheck
+H.check(qc ~= nil, "the settings window has a quest targets checkbox")
+H.eq(qc:GetChecked(), false, "...off, as the setting is")
+local qlabel = qc.text or qc.Text
+H.check(qlabel and qlabel:GetText():find("quest", 1, true), "...labelled for quests")
+H.check(qc.desc and qc.desc:GetText():find("Experimental", 1, true), "...and marked experimental")
+WoW.messages = {}
+qc:SetChecked(true)
+qc.scripts.OnClick(qc, "LeftButton", false)
+H.eq(StakeoutDB.questTargets, true, "ticking it turns quest targets on")
+H.check(WoW.chat():find("Quest targets (experimental):", 1, true) and WoW.chat():find("Without quest data", 1, true),
+    "...and says what it covers, as the command does")
+slash("quests off")
+H.eq(qc:GetChecked(), false, "/stakeout quests off while the window is open unticks it")
+slash("quests on")
+H.eq(qc:GetChecked(), true, "...and on ticks it")
+slash("config")
+H.check(not StakeoutConfigFrame:IsShown(), "the window closes")
+StakeoutDB.questTargets = false
+slash("config")
+H.eq(qc:GetChecked(), false, "reopened, it shows the setting as it is now")
+qc:SetChecked(false)
+qc.scripts.OnClick(qc, "LeftButton", false)
+H.eq(StakeoutDB.questTargets, false, "unticking it turns quest targets off")
+slash("config")
+
 H.done("test_slash")

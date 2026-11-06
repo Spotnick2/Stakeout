@@ -1240,6 +1240,14 @@ end
 
 local npcScrollRows = {}
 
+-- The quest targets checkbox shows the setting, however it was last changed
+-- (the window, or /stakeout quests while the window is open).
+local function ShowQuestCheck()
+    if configFrame and configFrame.questCheck then
+        configFrame.questCheck:SetChecked(StakeoutDB.questTargets == true)
+    end
+end
+
 function RefreshNPCList()
     if not configFrame or not configFrame.scrollContent then return end
 
@@ -1292,6 +1300,7 @@ function RefreshNPCList()
         configFrame.emptyHint:SetShown(count == 0)
     end
     if configFrame.macroCheck then configFrame.macroCheck:SetChecked(macroMode) end
+    ShowQuestCheck()
 end
 
 -- Save a look (the config's dropdown, /stakeout look). The windows keep the
@@ -1310,6 +1319,7 @@ end
 -- The config window (#34): the watch list on the left, the settings on the
 -- right. Each column is laid out down a y cursor, in px from the window's top.
 local CFG_W, CFG_H = 712, 540
+local QUEST_H = 92                -- the quest targets section, with Quests.lua loaded
 local COL_W = 324
 local LEFT, RIGHT = 16, 372   -- the columns' left edges
 local TOP = -50               -- where both columns start, under the title row
@@ -1436,7 +1446,9 @@ local function CreateConfigFrame()
 
     -- The Glass UI switch only means something with Glass UI loaded.
     local suiteRow = Theme.SuiteAvailable()
-    local height = CFG_H + (suiteRow and 44 or 0)
+    -- Quests.lua owns quest targets; without it there's nothing to switch.
+    local quests = ns.quests and ns.quests.SetEnabled and ns.quests
+    local height = CFG_H + (suiteRow and 44 or 0) + (quests and QUEST_H or 0)
     f:SetSize(CFG_W, height)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetMovable(true)
@@ -1752,6 +1764,24 @@ local function CreateConfigFrame()
         f.followCheck = follow
     end
 
+    -- Quest targets (#24, #61): experimental and off by default. The same
+    -- switch as /stakeout quests, which says what it covers today.
+    if quests then
+        y = y - (suiteRow and 50 or 40)
+        Rule(f, x, y, COL_W)
+        y = y - 12
+        SectionTitle(f, x, y, "Quest targets")
+        y = y - 26
+        local questCheck = Check(f, x, y, "Show buttons for quest mobs",
+            "Experimental: for now, mobs named in kill objectives.")
+        questCheck:SetScript("OnClick", function(self)
+            quests.SetEnabled(self:GetChecked() and true or false)
+            ShowQuestCheck()
+            quests.PrintState()
+        end)
+        f.questCheck = questCheck
+    end
+
     -- ESC closes config
     if UISpecialFrames then tinsert(UISpecialFrames, "StakeoutConfigFrame") end
 
@@ -2001,6 +2031,7 @@ SlashCmdList["STAKEOUT"] = function(input)
         local arg = rest:lower()
         if arg == "on" or arg == "off" then
             quests.SetEnabled(arg == "on")
+            ShowQuestCheck()
         end
         quests.PrintState()
 

@@ -52,7 +52,7 @@ and the combat log. See below. Don't reintroduce them.
 - `Stakeout.lua`: the addon's core, in labelled sections (defaults and settings, target frame,
   detection, config GUI, events, slash commands).
 - `Quests.lua`: quest targets (#24), **experimental and off by default** (`StakeoutDB.questTargets`,
-  `/stakeout quests on`). Reads the quest log, matches the units the core sees (its `ns.core` hooks) and hands
+  `/stakeout quests on`, or the settings window's "Quest targets" checkbox, #61). Reads the quest log, matches the units the core sees (its `ns.core` hooks) and hands
   the core up to 8 quest buttons (`ns.quests.ButtonSpecs`). Objective NPCs, item droppers and turn-in NPCs
   come from a data provider, `ns.questData`, whose interface the file documents (Phase 3's QuestieDB adapter).
   Without one it is a reduced subset: a mob you see whose name is literally in an unfinished kill objective gets
