@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Quest targets in the settings window
+
+The experimental quest target buttons now have a checkbox in the settings window (`/stakeout`), under
+"Quest targets". It's the same switch as `/stakeout quests on`, and still off by default.
+
 ## v2.3.0 - 2026-10-22
 
 ### The nameplate range setting is gone
