@@ -1773,7 +1773,7 @@ local function CreateConfigFrame()
         SectionTitle(f, x, y, "Quest targets")
         y = y - 26
         local questCheck = Check(f, x, y, "Show buttons for quest mobs",
-            "Experimental: for now, mobs named in kill objectives.")
+            "Experimental. With Questie: droppers and turn-ins too.")
         questCheck:SetScript("OnClick", function(self)
             quests.SetEnabled(self:GetChecked() and true or false)
             ShowQuestCheck()

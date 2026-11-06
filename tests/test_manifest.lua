@@ -60,7 +60,7 @@ H.eq(H.directive("X-Curse-Project-ID"), "1508654",
 -- read from once Blizzard fixes the loader.
 -- Glass UI loads first when it is enabled, so Stakeout can follow it at its own
 -- ADDON_LOADED (GlassUI docs/SUITE.md); without it, Stakeout loads as before.
-H.eq(H.directive("OptionalDeps"), "GlassUI", "Glass UI, optionally, before Stakeout")
+H.eq(H.directive("OptionalDeps"), "GlassUI, QuestieDB", "Glass UI and QuestieDB, optionally, before Stakeout")
 
 H.eq(H.directive("SavedVariablesPerCharacter"), "StakeoutDB",
     "settings are per character")
@@ -72,12 +72,13 @@ H.eq(H.directive("SavedVariablesPerCharacter"), "StakeoutDB",
 -- that builds the windows with both, then the quest targets, which plug into
 -- the core's hooks (ns.core).
 local files = H.tocFiles()
-H.eq(#files, 5, "the TOC loads the library, Theme.lua, Range.lua, Stakeout.lua and Quests.lua")
+H.eq(#files, 6, "the TOC loads the library, Theme.lua, Range.lua, Stakeout.lua, Quests.lua and QuestieData.lua")
 H.eq(files[1], "Libs\\LibGlass-1.0\\LibGlass-1.0.xml", "the embedded LibGlass-1.0 loads first")
 H.eq(files[2], "Theme.lua", "then Theme.lua")
 H.eq(files[3], "Range.lua", "then Range.lua")
 H.eq(files[4], "Stakeout.lua", "then Stakeout.lua")
 H.eq(files[5], "Quests.lua", "then Quests.lua, after the core it hooks into")
+H.eq(files[6], "QuestieData.lua", "then QuestieData.lua, the provider Quests.lua asks")
 -- Libs/ is the packager's (.pkgmeta externals) and gitignored: not on disk here.
 for i = 2, #files do
     H.check(H.readFile(files[i]) ~= nil, "the TOC loads " .. files[i] .. ", which does not exist")

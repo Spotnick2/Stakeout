@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Quest targets use Questie's data
+
+With Questie installed, the experimental quest targets now know more: the mobs that drop a quest item get a
+button once you see them, and the NPC to turn a finished quest in to (or a trainer a quest sends you to) gets a
+button while you're within about 80 yards of where Questie says they stand. Without Questie nothing changes.
+Questie has no droppers for many of Forever's own quest items, so those still get no button.
+
 ## v2.4.0 - 2026-11-06
 
 ### Quest targets in the settings window

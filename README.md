@@ -15,7 +15,8 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
 - Detects them on **nameplates**, as your **target**, or under your **mouse**
 - A small frame with one button per NPC found: **left-click** targets it, **right-click** targets and raid-marks it
 - Chat message, taskbar flash and sound alert (17 sounds, plus 7 more with DBM-Core)
-- Experimental quest buttons for mobs named in unfinished kill objectives (a checkbox in the config, or `/stakeout quests on`)
+- Experimental quest buttons (a checkbox in the config, or `/stakeout quests on`): mobs named in unfinished kill
+  objectives, and with Questie installed, the mobs that drop quest items and the NPC to turn a finished quest in to
 - An approximate distance in a button's tooltip while its NPC is visible
 - Two NPCs with the same name keep their button until both are dead
 - Movable, lockable, scalable frame
@@ -83,8 +84,10 @@ Blizzard's Forever client doesn't allow some of what Stakeout did on TBC:
 
 - Stakeout never moves, shows or hides its frame during combat. Changes wait for the fight to end.
 - It's designed for your own list, not a built-in rare database.
-- Quest targets are off by default and do not play alerts. Without quest data, they cover only mobs named in
-  unfinished kill objectives; turn-in NPCs and item droppers are not included yet.
+- Quest targets are off by default and do not play alerts. Without Questie, they cover only mobs named in
+  unfinished kill objectives. With Questie, a mob that drops a quest item gets a button once you see it, and the
+  NPC to turn a finished quest in to gets one while you're within about 80 yards of where Questie says they stand.
+  Questie has no droppers for many of Forever's own quest items; those get no button.
 - Hover a button to see roughly how far its NPC is (e.g. "25-30 yd"), while a nameplate, your target or your
   mouse shows it. Addons can't read other units' positions, so it's bracketed with range checks, as
   NameplateDistance by Nedyar does (MIT; its notice is

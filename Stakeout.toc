@@ -4,7 +4,7 @@
 ## Author: Spotnick
 ## Version: @project-version@
 ## SavedVariablesPerCharacter: StakeoutDB
-## OptionalDeps: GlassUI
+## OptionalDeps: GlassUI, QuestieDB
 ## X-Curse-Project-ID: 1508654
 ## X-Wago-ID: rNkgwjNa
 
@@ -13,3 +13,4 @@ Theme.lua
 Range.lua
 Stakeout.lua
 Quests.lua
+QuestieData.lua
