@@ -206,6 +206,50 @@ rebuild()
 H.eq(order(), "", "turned in (out of the log): gone")
 
 ------------------------------------------------------------
+-- Two near turn-ins and a full frame: the reserved slot follows the nearer
+-- one as the player walks (Codex on #69)
+------------------------------------------------------------
+do
+    -- Orgnil's spawn is cached at 52, 43; Gornek stands 60 yd east of it.
+    DB.Npc[3145] = { name = "Gornek", spawns = { [14] = { { 52.0 + 60 / W * 100, 43.0 } } } }
+    DB.Quest[825] = { objectives = {}, finishedBy = { { 3145 } } }
+    local rows, objs = {}, {}
+    for i = 1, 8 do
+        DB.Npc[200 + i] = { name = "Mob " .. i }
+        rows[i] = { type = "monster", text = "0/5 Mob " .. i .. " slain" }
+        objs[i] = { 200 + i }
+    end
+    DB.Quest[900] = { objectives = { objs } }
+    WoW.questLog = {
+        { questID = 900, title = "Cull", complete = false, rows = rows },
+        { questID = 823, title = "Report to Orgnil", rows = {}, complete = true },
+        { questID = 825, title = "Report to Gornek", rows = {}, complete = true },
+    }
+    stand(52, 43, 10)
+    rebuild()
+    for i = 1, 8 do
+        WoW.SetUnit("nameplate" .. i, { name = "Mob " .. i, guid = "Creature-0-1-2-3-" .. (200 + i) .. "-A",
+            plate = true, attackable = true })
+        WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate" .. i)
+    end
+    local function turnins()
+        local out = {}
+        for _, b in ipairs(T.buttons) do
+            if b.shown and (b.npcName == "Gornek" or b.npcName == "Orgnil Soulscar") then out[#out + 1] = b.npcName end
+        end
+        return table.concat(out, ",")
+    end
+    Q.Tick()
+    H.eq(turnins(), "Orgnil Soulscar", "a full frame keeps one slot for a turn-in: the nearer one (10 yd vs 50)")
+    stand(52, 43, 50); Q.Tick()
+    H.eq(turnins(), "Gornek", "walked on, both still near: the slot follows the nearer one")
+    for i = 1, 8 do WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate" .. i) end
+    WoW.units = {}
+    WoW.questLog = {}
+    rebuild()
+end
+
+------------------------------------------------------------
 -- A type-14 trainer: someone to talk to, also by their spawn
 ------------------------------------------------------------
 DB.Npc[3087] = { name = "Cook Torka", spawns = { [14] = { { 51.0, 42.0 } } } }

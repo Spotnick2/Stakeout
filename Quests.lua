@@ -394,7 +394,10 @@ local function UpdateNear(m, pos)
 end
 
 -- Every member's NEAR, from one read of the player's position (only when one
--- of them wants it).
+-- of them wants it). Touch only notices a tier change, but the selection also
+-- ranks near members by distance (the reserved turn-in slot, Prefer): when the
+-- order of the near ones changes, the buttons are picked again (Codex on #69).
+local nearOrder = ""
 local function UpdateAllNear()
     local pos
     for _, m in pairs(members) do
@@ -403,7 +406,22 @@ local function UpdateAllNear()
             break
         end
     end
-    for _, m in pairs(members) do UpdateNear(m, pos) end
+    local near = {}
+    for _, m in pairs(members) do
+        UpdateNear(m, pos)
+        if m.near then near[#near + 1] = m end
+    end
+    tsort(near, function(a, b)
+        if a.dist ~= b.dist then return a.dist < b.dist end
+        return a.key < b.key
+    end)
+    local keys = {}
+    for i, m in ipairs(near) do keys[i] = m.key end
+    local order = table.concat(keys, ",")
+    if order ~= nearOrder then
+        nearOrder = order
+        dirty = true
+    end
 end
 
 -------------------------------------------------------------------------------
