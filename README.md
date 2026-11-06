@@ -15,18 +15,18 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
 - Detects them on **nameplates**, as your **target**, or under your **mouse**
 - A small frame with one button per NPC found: **left-click** targets it, **right-click** targets and raid-marks it
 - Chat message, taskbar flash and sound alert (17 sounds, plus 7 more with DBM-Core)
-- Experimental quest buttons for mobs named in unfinished kill objectives (`/stakeout quests on`)
+- Experimental quest buttons for mobs named in unfinished kill objectives (a checkbox in the config, or `/stakeout quests on`)
 - An approximate distance in a button's tooltip while its NPC is visible
 - Two NPCs with the same name keep their button until both are dead
 - Movable, lockable, scalable frame
 
-## The Forever beta and your settings
+## Your settings
 
-The Forever beta client currently **doesn't load addon settings back** after you log out. It's a Blizzard bug
-that affects every addon. Your watch list and options start empty each session. Stakeout tells you at
-login while this is happening.
+Stakeout keeps your watch list and options between sessions. During the Forever beta, the client didn't load
+addon settings back after a restart (a Blizzard bug that affected every addon). It does now. If it ever stops
+again, Stakeout tells you at login, and the backups below keep your list.
 
-**The easy way:** type `/stakeout macro on`, or tick *Save list in a character macro* in the config.
+**A macro backup:** type `/stakeout macro on`, or tick *Save list in a character macro* in the config.
 Stakeout then keeps your watch list in a character macro called **Stakeout List** (plus *Stakeout List 2*
 and *3* for long lists), updates it whenever the list changes, and reads your list back from it at every
 login, with nothing to click. It uses one character macro slot, or up to three for a long list
@@ -65,6 +65,8 @@ NPC names must match exactly, spaces included (`/stakeout add Captain Flat Tusk`
 - **Target frame:** lock the position (Alt+drag still moves it), the button icon, and the scale.
 - **Look:** WoW Forever (the default) or Glass, a smoked glass look shared with other glass addons. It
   applies to every Stakeout window after a `/reload`.
+- **Quest targets:** tick *Show buttons for quest mobs* for the experimental quest buttons (the same switch as
+  `/stakeout quests on`).
 - **Glass UI:** with Glass UI loaded, Stakeout wears its look (its glass,
   tint and accent) by default. Untick *Use Glass UI appearance* to use your own look instead (after a `/reload`).
 
