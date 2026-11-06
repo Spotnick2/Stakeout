@@ -22,9 +22,8 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
 
 ## Your settings
 
-Stakeout keeps your watch list and options between sessions. During the Forever beta, the client didn't load
-addon settings back after a restart (a Blizzard bug that affected every addon). It does now. If it ever stops
-again, Stakeout tells you at login, and the backups below keep your list.
+Stakeout keeps your watch list and options between sessions. If the client ever fails to load them back,
+Stakeout tells you at login, and the backups below keep your list.
 
 **A macro backup:** type `/stakeout macro on`, or tick *Save list in a character macro* in the config.
 Stakeout then keeps your watch list in a character macro called **Stakeout List** (plus *Stakeout List 2*
