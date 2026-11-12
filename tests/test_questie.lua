@@ -3,7 +3,7 @@
 -- provider (#24, Phase 3, #68), and the NEAR tier it feeds in Quests.lua.
 --
 -- The stand-in LibQuestieDB below answers the way contract 4 does (its
--- Types/*.t.lua in References\Addons\QuestsLeveling\Questie\QuestieDB):
+-- Types/*.t.lua in References\Addons\QuestsLeveling\QuestieDB\QuestieDB, 1.0.15):
 -- entity Get(id, key), ObjectiveFirst sets, Support.Get("ZoneDB").private
 -- strings. The numbers come from the probe (FOREVER-PROBE.md, section 12):
 -- Durotar is area 14 -> uiMap 1411, 5287 x 3525 yd.
