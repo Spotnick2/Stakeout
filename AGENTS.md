@@ -206,6 +206,10 @@ template, unchanged) writes the notes and `release.json` on every run, so a brok
 
 1. Add a `## vX.Y.Z - <date>` section at the top of `CHANGELOG.md`, written for players, not from the diff.
    Anything that resets or behaves differently after updating gets its own heading.
+   A release tag (not an alpha or beta) also updates **both READMEs** in that prep PR (guide §3): `README.md` and
+   `README.curseforge.md` (untracked, in `.git/info/exclude`) describe what this release does and nothing it no
+   longer does. Say in the PR whether `README.curseforge.md` changed: the owner pastes it into CurseForge and Wago
+   after the release (§4).
 2. Merge it, wait for `main`'s run, **then** tag: `git tag -a vX.Y.Z -m "Stakeout X.Y.Z: <one line>"` and
    `git push origin vX.Y.Z`. A tag without its changelog section fails `check`, and so publishes nothing on
    GitHub or Wago, while CurseForge would still build it with the previous notes.
