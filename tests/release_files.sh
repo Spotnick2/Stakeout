@@ -38,15 +38,22 @@ fi
 test -f "$zip" || { echo "no zip at $zip" >&2; exit 1; }
 mkdir -p "$out"
 
-addon="${ADDON:-$(tr -d '\r' < .pkgmeta | sed -n 's/^package-as: *//p' | head -1)}"
+# A name YAML needs quoted ("!Bugsy": a leading ! is a tag) loses its quotes here,
+# as YAML reads it (Codex, Bugsy #35).
+addon="${ADDON:-$(tr -d '\r' < .pkgmeta | sed -n 's/^package-as: *//p' | head -1 |
+    sed -E "s/[[:space:]]+\$//; s/^\"(.*)\"\$/\1/; s/^'(.*)'\$/\1/")}"
 test -n "$addon" || { echo "no ADDON and no package-as in .pkgmeta" >&2; exit 1; }
 
 # The heading is "## v1.2.0", optionally followed by " - 2026-10-11" or
 # " (2026-10-11)": the tag, then a space or nothing. The blank lines around the
 # section are dropped.
+# awk reads to the end rather than exiting at the next heading: an early exit
+# closes the pipe while `tr` is still writing a changelog longer than the pipe
+# buffer (64 KB on Linux), and under `pipefail` its broken pipe failed the run
+# (AltStable #345, CHANGELOG.md at 71 KB).
 section() {
     tr -d '\r' < CHANGELOG.md |
-        awk -v h="## $1" '$0 == h || index($0, h " ") == 1 { on = 1; next } on && /^## / { exit } on' |
+        awk -v h="## $1" 'done { next } $0 == h || index($0, h " ") == 1 { on = 1; next } on && /^## / { done = 1; next } on' |
         sed -e '/[^[:space:]]/,$!d' | sed -e ':a' -e '/^[[:space:]]*$/{$d;N;ba' -e '}'
 }
 tried="'## $tag'"
