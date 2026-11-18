@@ -152,9 +152,9 @@ Kit.allowMethods({
 })
 function Methods.SetBackdrop(w, b) w._backdrop = b end
 
+-- WowTestKit #78: the core has no GetSize (test_suite reads the settings
+-- window's size back).
 function Methods.GetSize(w) return w._width, w._height end
-function Methods.SetScale(w, s) w._scale = s end
-function Methods.GetScale(w) return w._scale or 1 end
 -- Raise records the order: a later raise is over an earlier one in its strata.
 function Methods.Raise(w) WoW.raises = (WoW.raises or 0) + 1 w._raisedAt = WoW.raises end
 function Methods.SetToplevel(w, v) w._toplevel = v end
@@ -163,12 +163,10 @@ function Methods.StartMoving(w) w._moving = true end
 function Methods.StopMovingOrSizing(w) w._moving = false end
 -- The secure buttons' click edges (tests check both are registered).
 function Methods.RegisterForClicks(b, ...) b._forClicks = { ... } end
--- ForeverProbe's console scrolls by these (tests/test_probe.lua).
-function Methods.GetVerticalScroll() return 0 end
-function Methods.GetVerticalScrollRange() return 0 end
 
 -- Events: an unknown name throws (the kit's, against the build's list);
 -- one the client refuses returns false (measured: the combat log).
+-- WowTestKit #79: the core registers every event its build lists.
 local kitRegisterEvent = Methods.RegisterEvent
 function Methods.RegisterEvent(w, event)
     if WoW.refusedEvents[event] then return false end
