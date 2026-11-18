@@ -36,7 +36,7 @@ WoW.SECRET = WoW.Secret("a secret value")
 
 local function reset()
     WoW.now          = 1000   -- GetTime(); the tests' times are relative to it
-    WoW.build        = "70790"
+    WoW.build        = "70959"
     WoW.version      = "2.1.0"   -- TOC Version: a release; "dev" is what deploy.ps1 writes
     WoW.units        = {}   -- [token] = { name, guid, dead, player, controlled, plate, secretName, secretGuid, throws }
     WoW.cvars        = { nameplateMaxDistance = "45.000000" }
@@ -467,7 +467,7 @@ C_CVar = {}
 function C_CVar.GetCVar(name) return WoW.cvars[name] end
 function C_CVar.SetCVar(name, value) WoW.cvars[name] = value return true end
 
--- C_Map, the three reads quest proximity uses (forever-api-1.60.1.70790.md).
+-- C_Map, the three reads quest proximity uses (forever-api-1.60.1.70959.md).
 C_Map = {}
 function C_Map.GetBestMapForUnit(unit)
     if unit == "player" and WoW.position then return WoW.position.map end
