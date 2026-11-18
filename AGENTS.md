@@ -64,7 +64,13 @@ and the combat log. See below. Don't reintroduce them.
   order, `ObjectiveFirst` inserted at the front one at a time), unit objectives only. Spawns through ZoneDB's
   `areaIdToUiMapId` (+ `Override`) strings, parsed as data with the probe's strict parser; coordinates as stored,
   **never `EraToForever`** (§12, `mulgore`). One rebuild when `Questie.API.isReady` turns true.
-- `tests/`: Lua 5.1 unit tests, no game client. `pwsh tests/run.ps1`.
+- `tests/`: Lua 5.1 unit tests, no game client. `pwsh tests/run.ps1`. The test scaffolding is WowTestKit
+  (`C:\Projects\WoW\WowTestKit`; its README is the reference) at the commit and client build `tests\kit.pin`
+  names. `tests\run.ps1` puts that commit in `%LOCALAPPDATA%\WowTestKit\<sha>` and hands off to the kit's
+  runner; CI fetches it with `tests\fetch_kit.sh`. `tests\kit.lua`, `kit.ps1` and `fetch_kit.sh` are the kit's
+  bootstrap copies: never edit them here. A kit need is an issue on the kit, worked around in
+  `tests\wow_stubs.lua` with a `-- WowTestKit #N:` comment meanwhile. `tests\run.ps1 -KitDev` runs against the
+  `..\WowTestKit` working copy instead of the pin.
 - `Tools/deploy.ps1`: deploys to the local Forever AddOns folder (`-Probe` / `-ProbeOnly` add the probe).
 - `Tools/StakeoutProbe/`: the in-game probe, a ForeverProbe module (`/fp so`, never packaged). It measures what quest
   targeting relies on (#25); `docs/FOREVER-PROBE.md` lists its procedures. Its tests run locally only (CI sets

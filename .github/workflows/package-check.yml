@@ -65,6 +65,13 @@ jobs:
           test -n "$src" || { echo "the TOC lists no Lua file - the check would prove nothing"; exit 1; }
           luac5.1 -p $src $(find Tools -name '*.lua' 2>/dev/null)
 
+      # The test scaffolding at the commit tests/kit.pin names, checked to BE
+      # that commit (tests/kit.lua reads it from $WOWTESTKIT).
+      - name: Fetch WowTestKit at its pin
+        run: |
+          bash tests/fetch_kit.sh "$RUNNER_TEMP/WowTestKit"
+          echo "WOWTESTKIT=$RUNNER_TEMP/WowTestKit" >> "$GITHUB_ENV"
+
       - name: Unit tests
         env:
           FOREVERPROBE_OPTIONAL: "1"   # ForeverProbe is private and local: the probe tests run locally

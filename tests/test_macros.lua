@@ -21,28 +21,28 @@ local function body(line) return MARK .. "\n" .. line end
 ------------------------------------------------------------
 -- Off by default: nothing is written to the player's macros
 ------------------------------------------------------------
-H.eq(T.macroMode(), false, "off until the player turns it on")
+eq(T.macroMode(), false, "off until the player turns it on")
 slash("add Mother Fang")
-H.eq(#WoW.macros, 0, "adding a name while off creates no macro")
+eq(#WoW.macros, 0, "adding a name while off creates no macro")
 -- No macros at all: nothing says they've loaded, so the notice comes from
 -- the timer fallback.
 WoW.flushTimers()
-H.check(WoW.chat():find("/stakeout macro on", 1, true), "the login notice offers the macro option")
+check(WoW.chatText():find("/stakeout macro on", 1, true), "the login notice offers the macro option")
 
 ------------------------------------------------------------
 -- On: the list goes into one macro and follows every change
 ------------------------------------------------------------
 slash("macro on")
-H.eq(T.macroMode(), true, "on")
-H.eq(WoW.macroBody(LIST), body("/stakeout add Mother Fang"), "the current list is written at once, under the marker")
+eq(T.macroMode(), true, "on")
+eq(WoW.macroBody(LIST), body("/stakeout add Mother Fang"), "the current list is written at once, under the marker")
 slash("add Fedfennel; Gruff Swiftbite")
-H.eq(WoW.macroBody(LIST), body("/stakeout add Mother Fang; Fedfennel; Gruff Swiftbite"), "adds are written")
+eq(WoW.macroBody(LIST), body("/stakeout add Mother Fang; Fedfennel; Gruff Swiftbite"), "adds are written")
 slash("remove Fedfennel")
-H.eq(WoW.macroBody(LIST), body("/stakeout add Mother Fang; Gruff Swiftbite"), "removes are written")
+eq(WoW.macroBody(LIST), body("/stakeout add Mother Fang; Gruff Swiftbite"), "removes are written")
 slash("clear")
-H.eq(WoW.macroBody(LIST), MARK, "an empty list keeps the macro (the setting): just the marker")
-H.check(MARK:sub(1, 1) == "#", "the marker is a '#' line, ignored when the macro runs (a '--' line would be said in chat)")
-H.eq(#WoW.macros, 1, "one macro, never a duplicate")
+eq(WoW.macroBody(LIST), MARK, "an empty list keeps the macro (the setting): just the marker")
+check(MARK:sub(1, 1) == "#", "the marker is a '#' line, ignored when the macro runs (a '--' line would be said in chat)")
+eq(#WoW.macros, 1, "one macro, never a duplicate")
 
 ------------------------------------------------------------
 -- A long list spills into more macros; shrinking deletes the extra ones
@@ -50,89 +50,89 @@ H.eq(#WoW.macros, 1, "one macro, never a duplicate")
 local long = {}
 for i = 1, 20 do long[i] = string.format("Some Long Named Rare Number %02d", i) end
 slash("add " .. table.concat(long, "; "))
-H.check(WoW.macroBody(LIST2) ~= nil, "a list over one macro uses Stakeout List 2")
+check(WoW.macroBody(LIST2) ~= nil, "a list over one macro uses Stakeout List 2")
 for _, name in ipairs({ LIST, LIST2 }) do
     local b = WoW.macroBody(name)
-    H.check(#b <= 255, name .. " fits a macro, marker included (" .. #b .. ")")
+    check(#b <= 255, name .. " fits a macro, marker included (" .. #b .. ")")
 end
 slash("clear")
-H.eq(WoW.macroBody(LIST2), nil, "shrinking deletes the macros no longer needed")
+eq(WoW.macroBody(LIST2), nil, "shrinking deletes the macros no longer needed")
 
 -- More than three macros' worth: the names that don't fit are named.
 local huge = {}
 for i = 1, 40 do huge[i] = string.format("Some Long Named Rare Number %02d", i) end
-WoW.messages = {}
+WoW.chat = {}
 slash("add " .. table.concat(huge, "; "))
-H.check(WoW.macroBody(LIST3) ~= nil, "up to three macros")
-H.check(WoW.chat():find("won't come back after a restart", 1, true), "overflow is reported")
-H.check(WoW.chat():find("Some Long Named Rare Number 40", 1, true), "naming what was left out")
+check(WoW.macroBody(LIST3) ~= nil, "up to three macros")
+check(WoW.chatText():find("won't come back after a restart", 1, true), "overflow is reported")
+check(WoW.chatText():find("Some Long Named Rare Number 40", 1, true), "naming what was left out")
 slash("clear")
 
 ------------------------------------------------------------
 -- Combat: macros can't be written; the change waits for combat to end
 ------------------------------------------------------------
-WoW.inCombat = true
+WoW.combat = true
 local ok, err = pcall(slash, "add Mother Fang")
-H.check(ok, "adding in combat doesn't touch macros (" .. tostring(err) .. ")")
-H.eq(WoW.macroBody(LIST), MARK, "not yet written")
-WoW.inCombat = false
+check(ok, "adding in combat doesn't touch macros (" .. tostring(err) .. ")")
+eq(WoW.macroBody(LIST), MARK, "not yet written")
+WoW.combat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
-H.eq(WoW.macroBody(LIST), body("/stakeout add Mother Fang"), "written when combat ends")
+eq(WoW.macroBody(LIST), body("/stakeout add Mother Fang"), "written when combat ends")
 
-WoW.inCombat = true
-WoW.messages = {}
+WoW.combat = true
+WoW.chat = {}
 slash("macro off")
-H.check(WoW.chat():find("can't be changed in combat", 1, true), "turning it off in combat is refused, with a reason")
-H.eq(T.macroMode(), true, "and it stays on")
-WoW.inCombat = false
+check(WoW.chatText():find("can't be changed in combat", 1, true), "turning it off in combat is refused, with a reason")
+eq(T.macroMode(), true, "and it stays on")
+WoW.combat = false
 
 ------------------------------------------------------------
 -- Off: the macros are deleted (that is the setting)
 ------------------------------------------------------------
 slash("macro off")
-H.eq(T.macroMode(), false, "off")
-H.eq(#WoW.macros, 0, "the Stakeout List macros are deleted")
+eq(T.macroMode(), false, "off")
+eq(#WoW.macros, 0, "the Stakeout List macros are deleted")
 
 ------------------------------------------------------------
 -- Player macros are never touched (PR #12 review, P1)
 ------------------------------------------------------------
 -- An unrelated macro that happens to have the name.
 WoW.SetMacro(LIST, "/cast Hunter's Mark")
-WoW.messages = {}
+WoW.chat = {}
 slash("macro on")
-H.eq(WoW.macroBody(LIST), "/cast Hunter's Mark", "a foreign macro named Stakeout List is left alone")
-H.eq(WoW.macroCount(LIST), 1, "and gets no confusing twin")
-H.eq(T.macroMode(), false, "macro mode doesn't claim it")
-H.check(WoW.chat():find("Couldn't write the Stakeout List macro", 1, true), "the player is told why")
+eq(WoW.macroBody(LIST), "/cast Hunter's Mark", "a foreign macro named Stakeout List is left alone")
+eq(WoW.macroCount(LIST), 1, "and gets no confusing twin")
+eq(T.macroMode(), false, "macro mode doesn't claim it")
+check(WoW.chatText():find("Couldn't write the Stakeout List macro", 1, true), "the player is told why")
 slash("macro off")
-H.eq(WoW.macroBody(LIST), "/cast Hunter's Mark", "turning it off doesn't delete the player's macro")
+eq(WoW.macroBody(LIST), "/cast Hunter's Mark", "turning it off doesn't delete the player's macro")
 WoW.macros = {}
 
 -- The player's own macro made from Export: same name, a `/stakeout add` body,
 -- but no marker. Not ours.
 WoW.SetMacro(LIST, "/stakeout add Mother Fang")
 slash("macro on")
-H.eq(WoW.macroBody(LIST), "/stakeout add Mother Fang", "a player's export macro isn't overwritten")
+eq(WoW.macroBody(LIST), "/stakeout add Mother Fang", "a player's export macro isn't overwritten")
 slash("macro off")
-H.eq(WoW.macroBody(LIST), "/stakeout add Mother Fang", "or deleted")
+eq(WoW.macroBody(LIST), "/stakeout add Mother Fang", "or deleted")
 WoW.macros = {}
 
 -- An account macro with the name is not a character macro and not ours.
 WoW.SetAccountMacro(LIST, body("/stakeout add Account Rare"))
 slash("macro on")
-H.eq(WoW.accountMacros[1].body, body("/stakeout add Account Rare"), "account macros are never written")
-H.eq(WoW.macroCount(LIST), 1, "ours is a character macro")
+eq(WoW.accountMacros[1].body, body("/stakeout add Account Rare"), "account macros are never written")
+eq(WoW.macroCount(LIST), 1, "ours is a character macro")
 slash("macro off")
-H.eq(#WoW.accountMacros, 1, "account macros are never deleted")
+eq(#WoW.accountMacros, 1, "account macros are never deleted")
 WoW.accountMacros = {}
 
 -- Two of ours with one name (duplicates are allowed): writing keeps one.
 WoW.SetMacro(LIST, body("/stakeout add Old"))
 WoW.SetMacro(LIST, body("/stakeout add Older"))
 slash("macro on")
-H.eq(WoW.macroCount(LIST), 1, "duplicate copies of ours are folded into one")
+eq(WoW.macroCount(LIST), 1, "duplicate copies of ours are folded into one")
 slash("macro off")
-H.eq(#WoW.macros, 0, "and off deletes every copy of ours")
+eq(#WoW.macros, 0, "and off deletes every copy of ours")
 
 ------------------------------------------------------------
 -- The longest name accepted still fits one marked macro (PR #12 follow-up)
@@ -140,11 +140,11 @@ H.eq(#WoW.macros, 0, "and off deletes every copy of ours")
 slash("macro on")
 local longest = string.rep("x", T.NAME_MAX)
 slash("add " .. longest)
-H.check(#WoW.macroBody(LIST) <= 255, "a NAME_MAX-long name fits with the marker (" .. #WoW.macroBody(LIST) .. ")")
-WoW.messages = {}
+check(#WoW.macroBody(LIST) <= 255, "a NAME_MAX-long name fits with the marker (" .. #WoW.macroBody(LIST) .. ")")
+WoW.chat = {}
 slash("add " .. string.rep("y", 232))
-H.check(WoW.chat():find("Too long to be an NPC name", 1, true), "a longer one is refused, with a reason")
-H.check(not WoW.macroBody(LIST):find("yyyy", 1, true), "and never reaches the macro")
+check(WoW.chatText():find("Too long to be an NPC name", 1, true), "a longer one is refused, with a reason")
+check(not WoW.macroBody(LIST):find("yyyy", 1, true), "and never reaches the macro")
 slash("macro off")
 slash("clear")
 
@@ -157,56 +157,56 @@ slash("clear")
 slash("add " .. table.concat(long, "; "))
 WoW.SetMacro(LIST, "/cast Hunter's Mark")
 slash("macro on")
-H.eq(T.macroMode(), false, "Stakeout List blocked: off")
-H.eq(WoW.macroBody(LIST2), nil, "and no Stakeout List 2 left behind")
-H.eq(#WoW.macros, 1, "only the player's macro")
+eq(T.macroMode(), false, "Stakeout List blocked: off")
+eq(WoW.macroBody(LIST2), nil, "and no Stakeout List 2 left behind")
+eq(#WoW.macros, 1, "only the player's macro")
 WoW.macros = {}
 slash("clear")
 
 -- 4. A change in combat says it waits for combat to end (a session that
 --    ends before then loses it) - once, not per change.
 slash("macro on")
-WoW.inCombat = true
-WoW.messages = {}
+WoW.combat = true
+WoW.chat = {}
 slash("add Mother Fang")
 slash("add Fedfennel")
-local _, waits = WoW.chat():gsub("will be updated when combat ends", "")
-H.eq(waits, 1, "the wait is said once")
-WoW.inCombat = false
+local _, waits = WoW.chatText():gsub("will be updated when combat ends", "")
+eq(waits, 1, "the wait is said once")
+WoW.combat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
 slash("clear")
 
 -- 6. A warning is said when it changes, not on every list change.
 slash("add " .. table.concat(huge, "; "))
-WoW.messages = {}
+WoW.chat = {}
 slash("add One More")
 slash("add Another One")
-H.check(not WoW.chat():find("won't come back after a restart", 1, true),
+check(not WoW.chatText():find("won't come back after a restart", 1, true),
     "the overflow warning isn't repeated on every add")
 slash("macro off")
 slash("clear")
 
 -- 10. The too-long message never cuts a UTF-8 character in half.
-WoW.messages = {}
+WoW.chat = {}
 slash("add a" .. string.rep("\208\150", 60))     -- "a" + 60 x "Ж": byte 40 falls mid-character
-local msg = WoW.messages[#WoW.messages] or ""
+local msg = WoW.chat[#WoW.chat] or ""
 local clipped = msg:match("characters%):|r (.-)%.%.%.$") or ""
-H.check(clipped ~= "" and not clipped:find("[\192-\255]$"), "the clipped name ends on a whole character")
+check(clipped ~= "" and not clipped:find("[\192-\255]$"), "the clipped name ends on a whole character")
 -- Follow-up review, P3: a character that ends exactly at the cut is kept.
-WoW.messages = {}
+WoW.chat = {}
 slash("add " .. string.rep("a", 38) .. string.rep("\208\150", 40))   -- "Ж" occupies bytes 39-40
-msg = WoW.messages[#WoW.messages] or ""
+msg = WoW.chat[#WoW.chat] or ""
 clipped = msg:match("characters%):|r (.-)%.%.%.$") or ""
-H.eq(#clipped, 40, "a whole character at the boundary is kept")
+eq(#clipped, 40, "a whole character at the boundary is kept")
 
 ------------------------------------------------------------
 -- Full character macro slots
 ------------------------------------------------------------
 WoW.macroSlots = 0
-WoW.messages = {}
+WoW.chat = {}
 slash("macro on")
-H.eq(T.macroMode(), false, "no free slot: stays off")
-H.check(WoW.chat():find("slots may be full", 1, true), "and says why")
+eq(T.macroMode(), false, "no free slot: stays off")
+check(WoW.chatText():find("slots may be full", 1, true), "and says why")
 WoW.macroSlots = 18
 
-H.done("test_macros")
+done("test_macros")

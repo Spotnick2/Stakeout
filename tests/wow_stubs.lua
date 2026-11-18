@@ -1,48 +1,49 @@
 ------------------------------------------------------------
--- wow_stubs.lua
+-- wow_stubs.lua: Stakeout's WoW: Forever mock for Lua 5.1 unit tests.
+-- dofile("tests/wow_stubs.lua") FIRST in every test file; drive it through
+-- the WoW table:
 --
--- The WoW: Forever surface Stakeout uses, so Stakeout.lua can load and run
--- under stock Lua 5.1 with no client. Drive it through the exported `WoW`:
---
---     dofile("tests/wow_stubs.lua")          -- FIRST, in every test file
 --     WoW.SetUnit("nameplate1", { name = "Mob", guid = "Creature-1", plate = true })
 --     WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 --
--- Two kinds of strictness, both on purpose:
---   * Reading a global this file doesn't define is an error. The stub is the
---     list of APIs verified present on this client (the API dump, and
---     docs/FOREVER-PROBE.md for behaviour), so it models the absences too.
---   * Widgets have no catch-all: calling a method not defined here errors.
---     Every method below was checked against the dump's widget methods
---     (SetBackdrop* come from BackdropTemplateMixin, which exists).
--- Never add something because a test failed; confirm it exists first.
+-- The mechanics come from WowTestKit (tests/kit.lua loads the commit
+-- tests/kit.pin names; its README is the reference): strict globals, secrets,
+-- event names checked against the pinned build, widgets that record every
+-- method called (a method the build lacks reads as nil), protected frames in
+-- combat, print (with the stray-"|" check done() fails on), timers and the
+-- clock (WoW.now, WoW.advance, WoW.flushTimers), WoW.fire, check / eq / done.
+--
+-- This file adds Stakeout's own client APIs, each verified in the API dump
+-- (C:\Projects\WoW\References\Forever\api\forever-api-<version>.<build>.md),
+-- and for behaviour in docs/FOREVER-PROBE.md. A name the client does NOT have
+-- (or forbids) goes in the Kit.strict list at the bottom, so the addon has to
+-- cope without it. Never add something because a test failed; confirm it
+-- exists first.
 ------------------------------------------------------------
 
-WoW = {}
-local WoW = WoW
+dofile("tests/kit.lua")
+local Methods = WoW.Methods
 
-WoW.frames = {}         -- every frame created, in order
-WoW.events = {}         -- [frame] = { [event] = true }
+-- A value the client marks secret (the kit's proxy: arithmetic, ordering,
+-- tostring, concatenation and string.format on it throw). Lua 5.1 can't make
+-- == or a truth test throw, so the tests assert the addon never passes one on
+-- instead (ReadNPC must return nil for it).
+WoW.SECRET = WoW.Secret("a secret value")
 
--- A value the client marks secret. The real thing throws when compared or
--- truth-tested; Lua 5.1 cannot model that, so tests assert the addon never
--- passes it on instead (ReadNPC must return nil for it).
-WoW.SECRET = setmetatable({}, { __tostring = function() return "<secret>" end })
+------------------------------------------------------------
+-- State, reset by WoW.reset() with the kit's
+------------------------------------------------------------
 
-function WoW.reset()
-    WoW.time         = 1000
-    WoW.inCombat     = false
+local function reset()
+    WoW.now          = 1000   -- GetTime(); the tests' times are relative to it
     WoW.build        = "70790"
     WoW.version      = "2.1.0"   -- TOC Version: a release; "dev" is what deploy.ps1 writes
     WoW.units        = {}   -- [token] = { name, guid, dead, player, controlled, plate, secretName, secretGuid, throws }
     WoW.cvars        = { nameplateMaxDistance = "45.000000" }
     WoW.addonsLoaded = {}
-    WoW.messages     = {}
     WoW.sounds       = {}   -- what was played
     WoW.refuseSound  = {}   -- [id] = true -> willPlay nil
     WoW.flashes      = 0
-    WoW.timers       = {}
-    WoW.badEvents    = {}   -- RegisterEvent throws
     WoW.refusedEvents = { COMBAT_LOG_EVENT_UNFILTERED = true }   -- measured: returns false
     WoW.altDown      = false
     WoW.popups       = {}
@@ -61,6 +62,17 @@ function WoW.reset()
     -- (no map). mapSizes: [uiMapID] = { width, height } in yards.
     WoW.position     = nil
     WoW.mapSizes     = {}
+end
+table.insert(WoW.onReset, reset)
+reset()
+
+-- Every printed line, joined: what the player read in chat.
+function WoW.chatText() return table.concat(WoW.chat, "\n") end
+
+-- A new UI on the same client: the frames made so far stop getting events
+-- (the next WoW.loadAddon registers its own), and nothing else is reset.
+function WoW.dropEvents()
+    for _, w in ipairs(WoW.frames) do w._events, w._unitEvents = {}, {} end
 end
 
 -- A macro as the client would hold it (for tests that start with one).
@@ -89,214 +101,88 @@ function WoW.SetUnit(token, info)
     WoW.units[token] = info
 end
 
-function WoW.fire(event, ...)
-    for frame, events in pairs(WoW.events) do
-        if events[event] and frame.scripts.OnEvent then
-            frame.scripts.OnEvent(frame, event, ...)
-        end
-    end
-end
-
-function WoW.flushTimers()
-    local list = WoW.timers
-    WoW.timers = {}
-    for _, t in ipairs(list) do t.fn() end
-end
-
-function WoW.advance(seconds) WoW.time = WoW.time + seconds end
-
-function WoW.chat()
-    return table.concat(WoW.messages, "\n")
-end
-
 ------------------------------------------------------------
--- Widgets
+-- Protected frames in combat
 ------------------------------------------------------------
 
-local Widget = {}
-Widget.__index = Widget
+-- What a protected frame refuses in combat beyond the kit's list: the old
+-- stub refused SetScale too.
+WoW.PROTECTED.SetScale = true
 
-local function newWidget(kind, name, parent, template)
-    local w = setmetatable({
-        kind = kind, name = name, parent = parent, template = template,
-        shown = true, scripts = {}, attrs = {}, points = {}, children = {},
-        scale = 1, _text = "", checked = false, value = 0, width = 100, height = 20,
-        level = parent and (parent.level or 0) + 1 or 0, alpha = 1, masks = {},
-    }, Widget)
-    if name then _G[name] = w end
-    WoW.frames[#WoW.frames + 1] = w
-    -- What the templates provide that the addon reads as fields.
-    if template == "UICheckButtonTemplate" then
-        w.Text = newWidget("FontString")
-    elseif template == "OptionsSliderTemplate" then
-        w.Low, w.High, w.Text = newWidget("FontString"), newWidget("FontString"), newWidget("FontString")
-    end
-    return w
-end
-
--- Protected frames refuse movement/visibility in combat, as measured.
-local function isProtected(w)
-    local f = w
-    while f do
-        if f.template == "SecureActionButtonTemplate" then return true end
-        for _, child in ipairs(f.children) do
-            if child.template == "SecureActionButtonTemplate" then return true end
-        end
-        f = nil
-    end
-    return false
-end
-
-local function guardProtected(w, what)
-    if WoW.inCombat and isProtected(w) then
+-- A refused call raises at the call, as the old stub did, so a test fails
+-- where the addon makes it (the client refuses silently and raises
+-- ADDON_ACTION_BLOCKED; the kit records it in WoW.blocked). The dispatch
+-- checks WoW.refused first, so raising here works (MIGRATING, API 1 -> 2,
+-- "Protected frames": Apotheca's WoW.strictLockdown).
+local kitRefused = WoW.refused
+function WoW.refused(w, what)
+    if kitRefused(w, what) then
         error("ADDON_ACTION_BLOCKED: " .. what .. " on a protected frame in combat", 3)
     end
 end
 
-function Widget:SetSize(wd, h) guardProtected(self, "SetSize") self.width, self.height = wd, h end
-function Widget:GetSize() return self.width, self.height end
-function Widget:SetWidth(wd) self.width = wd end
-function Widget:SetHeight(h) self.height = h end
-function Widget:GetWidth() return self.width end
-function Widget:SetPoint(...) guardProtected(self, "SetPoint") self.points[#self.points + 1] = { ... } end
-function Widget:ClearAllPoints() guardProtected(self, "ClearAllPoints") self.points = {} end
-function Widget:GetPoint()
-    local p = self.points[#self.points] or { "CENTER", nil, "CENTER", 0, 0 }
-    return p[1], p[2], p[3], p[4], p[5]
+------------------------------------------------------------
+-- Templates (Blizzard's XML: the fields the addon reads)
+------------------------------------------------------------
+
+-- UICheckButtonTemplate's Text (Blizzard_SharedXML/Shared/Button/CheckButtonTemplates.xml).
+WoW.templates.UICheckButtonTemplate = function(w)
+    w.Text = Methods.CreateFontString(w, nil, "ARTWORK", "GameFontNormalSmall")
 end
-function Widget:SetAllPoints() end
-function Widget:Show() guardProtected(self, "Show") self.shown = true end
-function Widget:Hide() guardProtected(self, "Hide") self.shown = false end
-function Widget:IsShown() return self.shown end
-function Widget:SetShown(v) if v then self:Show() else self:Hide() end end
-function Widget:SetScale(s) guardProtected(self, "SetScale") self.scale = s end
-function Widget:SetClampedToScreen() end
-function Widget:SetMovable() end
-function Widget:EnableMouse(v) self.mouse = v end
-function Widget:SetFrameStrata() end
-function Widget:SetToplevel(v) self.toplevel = v end
+-- OptionsSliderTemplate's Text, Low and High (Blizzard_FrameXML/DeprecatedTemplates.xml,
+-- UISliderTemplateWithLabels in Blizzard_SharedXML/Mainline/SharedUIPanelTemplates.xml).
+WoW.templates.OptionsSliderTemplate = function(w)
+    w.Low = Methods.CreateFontString(w, nil, "ARTWORK", "GameFontHighlightSmall")
+    w.High = Methods.CreateFontString(w, nil, "ARTWORK", "GameFontHighlightSmall")
+    w.Text = Methods.CreateFontString(w, nil, "ARTWORK", "GameFontHighlight")
+end
+
+------------------------------------------------------------
+-- Widget methods the kit's core doesn't implement (each a real method of
+-- that widget type on this build: Kit.checkMethods checks every call)
+------------------------------------------------------------
+
+-- BackdropTemplateMixin's (a Lua mixin the dump's widget walk can't see).
+local BACKDROP = "BackdropTemplateMixin (Blizzard_SharedXML/Backdrop.lua)"
+Kit.allowMethods({
+    ["Frame:SetBackdrop"] = BACKDROP, ["Frame:SetBackdropColor"] = BACKDROP,
+    ["Frame:SetBackdropBorderColor"] = BACKDROP,
+    ["EditBox:SetBackdrop"] = BACKDROP, ["EditBox:SetBackdropColor"] = BACKDROP,
+    ["EditBox:SetBackdropBorderColor"] = BACKDROP,
+})
+function Methods.SetBackdrop(w, b) w._backdrop = b end
+
+-- WowTestKit #78: the core has no GetSize (test_suite reads the settings
+-- window's size back).
+function Methods.GetSize(w) return w._width, w._height end
 -- Raise records the order: a later raise is over an earlier one in its strata.
-function Widget:Raise() WoW.raises = (WoW.raises or 0) + 1 self.raisedAt = WoW.raises end
-function Widget:StartMoving() guardProtected(self, "StartMoving") self.moving = true end
-function Widget:StopMovingOrSizing() guardProtected(self, "StopMovingOrSizing") self.moving = false end
-function Widget:RegisterForDrag() end
-function Widget:SetScript(name, fn) self.scripts[name] = fn end
-function Widget:GetName() return self.name end
-function Widget:IsForbidden() return false end
-function Widget:SetBackdrop(b) self.backdrop = b end
-function Widget:SetBackdropColor() end
-function Widget:SetBackdropBorderColor() end
-function Widget:CreateFontString() local c = newWidget("FontString") self.children[#self.children + 1] = c return c end
-function Widget:CreateTexture(_, layer, _, sublevel)
-    local c = newWidget("Texture")
-    c.owner, c.layer, c.sublevel = self, layer, sublevel
-    self.children[#self.children + 1] = c
-    return c
-end
-function Widget:SetScrollChild(child) self.scrollChild = child end
--- Events: unknown names throw, refused ones return false (both measured).
-function Widget:RegisterEvent(event)
-    if WoW.badEvents[event] then error("unknown event " .. event) end
+function Methods.Raise(w) WoW.raises = (WoW.raises or 0) + 1 w._raisedAt = WoW.raises end
+function Methods.SetToplevel(w, v) w._toplevel = v end
+-- A drag in progress (tests read w._moving).
+function Methods.StartMoving(w) w._moving = true end
+function Methods.StopMovingOrSizing(w) w._moving = false end
+-- The secure buttons' click edges (tests check both are registered).
+function Methods.RegisterForClicks(b, ...) b._forClicks = { ... } end
+
+-- Events: an unknown name throws (the kit's, against the build's list);
+-- one the client refuses returns false (measured: the combat log).
+-- WowTestKit #79: the core registers every event its build lists.
+local kitRegisterEvent = Methods.RegisterEvent
+function Methods.RegisterEvent(w, event)
     if WoW.refusedEvents[event] then return false end
-    WoW.events[self] = WoW.events[self] or {}
-    WoW.events[self][event] = true
-    return true
-end
-function Widget:UnregisterEvent(event)
-    if WoW.events[self] then WoW.events[self][event] = nil end
-end
--- Secure attributes on a protected frame in combat are blocked. Raising here
--- (rather than silently dropping the write) makes such a call fail the suite.
-function Widget:SetAttribute(k, v) guardProtected(self, "SetAttribute") self.attrs[k] = v end
-function Widget:GetAttribute(k) return self.attrs[k] end
-function Widget:RegisterForClicks(...) guardProtected(self, "RegisterForClicks") self.clicks = { ... } end
--- Text, check buttons, sliders, edit boxes
-function Widget:SetText(t) self._text = t end
-function Widget:SetFontHeight(h) self.fontHeight = h end
-function Widget:GetText() return self._text end
-function Widget:SetFontObject() end
-function Widget:SetTextColor(r, g, b, a) self.textColor = { r, g, b, a } end
-function Widget:SetJustifyH() end
-function Widget:SetWordWrap() end
-function Widget:SetTexture(t) self.texture = t end
-function Widget:SetColorTexture(r, g, b, a) self.color = { r, g, b, a } end
-function Widget:SetBlendMode() end
-function Widget:SetChecked(v) self.checked = v and true or false end
-function Widget:GetChecked() return self.checked end
-function Widget:SetMinMaxValues() end
-function Widget:SetValueStep() end
-function Widget:SetObeyStepOnDrag() end
-function Widget:SetValue(v)
-    self.value = v
-    if self.scripts.OnValueChanged then self.scripts.OnValueChanged(self, v) end
-end
-function Widget:GetValue() return self.value end
-function Widget:SetAutoFocus() end
-function Widget:SetMaxLetters() end
-function Widget:SetTextInsets() end
-function Widget:SetMultiLine() end
-function Widget:ClearFocus() end
-function Widget:SetFocus() end
-function Widget:HighlightText() end
-function Widget:SetCursorPosition() end
--- What ForeverProbe's console calls (tests/test_probe.lua loads it); each is a
--- widget method in forever-api-1.60.1.70450.md.
-function Widget:SetFrameLevel(l) self.level = l end
-function Widget:GetFrameStrata() return "MEDIUM" end
-function Widget:GetEffectiveScale() return self.scale end
-function Widget:IsVisible() return self.shown end
-function Widget:GetScript(name) return self.scripts[name] end
-function Widget:SetParent(p) self.parent = p end
-function Widget:SetJustifyV() end
-function Widget:EnableMouseWheel() end
-function Widget:GetVerticalScroll() return 0 end
-function Widget:GetVerticalScrollRange() return 0 end
-function Widget:SetVerticalScroll() end
-function Widget:HookScript(name, fn)
-    self.hooks = self.hooks or {}
-    self.hooks[name] = fn
-    return true
-end
--- What LibGlass-1.0 calls building the glass look (Theme.lua); each is a
--- widget method in forever-api-1.60.1.70450.md (Frame:CreateMaskTexture,
--- Texture:AddMaskTexture, Texture/MaskTexture:SetTextureSliceMargins and
--- SetTextureSliceMode, Texture:SetGradient, SetHorizTile, SetVertTile,
--- SetAlpha, GetAlpha, SetVertexColor, Frame:GetFrameLevel, GetParent, GetHeight).
-function Widget:GetFrameLevel() return self.level end
-function Widget:GetParent() return self.parent end
-function Widget:GetHeight() return self.height end
-function Widget:SetAlpha(a) self.alpha = a end
-function Widget:GetAlpha() return self.alpha end
-function Widget:CreateMaskTexture()
-    local m = newWidget("MaskTexture")
-    m.owner = self
-    self.children[#self.children + 1] = m
-    return m
-end
-function Widget:AddMaskTexture(m)
-    -- Measured rule (LibGlass docs/GLASS-MATERIAL.md): a mask only clips the
-    -- textures of the frame that made it, so a wrong owner draws unclipped.
-    assert(m.kind == "MaskTexture", "AddMaskTexture takes a mask texture")
-    self.masks[#self.masks + 1] = m
-end
-function Widget:SetTextureSliceMargins(...) self.slice = { ... } end
-function Widget:SetTextureSliceMode(mode) self.sliceMode = mode end
-function Widget:SetGradient(orientation, from, to) self.gradient = { orientation, from, to } end
-function Widget:SetHorizTile() end
-function Widget:SetVertTile() end
-function Widget:SetVertexColor() end
-
-function CreateFrame(kind, name, parent, template)
-    local w = newWidget(kind, name, parent, template)
-    if parent then parent.children[#parent.children + 1] = w end
-    return w
+    return kitRegisterEvent(w, event)
 end
 
-UIParent = newWidget("Frame", "UIParent")
-GameTooltip = newWidget("GameTooltip", "GameTooltip")
-function GameTooltip:SetOwner(owner) self.owner, self.lines = owner, {} end
-function GameTooltip:AddLine(text) self.lines = self.lines or {} self.lines[#self.lines + 1] = text end
-DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) WoW.messages[#WoW.messages + 1] = msg end }
+------------------------------------------------------------
+-- Blizzard frames and UI globals
+------------------------------------------------------------
+
+GameTooltip = CreateFrame("GameTooltip", "GameTooltip", UIParent)
+function Methods.SetOwner(tip, owner) tip._owner, tip._lines = owner, {} end
+function Methods.AddLine(tip, text) tip._lines = tip._lines or {} tip._lines[#tip._lines + 1] = text end
+-- Stakeout prints through DEFAULT_CHAT_FRAME: each line goes to the kit's
+-- print, so WoW.chat has it and done() checks it for a stray "|".
+DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) print(msg) end }
 UISpecialFrames = {}
 StaticPopupDialogs = {}
 function StaticPopup_Show(which) WoW.popups[#WoW.popups + 1] = which end
@@ -311,18 +197,15 @@ WoW.dropdownItems = {}
 
 SlashCmdList = {}
 
--- For LibGlass-1.0 and its LibStub: CreateColor and strmatch are in the dump,
--- and so is Enum.UITextureSliceMode (SetTextureSliceMode's argument type).
+-- For LibGlass-1.0 and its LibStub: CreateColor is in the dump, and so is
+-- Enum.UITextureSliceMode (SetTextureSliceMode's argument type).
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
-strmatch = string.match
 Enum = { UITextureSliceMode = { Stretched = 0, Tiled = 1 } }
 
 ------------------------------------------------------------
 -- Game state
 ------------------------------------------------------------
 
-function GetTime() return WoW.time end
-function InCombatLockdown() return WoW.inCombat end
 function IsAltKeyDown() return WoW.altDown end
 function GetBuildInfo() return "1.60.1", WoW.build, "Sep 22 2026", 16001, "", " " end
 function FlashClientIcon() WoW.flashes = WoW.flashes + 1 end
@@ -337,10 +220,20 @@ function PlaySoundFile(id)
     return true, 1
 end
 function SetPortraitTexture(tex, unit) tex.portrait = unit end
-function issecretvalue(v) return v == WoW.SECRET end
 function wipe(t) for k in pairs(t) do t[k] = nil end return t end
 function strtrim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
 string.trim = strtrim
+
+-- The 1 s sweep ticker. Kept from the old stub, not the kit's: the tests run
+-- it by hand (WoW.ticker.fn()) at the clock times they choose, and the kit's
+-- ticker would also run inside every WoW.advance and WoW.flushTimers,
+-- changing what each step checks. It never goes in WoW.timers.
+function C_Timer.NewTicker(seconds, fn)
+    local t = { fn = fn, every = seconds }
+    t.handle = { Cancel = function() t.cancelled = true end, IsCancelled = function() return t.cancelled == true end }
+    WoW.ticker = t
+    return t.handle
+end
 
 local function unit(token)
     local u = WoW.units[token]
@@ -509,7 +402,7 @@ end
 
 local MACRO_BASE = 120
 local function macroCombatGuard(what)
-    if WoW.inCombat then error("MACRO_ACTION_FORBIDDEN: " .. what .. " in combat", 3) end
+    if WoW.combat then error("MACRO_ACTION_FORBIDDEN: " .. what .. " in combat", 3) end
 end
 local function macroAt(index)
     index = index or 0
@@ -591,50 +484,9 @@ function C_Map.GetMapWorldSize(map)
     return size[1], size[2]
 end
 
-C_Timer = {}
-function C_Timer.After(seconds, fn) WoW.timers[#WoW.timers + 1] = { fn = fn, delay = seconds } end
-function C_Timer.NewTicker(_, fn) local t = { fn = fn } WoW.ticker = t return t end
-
 ------------------------------------------------------------
--- Strict globals
+-- Loading the addon
 ------------------------------------------------------------
-
-local KNOWN_ABSENT = {
-    -- Gone on this client (dump + probe); the addon must not depend on them.
-    CombatLogGetCurrentEventInfo = true, IsAddOnLoaded = true, MouseIsOver = true,
-    GetAddOnMetadata = true, SetRaidTarget = true, TargetUnit = true,
-    -- The addon's own globals, nil until it creates them / SavedVariables load.
-    Stakeout = true, StakeoutDB = true,
-    -- Nil until the embedded library's LibStub.lua runs (it checks for a copy).
-    LibStub = true,
-    -- Other addons' globals, nil unless that addon is loaded (QuestieData.lua).
-    LibQuestieDB = true, Questie = true,
-}
-
-function WoW.allowGlobal(name) KNOWN_ABSENT[name] = true end
-
-function WoW.strictGlobals()
-    setmetatable(_G, {
-        __index = function(_, k)
-            if KNOWN_ABSENT[k] then return nil end
-            error("read of undefined global '" .. tostring(k) ..
-                "' - stub it (only if the dump/probe confirms it exists) or add it to " ..
-                "KNOWN_ABSENT in tests/wow_stubs.lua", 2)
-        end,
-    })
-end
-
--- The Lua files Stakeout.toc loads, in order.
-function WoW.tocLuaFiles()
-    local f = assert(io.open("Stakeout.toc", "rb"), "Stakeout.toc not found - run from the repo root")
-    local files = {}
-    for line in f:read("*a"):gmatch("[^\r\n]+") do
-        local file = line:match("^%s*([^#%s].-%.lua)%s*$")
-        if file then files[#files + 1] = (file:gsub("\\", "/")) end
-    end
-    f:close()
-    return files
-end
 
 -- The embedded LibGlass-1.0. Libs/ is filled by the packager (.pkgmeta
 -- externals) and gitignored, so the tests read the library from a checkout:
@@ -668,16 +520,12 @@ function WoW.loadAddon(opts)
     opts = opts or {}
     local ns = opts.ns or {}
     WoW.ns = ns
-    local f = assert(io.open("Stakeout.toc", "rb"))
-    local toc = f:read("*a")
-    f:close()
-    for line in toc:gmatch("[^\r\n]+") do
-        local file = line:match("^%s*([^#%s].-)%s*$")
+    for _, file in ipairs(Kit.tocLines("Stakeout.toc")) do
         if file == WoW.LIBGLASS_XML then
             if not opts.noLibrary then
                 for _, path in ipairs(WoW.libGlassScripts()) do assert(loadfile(path))("Stakeout", {}) end
             end
-        elseif file then
+        else
             assert(file:match("%.lua$"), "the TOC loads " .. file .. ", which this loader doesn't know")
             assert(loadfile((file:gsub("\\", "/"))))("Stakeout", ns)
         end
@@ -688,5 +536,24 @@ function WoW.loadAddon(opts)
     return Stakeout._test, ns
 end
 
-WoW.reset()
-WoW.strictGlobals()
+------------------------------------------------------------
+-- Strict globals
+------------------------------------------------------------
+
+local allowNil = {
+    -- Gone on this client (dump + probe), or forbidden to addons: the addon
+    -- must not depend on them.
+    CombatLogGetCurrentEventInfo = true, IsAddOnLoaded = true, MouseIsOver = true,
+    GetAddOnMetadata = true, SetRaidTarget = true, TargetUnit = true,
+    -- The addon's own globals, nil until it creates them / SavedVariables load.
+    Stakeout = true, StakeoutDB = true,
+    -- Nil until the embedded library's LibStub.lua runs (it checks for a copy).
+    LibStub = true,
+    -- Other addons' globals, nil unless that addon is loaded (QuestieData.lua).
+    LibQuestieDB = true, Questie = true,
+}
+
+-- A test's own name that may read nil (a host's or a probe's globals).
+function WoW.allowGlobal(name) allowNil[name] = true end
+
+Kit.strict(allowNil)

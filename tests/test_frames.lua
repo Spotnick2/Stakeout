@@ -28,11 +28,11 @@ local function fireAll(label)
     for i, f in ipairs(WoW.frames) do frames[i] = f end   -- handlers create frames
     local ran = 0
     for _, f in ipairs(frames) do
-        for script, fn in pairs(f.scripts) do
+        for script, fn in pairs(f._scripts) do
             if not SKIP[script] then
                 local args = ARGS[script] or {}
                 local ok, err = pcall(fn, f, args[1], args[2])
-                H.check(ok, label .. ": " .. tostring(f.name or f.kind) .. " " .. script .. " - " .. tostring(err))
+                check(ok, label .. ": " .. tostring(f._name or f._type) .. " " .. script .. " - " .. tostring(err))
                 ran = ran + 1
             end
         end
@@ -41,20 +41,20 @@ local function fireAll(label)
 end
 
 local ran = fireAll("out of combat")
-H.check(ran > 40, "handlers were actually executed (" .. ran .. ")")
+check(ran > 40, "handlers were actually executed (" .. ran .. ")")
 
 -- The sound dropdown's items, each previewing its sound.
 local dd = StakeoutSoundDropdown
 WoW.dropdownItems = {}
 dd.initFn()
-H.eq(#WoW.dropdownItems, 17, "17 built-in sounds without DBM-Core (the 9 path sounds are gone)")
+eq(#WoW.dropdownItems, 17, "17 built-in sounds without DBM-Core (the 9 path sounds are gone)")
 for _, info in ipairs(WoW.dropdownItems) do
-    H.check(pcall(info.func), "dropdown item " .. tostring(info.text))
+    check(pcall(info.func), "dropdown item " .. tostring(info.text))
 end
 WoW.addonsLoaded["DBM-Core"] = true
 WoW.dropdownItems = {}
 dd.initFn()
-H.eq(#WoW.dropdownItems, 24, "plus 7 with DBM-Core")
+eq(#WoW.dropdownItems, 24, "plus 7 with DBM-Core")
 
 -- A refused sound falls back to Raid Warning.
 WoW.sounds = {}
@@ -63,25 +63,25 @@ StakeoutDB.soundChoice = "Loatheb: I See You"
 SlashCmdList.STAKEOUT("add Other Mob")   -- fireAll clicked every row's delete button
 WoW.SetUnit("nameplate2", { name = "Other Mob", guid = "Creature-2", plate = true })
 WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate2")
-H.eq(WoW.sounds[#WoW.sounds], 8959, "a refused alert sound falls back to Raid Warning")
+eq(WoW.sounds[#WoW.sounds], 8959, "a refused alert sound falls back to Raid Warning")
 
 -- Clear-all confirmation
-H.check(StaticPopupDialogs.STAKEOUT_CLEAR_CONFIRM ~= nil, "Clear All asks first")
-H.check(pcall(StaticPopupDialogs.STAKEOUT_CLEAR_CONFIRM.OnAccept), "confirming Clear All runs")
-H.eq(#StakeoutDB.npcList, 0, "and clears the list")
+check(StaticPopupDialogs.STAKEOUT_CLEAR_CONFIRM ~= nil, "Clear All asks first")
+check(pcall(StaticPopupDialogs.STAKEOUT_CLEAR_CONFIRM.OnAccept), "confirming Clear All runs")
+eq(#StakeoutDB.npcList, 0, "and clears the list")
 
 -- The watch list column: its count, and the empty state while nothing is watched (#34).
-H.eq(StakeoutConfigFrame.countLabel:GetText(), "0 tracked", "the count says none")
-H.check(StakeoutConfigFrame.emptyTitle:IsShown() and StakeoutConfigFrame.emptyHint:IsShown(),
+eq(StakeoutConfigFrame.countLabel:GetText(), "0 tracked", "the count says none")
+check(StakeoutConfigFrame.emptyTitle:IsShown() and StakeoutConfigFrame.emptyHint:IsShown(),
     "an empty list says so")
-H.eq(StakeoutConfigFrame.emptyTitle:GetText(), "No NPCs tracked", "in the empty state's words")
+eq(StakeoutConfigFrame.emptyTitle:GetText(), "No NPCs tracked", "in the empty state's words")
 SlashCmdList.STAKEOUT("add Other Mob; Rare Mob")
-H.eq(StakeoutConfigFrame.countLabel:GetText(), "2 tracked", "the count follows the list")
-H.check(not StakeoutConfigFrame.emptyTitle:IsShown() and not StakeoutConfigFrame.emptyHint:IsShown(),
+eq(StakeoutConfigFrame.countLabel:GetText(), "2 tracked", "the count follows the list")
+check(not StakeoutConfigFrame.emptyTitle:IsShown() and not StakeoutConfigFrame.emptyHint:IsShown(),
     "and the empty state goes once something is watched")
 StaticPopupDialogs.STAKEOUT_CLEAR_CONFIRM.OnAccept()
-H.check(StakeoutConfigFrame.emptyTitle:IsShown(), "and comes back when the list is cleared")
-H.eq(#StakeoutDB.npcList, 0, "which leaves the list empty for what follows")
+check(StakeoutConfigFrame.emptyTitle:IsShown(), "and comes back when the list is cleared")
+eq(#StakeoutDB.npcList, 0, "which leaves the list empty for what follows")
 
 ------------------------------------------------------------
 -- In combat: the protected target frame must not be touched
@@ -89,44 +89,44 @@ H.eq(#StakeoutDB.npcList, 0, "which leaves the list empty for what follows")
 SlashCmdList.STAKEOUT("add Rare Mob")
 WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 local frame = T.frame()
-WoW.inCombat = true
-H.check(pcall(frame.scripts.OnMouseDown, frame, "LeftButton"), "a drag attempt in combat is ignored")
-H.check(not frame.moving, "and doesn't start moving")
+WoW.combat = true
+check(pcall(frame._scripts.OnMouseDown, frame, "LeftButton"), "a drag attempt in combat is ignored")
+check(not frame._moving, "and doesn't start moving")
 fireAll("in combat")
 for _, event in ipairs({ "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "UNIT_DIED" }) do
-    H.check(pcall(WoW.fire, event, "nameplate1"), event .. " in combat")
+    check(pcall(WoW.fire, event, "nameplate1"), event .. " in combat")
 end
-WoW.inCombat = false
-H.check(pcall(WoW.fire, "PLAYER_REGEN_ENABLED"), "combat end")
+WoW.combat = false
+check(pcall(WoW.fire, "PLAYER_REGEN_ENABLED"), "combat end")
 
 -- A drag held as combat starts is stopped at PLAYER_REGEN_DISABLED, before
 -- lockdown, so the frame doesn't follow the cursor all fight.
-frame.scripts.OnMouseDown(frame, "LeftButton")
+frame._scripts.OnMouseDown(frame, "LeftButton")
 StakeoutDB.framePos = nil
 WoW.fire("PLAYER_REGEN_DISABLED")
-H.check(not frame.moving, "combat start stops a drag in progress")
-H.check(StakeoutDB.framePos ~= nil, "and saves where it was")
+check(not frame._moving, "combat start stops a drag in progress")
+check(StakeoutDB.framePos ~= nil, "and saves where it was")
 
 -- If lockdown won the race, the drag is finished when combat ends.
-frame.scripts.OnMouseDown(frame, "LeftButton")
-H.check(frame.moving, "a drag starts out of combat")
-WoW.inCombat = true
-frame.scripts.OnMouseUp(frame, "LeftButton")
-H.check(frame.moving, "releasing in combat can't stop the protected frame")
-WoW.inCombat = false
+frame._scripts.OnMouseDown(frame, "LeftButton")
+check(frame._moving, "a drag starts out of combat")
+WoW.combat = true
+frame._scripts.OnMouseUp(frame, "LeftButton")
+check(frame._moving, "releasing in combat can't stop the protected frame")
+WoW.combat = false
 StakeoutDB.framePos = nil
 WoW.fire("PLAYER_REGEN_ENABLED")
-H.check(not frame.moving, "combat end stops it")
-H.check(StakeoutDB.framePos ~= nil, "and saves the position")
+check(not frame._moving, "combat end stops it")
+check(StakeoutDB.framePos ~= nil, "and saves the position")
 
 -- The event handler for every event the addon registers
 for _, event in ipairs({ "PLAYER_LOGIN", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED",
                           "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "UNIT_NAME_UPDATE", "UNIT_DIED",
                           "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
     local registered = false
-    for _, evs in pairs(WoW.events) do if evs[event] then registered = true end end
-    H.check(registered, event .. " is registered")
+    for _, f in ipairs(WoW.frames) do if f._events[event] then registered = true end end
+    check(registered, event .. " is registered")
 end
-H.check(WoW.ticker ~= nil and pcall(WoW.ticker.fn), "the sweep ticker runs")
+check(WoW.ticker ~= nil and pcall(WoW.ticker.fn), "the sweep ticker runs")
 
-H.done("test_frames")
+done("test_frames")
