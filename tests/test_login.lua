@@ -16,12 +16,12 @@ WoW.build = "70400"
 WoW.version = "dev"
 local T = WoW.loadAddon({ savedDB = { svLoadCheck = 3, npcList = { "Mother Fang" }, markerIndex = 8 } })
 
-H.eq(T.settingsLoaded(), true, "svLoadCheck arrived: settings loaded")
-H.eq(StakeoutDB.svLoadCheck, 4, "and it is counted on")
-H.eq(StakeoutDB.npcList[1], "Mother Fang", "the saved list is kept")
-H.eq(StakeoutDB.markerIndex, 8, "a saved setting is not overwritten by its default")
-H.eq(StakeoutDB.soundChoice, "Raid Warning", "a missing setting gets its default")
-H.check(not WoW.chat():find("doesn't reload saved settings", 1, true), "no settings notice once they load")
+eq(T.settingsLoaded(), true, "svLoadCheck arrived: settings loaded")
+eq(StakeoutDB.svLoadCheck, 4, "and it is counted on")
+eq(StakeoutDB.npcList[1], "Mother Fang", "the saved list is kept")
+eq(StakeoutDB.markerIndex, 8, "a saved setting is not overwritten by its default")
+eq(StakeoutDB.soundChoice, "Raid Warning", "a missing setting gets its default")
+check(not WoW.chatText():find("doesn't reload saved settings", 1, true), "no settings notice once they load")
 
 ------------------------------------------------------------
 -- The build note: a development copy says once per new build.
@@ -29,50 +29,50 @@ H.check(not WoW.chat():find("doesn't reload saved settings", 1, true), "no setti
 
 local NOTE = "Client build changed"
 
-H.check(WoW.chat():find(NOTE .. ": " .. T.MEASURED_ON_BUILD .. " -> 70400", 1, true),
-    "a dev copy that has seen no build compares with MEASURED_ON_BUILD: " .. WoW.chat())
-H.eq(StakeoutDB.lastBuild, "70400", "and records the build")
+check(WoW.chatText():find(NOTE .. ": " .. T.MEASURED_ON_BUILD .. " -> 70400", 1, true),
+    "a dev copy that has seen no build compares with MEASURED_ON_BUILD: " .. WoW.chatText())
+eq(StakeoutDB.lastBuild, "70400", "and records the build")
 
 -- Next login on the same build, settings loaded: quiet.
 local saved = StakeoutDB
 WoW.reset()
 WoW.build, WoW.version = "70400", "dev"
 WoW.loadAddon({ savedDB = saved })
-H.check(WoW.chat():find("Loaded.", 1, true), "logged in again")
-H.check(not WoW.chat():find(NOTE, 1, true), "the same build is not announced twice")
+check(WoW.chatText():find("Loaded.", 1, true), "logged in again")
+check(not WoW.chatText():find(NOTE, 1, true), "the same build is not announced twice")
 
 -- The client patches again: once more, from the last build seen.
 saved = StakeoutDB
 WoW.reset()
 WoW.build, WoW.version = "70500", "dev"
 WoW.loadAddon({ savedDB = saved })
-H.check(WoW.chat():find(NOTE .. ": 70400 -> 70500", 1, true),
-    "a new build is announced from the last one seen: " .. WoW.chat())
+check(WoW.chatText():find(NOTE .. ": 70400 -> 70500", 1, true),
+    "a new build is announced from the last one seen: " .. WoW.chatText())
 
 -- An unpackaged checkout is a development copy too.
 WoW.reset()
 WoW.build, WoW.version = "70400", "@project-version@"
 WoW.loadAddon({ savedDB = { svLoadCheck = 3 } })
-H.check(WoW.chat():find(NOTE, 1, true), "an unpackaged checkout gets the note too")
+check(WoW.chatText():find(NOTE, 1, true), "an unpackaged checkout gets the note too")
 
 -- A release keeps quiet on any build, but still records it, so a dev copy
 -- deployed over it does not announce a patch the player already had.
 WoW.reset()
 WoW.build, WoW.version = "70400", "2.1.1"
 WoW.loadAddon({ savedDB = { svLoadCheck = 3 } })
-H.check(WoW.chat():find("Loaded.", 1, true), "the release logged in")
-H.check(not WoW.chat():find(NOTE, 1, true), "a release never shows the build note: " .. WoW.chat())
-H.eq(StakeoutDB.lastBuild, "70400", "a release records the build")
+check(WoW.chatText():find("Loaded.", 1, true), "the release logged in")
+check(not WoW.chatText():find(NOTE, 1, true), "a release never shows the build note: " .. WoW.chatText())
+eq(StakeoutDB.lastBuild, "70400", "a release records the build")
 saved = StakeoutDB
 WoW.reset()
 WoW.build, WoW.version = "70400", "dev"
 WoW.loadAddon({ savedDB = saved })
-H.check(not WoW.chat():find(NOTE, 1, true), "a dev copy over a release on the same build is quiet")
+check(not WoW.chatText():find(NOTE, 1, true), "a dev copy over a release on the same build is quiet")
 
 -- A fresh dev copy on the measured build has nothing to say.
 WoW.reset()
 WoW.version = "dev"
 WoW.loadAddon({ savedDB = { svLoadCheck = 3 } })
-H.check(not WoW.chat():find(NOTE, 1, true), "no note on the measured build")
+check(not WoW.chatText():find(NOTE, 1, true), "no note on the measured build")
 
-H.done("test_login")
+done("test_login")

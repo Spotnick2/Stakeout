@@ -5,15 +5,13 @@
 -- CI sets FOREVERPROBE_OPTIONAL=1 and this file skips itself.
 dofile("tests/wow_stubs.lua")
 local H = dofile("tests/harness.lua")
-local check, eq = H.check, H.eq
 
 -- ForeverProbe, as the client loads it before a dependent (GUIDE.md, section 8).
 local root = (os.getenv("FOREVERPROBE") or "../ForeverProbe"):gsub("\\", "/"):gsub("/$", "")
 local toc = io.open(root .. "/ForeverProbe.toc", "rb")
 if not toc then
     if os.getenv("FOREVERPROBE_OPTIONAL") == "1" then
-        print("test_probe: SKIPPED (ForeverProbe is private and local; the probe tests run locally)")
-        os.exit(0)
+        Kit.skip("test_probe", "ForeverProbe is private and local; the probe tests run locally")
     end
     error("ForeverProbe checkout not found at " .. root .. ": clone it there or set FOREVERPROBE", 0)
 end
@@ -72,7 +70,7 @@ function UnitCanAttack(_, token) local u = WoW.units[token] return u and not u.f
 function UnitReaction(token) local u = WoW.units[token] return u and (u.friendly and 5 or 2) end
 function GetRaidTargetIndex() return nil end
 function C_NamePlate.GetNamePlateForUnit(token) local u = WoW.units[token] return u and u.plate and {} or nil end
-function debugprofilestop() return WoW.time * 1000 end
+function debugprofilestop() return WoW.now * 1000 end
 
 -- A QuestieDB with the provider's shape (src/api.lua, src/support/data.lua).
 local NPCS = {
@@ -174,31 +172,31 @@ check(not logged("Someone"), "...and their name isn't in the log")
 -- The test button: left /targetexact, right adds /tm; never changed in combat.
 fp("so button Orgnil Soulscar !8")
 local b = _G.StakeoutProbeButton
-check(b and b.template == "SecureActionButtonTemplate", "a secure button")
-eq(b.attrs.macrotext, "/cleartarget\n/targetexact Orgnil Soulscar", "left: target by exact name")
-eq(b.attrs.macrotext2, "/cleartarget\n/targetexact Orgnil Soulscar\n/tm !8", "right: and mark")
-eq(#b.clicks, 2, "both mouse edges registered")
+check(b and b._template == "SecureActionButtonTemplate", "a secure button")
+eq(b._attrs.macrotext, "/cleartarget\n/targetexact Orgnil Soulscar", "left: target by exact name")
+eq(b._attrs.macrotext2, "/cleartarget\n/targetexact Orgnil Soulscar\n/tm !8", "right: and mark")
+eq(#b._forClicks, 2, "both mouse edges registered")
 -- A click: the secure macro runs (here: the target set by hand), then PostClick logs what it got.
-b.hooks.PostClick(b, "LeftButton", true)
+b._scripts.PostClick(b, "LeftButton", true)
 check(logged("click LeftButton down: target <a player> %(wanted"), "a player targeted is logged as one")
 WoW.SetUnit("target", { name = "Orgnil Soulscar", guid = "Creature-0-4170-1-12-3142-0000ABCD", creatureID = 3142,
     friendly = true })
-b.hooks.PostClick(b, "RightButton", false)
+b._scripts.PostClick(b, "RightButton", false)
 check(logged("click RightButton up: target Orgnil Soulscar %(wanted Orgnil Soulscar%) plate false mark nil "
     .. "dead false unit 0000ABCD"), "a click logs the target it got, alive or not, and which one")
 eq(T.state.clicks, 2, "...and counts")
 WoW.SetUnit("target", { name = "Orgnil Soulscar", guid = "Creature-0-4170-1-12-3142-0000BEEF", creatureID = 3142,
     dead = true })
-b.hooks.PostClick(b, "LeftButton", true)
+b._scripts.PostClick(b, "LeftButton", true)
 check(logged("dead true unit 0000BEEF"), "a corpse is logged as one")
 eq(T.state.lastClick.dead, true, "...and recorded")
-WoW.inCombat = true
+WoW.combat = true
 fp("so button Vile Familiar")
-eq(b.attrs.macrotext, "/cleartarget\n/targetexact Orgnil Soulscar", "not changed in combat")
+eq(b._attrs.macrotext, "/cleartarget\n/targetexact Orgnil Soulscar", "not changed in combat")
 check(logged("button: in combat"), "...saying why")
-WoW.inCombat = false
+WoW.combat = false
 fp("so button off")
-eq(b.shown, false, "button off hides it")
+eq(b._shown, false, "button off hides it")
 
 --------------------------------------------------------------------------------
 -- Procedures
@@ -214,16 +212,16 @@ end
 -- The corpse variants set the left-click macro, with the name filled in.
 eq(T.aim("Pygmy Surf Crawler", 3106, "8",
     "/cleartarget\n/targetexact <name>\n/cleartarget [dead]\n/targetexact <name>"), true, "a variant is set")
-eq(b.attrs.macrotext,
+eq(b._attrs.macrotext,
     "/cleartarget\n/targetexact Pygmy Surf Crawler\n/cleartarget [dead]\n/targetexact Pygmy Surf Crawler",
     "...with the name in every line")
-eq(b.attrs.macrotext2, "/cleartarget\n/targetexact Pygmy Surf Crawler\n/tm 8", "right-click unchanged")
+eq(b._attrs.macrotext2, "/cleartarget\n/targetexact Pygmy Surf Crawler\n/tm 8", "right-click unchanged")
 eq(T.aim("Pygmy Surf Crawler", 3106, "8"), true, "no variant")
-eq(b.attrs.macrotext, "/cleartarget\n/targetexact Pygmy Surf Crawler", "...is the default macro")
+eq(b._attrs.macrotext, "/cleartarget\n/targetexact Pygmy Surf Crawler", "...is the default macro")
 
 local errors = 0
 for _, l in ipairs(db.log) do if l:find("ERROR") then errors = errors + 1 end end
 eq(errors, 0, "nothing threw")
-eq(#WoW.messages, 0, "nothing in chat")
+eq(#WoW.chat, 0, "nothing in chat")
 
-H.done("test_probe")
+done("test_probe")

@@ -16,21 +16,21 @@ local slash = SlashCmdList.STAKEOUT
 -- ParseNames
 ------------------------------------------------------------
 local names = T.ParseNames("  Gruff Swiftbite ;Mother Fang;; Gruff Swiftbite ; ")
-H.eq(#names, 2, "blanks and repeats are dropped")
-H.eq(names[1], "Gruff Swiftbite", "names are trimmed")
-H.eq(names[2], "Mother Fang", "order is kept")
-H.eq(#T.ParseNames(""), 0, "nothing in, nothing out")
-H.eq(T.ParseNames("Captain Flat Tusk")[1], "Captain Flat Tusk", "one multi-word name, no separator")
+eq(#names, 2, "blanks and repeats are dropped")
+eq(names[1], "Gruff Swiftbite", "names are trimmed")
+eq(names[2], "Mother Fang", "order is kept")
+eq(#T.ParseNames(""), 0, "nothing in, nothing out")
+eq(T.ParseNames("Captain Flat Tusk")[1], "Captain Flat Tusk", "one multi-word name, no separator")
 
 ------------------------------------------------------------
 -- /stakeout add
 ------------------------------------------------------------
 slash("add Mother Fang; Fedfennel")
-H.eq(#StakeoutDB.npcList, 2, "two names in one command")
-WoW.messages = {}
+eq(#StakeoutDB.npcList, 2, "two names in one command")
+WoW.chat = {}
 slash("add Fedfennel; Morgaine the Sly")
-H.eq(#StakeoutDB.npcList, 3, "only the new one is added")
-H.check(WoW.chat():find("Already listed:|r Fedfennel", 1, true), "the duplicate is reported")
+eq(#StakeoutDB.npcList, 3, "only the new one is added")
+check(WoW.chatText():find("Already listed:|r Fedfennel", 1, true), "the duplicate is reported")
 
 ------------------------------------------------------------
 -- ExportLines: every line fits a macro and round-trips
@@ -38,98 +38,98 @@ H.check(WoW.chat():find("Already listed:|r Fedfennel", 1, true), "the duplicate 
 local list = {}
 for i = 1, 40 do list[i] = string.format("Some Long Named Rare Number %02d", i) end
 local lines = T.ExportLines(list)
-H.check(#lines > 1, "a long list spans several lines")
+check(#lines > 1, "a long list spans several lines")
 local back = {}
 for _, line in ipairs(lines) do
-    H.check(#line <= 255, "each line fits a 255-character macro (got " .. #line .. ")")
-    H.eq(line:sub(1, 14), "/stakeout add ", "each line is a /stakeout add command")
+    check(#line <= 255, "each line fits a 255-character macro (got " .. #line .. ")")
+    eq(line:sub(1, 14), "/stakeout add ", "each line is a /stakeout add command")
     for _, n in ipairs(T.ParseNames(line:sub(15))) do back[#back + 1] = n end
 end
-H.eq(#back, 40, "every name comes back")
-H.eq(back[40], list[40], "in order")
-H.eq(#T.ExportLines({}), 0, "an empty list exports nothing")
+eq(#back, 40, "every name comes back")
+eq(back[40], list[40], "in order")
+eq(#T.ExportLines({}), 0, "an empty list exports nothing")
 
-WoW.messages = {}
+WoW.chat = {}
 slash("clear")
 slash("export")
-H.check(WoW.chat():find("empty", 1, true), "exporting an empty list says so")
+check(WoW.chatText():find("empty", 1, true), "exporting an empty list says so")
 
 slash("add Mother Fang")
 slash("export")
-H.eq(StakeoutExportFrame.eb:GetText(), "/stakeout add Mother Fang", "export fills the copy box")
+eq(StakeoutExportFrame.eb:GetText(), "/stakeout add Mother Fang", "export fills the copy box")
 
 -- Opened from the config window (same strata, which comes forward when its
 -- Export button is clicked): the export window must come out on top.
-H.eq(StakeoutExportFrame.toplevel, true, "the export window comes forward when clicked")
-H.check(StakeoutExportFrame.raisedAt ~= nil, "and is raised when it opens")
-local raised = StakeoutExportFrame.raisedAt
+eq(StakeoutExportFrame._toplevel, true, "the export window comes forward when clicked")
+check(StakeoutExportFrame._raisedAt ~= nil, "and is raised when it opens")
+local raised = StakeoutExportFrame._raisedAt
 slash("export")
-H.check(StakeoutExportFrame.raisedAt > raised, "and again each time it opens")
+check(StakeoutExportFrame._raisedAt > raised, "and again each time it opens")
 
 ------------------------------------------------------------
 -- remove / list / reset / help
 ------------------------------------------------------------
-WoW.messages = {}
+WoW.chat = {}
 slash("remove Mother Fang")
-H.eq(#StakeoutDB.npcList, 0, "remove takes a multi-word name")
+eq(#StakeoutDB.npcList, 0, "remove takes a multi-word name")
 slash("remove Nobody")
-H.check(WoW.chat():find("not found", 1, true), "removing an unknown name says so")
+check(WoW.chatText():find("not found", 1, true), "removing an unknown name says so")
 for _, cmd in ipairs({ "list", "reset", "help", "config", "config" }) do
-    H.check(pcall(slash, cmd), "/stakeout " .. cmd .. " runs")
+    check(pcall(slash, cmd), "/stakeout " .. cmd .. " runs")
 end
 
 ------------------------------------------------------------
 -- /stakeout quests (experimental, off by default)
 ------------------------------------------------------------
-WoW.messages = {}
+WoW.chat = {}
 slash("help")
-H.check(WoW.chat():find("/stakeout quests on / off", 1, true) and WoW.chat():find("(experimental)", 1, true),
+check(WoW.chatText():find("/stakeout quests on / off", 1, true) and WoW.chatText():find("(experimental)", 1, true),
     "the help names the quests command as experimental")
-WoW.messages = {}
+WoW.chat = {}
 slash("quests")
-H.check(WoW.chat():find("Quest targets (experimental):", 1, true) and WoW.chat():find("off", 1, true),
-    "/stakeout quests says it is off: " .. WoW.chat())
-H.check(WoW.chat():find("/stakeout quests on", 1, true), "...and how to try it")
-H.eq(StakeoutDB.questTargets, false, "asking changes nothing")
-WoW.messages = {}
+check(WoW.chatText():find("Quest targets (experimental):", 1, true) and WoW.chatText():find("off", 1, true),
+    "/stakeout quests says it is off: " .. WoW.chatText())
+check(WoW.chatText():find("/stakeout quests on", 1, true), "...and how to try it")
+eq(StakeoutDB.questTargets, false, "asking changes nothing")
+WoW.chat = {}
 slash("quests on")
-H.eq(StakeoutDB.questTargets, true, "/stakeout quests on")
-H.check(WoW.chat():find("Quest targets (experimental):", 1, true) and WoW.chat():find("on", 1, true),
+eq(StakeoutDB.questTargets, true, "/stakeout quests on")
+check(WoW.chatText():find("Quest targets (experimental):", 1, true) and WoW.chatText():find("on", 1, true),
     "...confirmed")
-H.check(WoW.chat():find("Without quest data", 1, true), "...with the subset it covers without Questie")
+check(WoW.chatText():find("Without quest data", 1, true), "...with the subset it covers without Questie")
 slash("quests OFF")
-H.eq(StakeoutDB.questTargets, false, "/stakeout quests off (any case)")
+eq(StakeoutDB.questTargets, false, "/stakeout quests off (any case)")
 slash("quests maybe")
-H.eq(StakeoutDB.questTargets, false, "anything else only reports")
+eq(StakeoutDB.questTargets, false, "anything else only reports")
 
 ------------------------------------------------------------
 -- The settings window's quest targets checkbox (#61): the same switch
 ------------------------------------------------------------
 slash("config")
 local qc = StakeoutConfigFrame.questCheck
-H.check(qc ~= nil, "the settings window has a quest targets checkbox")
-H.eq(qc:GetChecked(), false, "...off, as the setting is")
+check(qc ~= nil, "the settings window has a quest targets checkbox")
+eq(qc:GetChecked(), false, "...off, as the setting is")
 local qlabel = qc.text or qc.Text
-H.check(qlabel and qlabel:GetText():find("quest", 1, true), "...labelled for quests")
-H.check(qc.desc and qc.desc:GetText():find("Experimental", 1, true), "...and marked experimental")
-WoW.messages = {}
+check(qlabel and qlabel:GetText():find("quest", 1, true), "...labelled for quests")
+check(qc.desc and qc.desc:GetText():find("Experimental", 1, true), "...and marked experimental")
+WoW.chat = {}
 qc:SetChecked(true)
-qc.scripts.OnClick(qc, "LeftButton", false)
-H.eq(StakeoutDB.questTargets, true, "ticking it turns quest targets on")
-H.check(WoW.chat():find("Quest targets (experimental):", 1, true) and WoW.chat():find("Without quest data", 1, true),
+qc._scripts.OnClick(qc, "LeftButton", false)
+eq(StakeoutDB.questTargets, true, "ticking it turns quest targets on")
+check(WoW.chatText():find("Quest targets (experimental):", 1, true) and WoW.chatText():find("Without quest data", 1, true),
     "...and says what it covers, as the command does")
 slash("quests off")
-H.eq(qc:GetChecked(), false, "/stakeout quests off while the window is open unticks it")
+eq(qc:GetChecked(), false, "/stakeout quests off while the window is open unticks it")
 slash("quests on")
-H.eq(qc:GetChecked(), true, "...and on ticks it")
+eq(qc:GetChecked(), true, "...and on ticks it")
 slash("config")
-H.check(not StakeoutConfigFrame:IsShown(), "the window closes")
+check(not StakeoutConfigFrame:IsShown(), "the window closes")
 StakeoutDB.questTargets = false
 slash("config")
-H.eq(qc:GetChecked(), false, "reopened, it shows the setting as it is now")
+eq(qc:GetChecked(), false, "reopened, it shows the setting as it is now")
 qc:SetChecked(false)
-qc.scripts.OnClick(qc, "LeftButton", false)
-H.eq(StakeoutDB.questTargets, false, "unticking it turns quest targets off")
+qc._scripts.OnClick(qc, "LeftButton", false)
+eq(StakeoutDB.questTargets, false, "unticking it turns quest targets off")
 slash("config")
 
-H.done("test_slash")
+done("test_slash")
