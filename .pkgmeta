@@ -15,7 +15,7 @@ manual-changelog:
 externals:
   Libs/LibGlass-1.0:
     url: https://github.com/Spotnick2/LibGlass
-    tag: r11
+    tag: r13
 
 # Every pattern matches the WHOLE path from the package root, so the top-level
 # names never reach inside Libs/.
