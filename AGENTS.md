@@ -58,6 +58,9 @@ and the combat log. See below. Don't reintroduce them.
   subset: a mob you see whose name is literally in an unfinished kill objective gets a button, nothing else (no
   turn-ins, no droppers; "other quest units", `questOther`, is opt-in). The NEAR tier is the player's distance to
   a known spawn (the provider's `Spawns`), for turn-in and "talk to" NPCs only: near within 80 yd, until 100 yd.
+  Hunt mode (`questHunt`, `/stakeout quests hunt on`, #81, opt-in) adds a lowest tier, HUNT: a kill or dropper an
+  unfinished objective wants, with a known spawn on the player's map, before it's seen, nearest first. It only fills
+  the slots the others leave. How far a click reaches a hostile with no plate is unmeasured; the owner's use is the test.
   Mobs get no NEAR: reaching a live hostile with no plate is unmeasured (FOREVER-PROBE.md §12, `hostile`).
 - `QuestieData.lua`: the provider (#68), from `LibQuestieDB` when it's loaded and `RequireContract(4)` holds;
   nothing is set otherwise. Objectives in Questie's own order (`QuestieDB.lua`'s `ObjectiveData`: groups in

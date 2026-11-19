@@ -102,6 +102,21 @@ eq(StakeoutDB.questTargets, false, "/stakeout quests off (any case)")
 slash("quests maybe")
 eq(StakeoutDB.questTargets, false, "anything else only reports")
 
+-- Hunt mode (#81): its own switch, under /stakeout quests.
+check(WoW.chatText():find("/stakeout quests hunt on", 1, true), "the state says how to turn hunting on")
+slash("help")
+check(WoW.chatText():find("/stakeout quests hunt on / off", 1, true), "the help names it")
+WoW.chat = {}
+slash("quests hunt on")
+eq(StakeoutDB.questHunt, true, "/stakeout quests hunt on")
+eq(StakeoutDB.questTargets, false, "...and leaves quest targets as they were")
+check(WoW.chatText():find("Hunt: ", 1, true) and WoW.chatText():find("needs Questie", 1, true),
+    "...confirmed, saying it needs Questie's data: " .. WoW.chatText())
+slash("quests HUNT off")
+eq(StakeoutDB.questHunt, false, "/stakeout quests hunt off (any case)")
+slash("quests hunt maybe")
+eq(StakeoutDB.questHunt, false, "anything else only reports")
+
 ------------------------------------------------------------
 -- The settings window's quest targets checkbox (#61): the same switch
 ------------------------------------------------------------
@@ -130,6 +145,26 @@ eq(qc:GetChecked(), false, "reopened, it shows the setting as it is now")
 qc:SetChecked(false)
 qc._scripts.OnClick(qc, "LeftButton", false)
 eq(StakeoutDB.questTargets, false, "unticking it turns quest targets off")
+
+-- The hunt checkbox, under it (#81).
+local hc = StakeoutConfigFrame.huntCheck
+check(hc ~= nil, "the settings window has a hunt checkbox")
+eq(hc:GetChecked(), false, "...off, as the setting is")
+local hlabel = hc.text or hc.Text
+check(hlabel and hlabel:GetText():find("before they're seen", 1, true), "...labelled for unseen quest mobs")
+check(hc.desc and hc.desc:GetText():find("Questie", 1, true), "...saying it needs Questie")
+WoW.chat = {}
+hc:SetChecked(true)
+hc._scripts.OnClick(hc, "LeftButton", false)
+eq(StakeoutDB.questHunt, true, "ticking it turns hunting on")
+check(WoW.chatText():find("Hunt: ", 1, true), "...and says so")
+slash("quests hunt off")
+eq(hc:GetChecked(), false, "/stakeout quests hunt off while the window is open unticks it")
+slash("config")
+StakeoutDB.questHunt = true
+slash("config")
+eq(hc:GetChecked(), true, "reopened, it shows the setting as it is now")
+StakeoutDB.questHunt = false
 slash("config")
 
 done("test_slash")

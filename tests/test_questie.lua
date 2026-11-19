@@ -283,6 +283,116 @@ WoW.questLog = {}
 rebuild()
 
 ------------------------------------------------------------
+-- Hunt mode (#81): mobs with a spawn on this map get a button before
+-- they're seen, in the slots nothing seen or near wants
+------------------------------------------------------------
+do
+    local function tip(name)
+        for _, b in ipairs(T.buttons) do
+            if b._shown and b.npcName == name then return table.concat(b.tooltipLines or {}, "|") end
+        end
+    end
+    -- Clacker drops the eye, and spawns at 60, 80; the crawler drops it too,
+    -- 1000 yd east of that; a third dropper is only known on another map.
+    DB.Npc[3106].spawns = { [14] = { { 60.0 + 1000 / W * 100, 80.0 } } }
+    DB.Npc[3110] = { name = "Far Makrura", spawns = { [215] = { { 50.0, 50.0 } } } }
+    DB.Item[5002].npcDrops = { 3103, 3106, 3110 }
+    local eyes = { type = "item", text = "1/4 Intact Makrura Eye", numFulfilled = 1, numRequired = 4 }
+    WoW.questLog = { { questID = 818, title = "A Solvent Spirit", complete = false, rows = { eyes } } }
+    stand(60, 80, 5)
+    rebuild()
+    eq(StakeoutDB.questHunt, false, "hunt mode is off by default")
+    eq(order(), "", "...so unseen droppers get no button")
+
+    Q.SetHunt(true)
+    WoW.flushTimers()
+    eq(StakeoutDB.questHunt, true, "turned on through the owner")
+    eq(order(), "Makrura Clacker,Pygmy Surf Crawler", "on: every dropper with a spawn on this map, none from another")
+    local b = T.buttons[1]
+    check(not b.friendly, "...in the mob row")
+    eq(b:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Makrura Clacker\n/cleartarget [dead]",
+        "...with the mob's macro, so a click looks for it")
+    check(tip("Makrura Clacker"):find("Not seen yet", 1, true), "...and a tooltip that says it isn't a sighting")
+    check(tip("Makrura Clacker"):find("1/4 Intact Makrura Eye", 1, true), "...under the objective it serves")
+
+    stand(60, 80, 3000); Q.Tick()
+    eq(order(), "Makrura Clacker,Pygmy Surf Crawler", "3000 yd off, the same map: still there (the click finds out)")
+    WoW.position = { map = 1412, x = 0.5, y = 0.5 }
+    Q.Tick()
+    eq(order(), "Far Makrura", "on the other map, only the dropper known there")
+    WoW.position = nil
+    Q.Tick()
+    eq(order(), "", "no position (an instance): none")
+
+    stand(60, 80, 5)
+    Q.Tick()
+    WoW.SetUnit("nameplate1", { name = "Makrura Clacker", guid = "Creature-0-1-2-3-3103-A", plate = true, attackable = true })
+    WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    check(not tip("Makrura Clacker"):find("Not seen yet", 1, true), "found: a sighting now, the tooltip line goes")
+    WoW.units = {}
+    WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+    -- Its sighting over (LINGER passed), it's back to hunted, not lingering.
+    for _, m in pairs(Q._test.members) do m.lastSeen = nil end
+    Q.Tick()
+    eq(Q._test.members["id:3103"].tier, Q._test.HUNT, "the sighting over, it's hunted again")
+    check(tip("Makrura Clacker"):find("Not seen yet", 1, true), "...and the tooltip says so again")
+
+    -- Seven seen mobs and one slot left: the nearest unseen dropper gets it.
+    -- Hunting starts after the mobs are up, so neither dropper is an
+    -- incumbent, and the player stands at the crawler's spawn, not the
+    -- Clacker's: only the distance can pick it.
+    Q.SetHunt(false)
+    WoW.flushTimers()
+    local rows, objs = { eyes }, {}
+    for i = 1, 7 do
+        DB.Npc[200 + i] = { name = "Mob " .. i }
+        rows[#rows + 1] = { type = "monster", text = "0/5 Mob " .. i .. " slain" }
+        objs[i] = { 200 + i }
+    end
+    DB.Quest[901] = { objectives = { objs, nil, { { 5002 } } } }
+    WoW.questLog = { { questID = 901, title = "Busy", complete = false, rows = rows } }
+    rebuild()
+    for i = 1, 7 do
+        WoW.SetUnit("nameplate" .. i, { name = "Mob " .. i, guid = "Creature-0-1-2-3-" .. (200 + i) .. "-A",
+            plate = true, attackable = true })
+        WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate" .. i)
+    end
+    stand(60 + 1000 / W * 100, 80, 5)
+    Q.Tick()
+    local shown = order()
+    eq(select(2, shown:gsub("Mob ", "")), 7, "hunt off: the seven seen mobs")
+    Q.SetHunt(true)
+    WoW.flushTimers()
+    shown = order()
+    check(shown:find("Pygmy Surf Crawler", 1, true) and not shown:find("Makrura Clacker", 1, true),
+        "hunt on: seen mobs keep theirs; the last slot goes to the nearer dropper (5 yd vs 1000): " .. shown)
+    stand(60, 80, 5); Q.Tick()
+    shown = order()
+    check(shown:find("Pygmy Surf Crawler", 1, true) and not shown:find("Makrura Clacker", 1, true),
+        "walked to the Clacker's spawn: the incumbent keeps its slot (no shuffling while you click): " .. shown)
+    WoW.units = {}
+    for i = 1, 7 do WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate" .. i) end
+    for _, m in pairs(Q._test.members) do m.lastSeen = nil end
+
+    -- A finished objective wants nothing: its droppers go.
+    eyes.numFulfilled, eyes.finished = 4, true
+    WoW.questLog = { { questID = 818, title = "A Solvent Spirit", complete = false, rows = { eyes } } }
+    stand(60, 80, 5)
+    rebuild()
+    eq(order(), "", "a finished objective: no hunt buttons")
+    eyes.numFulfilled, eyes.finished = 1, false
+    rebuild()
+    eq(order(), "Makrura Clacker,Pygmy Surf Crawler", "unfinished again: back")
+
+    Q.SetHunt(false)
+    WoW.flushTimers()
+    eq(order(), "", "off again: gone")
+    DB.Item[5002].npcDrops = { 3103 }
+    WoW.questLog = {}
+    rebuild()
+end
+
+------------------------------------------------------------
 -- Questie ready: one rebuild with fresh data
 ------------------------------------------------------------
 do

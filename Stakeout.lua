@@ -59,6 +59,7 @@ local defaults = {
     followGlassUI    = true,    -- with Glass UI loaded, wear its look (Theme.lua; after a /reload)
     questTargets     = false,   -- experimental: buttons for what the quest log wants (Quests.lua)
     questOther       = false,   -- ...and for other units the client relates to a quest
+    questHunt        = false,   -- ...and for quest mobs not seen yet, with a spawn on this map (#81)
     questMutes       = {},      -- [muteKey] = true; see SetQuestMute
 }
 
@@ -1251,6 +1252,9 @@ local function ShowQuestCheck()
     if configFrame and configFrame.questCheck then
         configFrame.questCheck:SetChecked(StakeoutDB.questTargets == true)
     end
+    if configFrame and configFrame.huntCheck then
+        configFrame.huntCheck:SetChecked(StakeoutDB.questHunt == true)
+    end
 end
 
 function RefreshNPCList()
@@ -1324,7 +1328,7 @@ end
 -- The config window (#34): the watch list on the left, the settings on the
 -- right. Each column is laid out down a y cursor, in px from the window's top.
 local CFG_W, CFG_H = 712, 540
-local QUEST_H = 92                -- the quest targets section, with Quests.lua loaded
+local QUEST_H = 136               -- the quest targets section, with Quests.lua loaded (two checkboxes)
 local COL_W = 324
 local LEFT, RIGHT = 16, 372   -- the columns' left edges
 local TOP = -50               -- where both columns start, under the title row
@@ -1785,6 +1789,16 @@ local function CreateConfigFrame()
             quests.PrintState()
         end)
         f.questCheck = questCheck
+        -- Hunt mode (#81): the same switch as /stakeout quests hunt.
+        y = y - 44
+        local huntCheck = Check(f, x, y, "Show quest mobs before they're seen",
+            "Needs Questie. Nearest spawns on this map; click to find one.")
+        huntCheck:SetScript("OnClick", function(self)
+            quests.SetHunt(self:GetChecked() and true or false)
+            ShowQuestCheck()
+            quests.PrintState()
+        end)
+        f.huntCheck = huntCheck
     end
 
     -- ESC closes config
@@ -2034,8 +2048,12 @@ SlashCmdList["STAKEOUT"] = function(input)
             return
         end
         local arg = rest:lower()
+        local hunt = arg:match("^hunt%s+(%a+)$")
         if arg == "on" or arg == "off" then
             quests.SetEnabled(arg == "on")
+            ShowQuestCheck()
+        elseif hunt == "on" or hunt == "off" then
+            quests.SetHunt(hunt == "on")
             ShowQuestCheck()
         end
         quests.PrintState()
@@ -2057,6 +2075,7 @@ SlashCmdList["STAKEOUT"] = function(input)
         Print("  /stakeout macro on / off      — Keep the list in a character macro")
         Print("  /stakeout look forever/glass  — The windows' look (after a /reload)")
         Print("  /stakeout quests on / off     — Quest target buttons (experimental)")
+        Print("  /stakeout quests hunt on / off — ...and quest mobs before they're seen")
         Print("  /stakeout clear               — Remove all NPCs")
         Print("  /stakeout reset               — Clear detections & rescan")
     end

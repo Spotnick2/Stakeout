@@ -112,7 +112,7 @@ do
     check(StakeoutConfigFrame.followCheck and StakeoutConfigFrame.followCheck:GetChecked(),
         "the settings show the switch, on")
     local w, h = StakeoutConfigFrame:GetSize()
-    eq(h, 676, "and the window makes room for it (and for quest targets)")
+    eq(h, 720, "and the window makes room for it (and for quest targets, two checkboxes)")
 
     -- The saved look is kept while following, and says so.
     SlashCmdList.STAKEOUT("look glass")
@@ -226,7 +226,7 @@ do
     SlashCmdList.STAKEOUT("config")
     eq(StakeoutConfigFrame.followCheck, nil, "and no switch in the settings")
     local _, h = StakeoutConfigFrame:GetSize()
-    eq(h, 632, "nor room for one (quest targets only)")
+    eq(h, 676, "nor room for one (quest targets only)")
 end
 
 do
