@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v2.6.0 - 2026-11-18
 
 ### Hunt for quest mobs you haven't seen yet
 

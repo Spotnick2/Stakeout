@@ -18,6 +18,7 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
 - Chat message, taskbar flash and sound alert (17 sounds, plus 7 more with DBM-Core)
 - Experimental quest buttons (a checkbox in the config, or `/stakeout quests on`): mobs named in unfinished kill
   objectives, and with Questie installed, the mobs that drop quest items and the NPC to turn a finished quest in to
+- An optional hunt mode for quest mobs (with Questie): a button before you see them, to click until one is in reach
 - An approximate distance in a button's tooltip while its NPC is visible
 - Two NPCs with the same name keep their button until both are dead
 - Movable, lockable, scalable frame
@@ -53,6 +54,7 @@ login, with nothing to click. It uses one character macro slot, or up to three f
 /stakeout export                 Copy the list as /stakeout add lines
 /stakeout macro on / off         Keep the list in a character macro (restored at login)
 /stakeout quests on / off        Show experimental quest target buttons
+/stakeout quests hunt on / off   Show quest mobs before you see them (with Questie)
 /stakeout clear                  Remove every NPC
 /stakeout reset                  Clear current detections and rescan
 ```
@@ -68,7 +70,7 @@ NPC names must match exactly, spaces included (`/stakeout add Captain Flat Tusk`
 - **Look:** WoW Forever (the default) or Glass, a smoked glass look shared with other glass addons. It
   applies to every Stakeout window after a `/reload`.
 - **Quest targets:** tick *Show buttons for quest mobs* for the experimental quest buttons (the same switch as
-  `/stakeout quests on`).
+  `/stakeout quests on`), and *Show quest mobs before they're seen* for hunt mode (`/stakeout quests hunt on`).
 - **Glass UI:** with Glass UI loaded, Stakeout wears its look (its glass,
   tint and accent) by default. Untick *Use Glass UI appearance* to use your own look instead (after a `/reload`).
 
@@ -90,6 +92,10 @@ Blizzard's Forever client doesn't allow some of what Stakeout did on TBC:
   unfinished kill objectives. With Questie, a mob that drops a quest item gets a button once you see it, and the
   NPC to turn a finished quest in to gets one while you're within about 80 yards of where Questie says they stand.
   Questie has no droppers for many of Forever's own quest items; those get no button.
+- Hunt mode (off by default, needs Questie) gives the mobs your unfinished quests want a button as soon as Questie
+  knows they spawn on your map, nearest first, in the slots mobs you can see leave free. Its tooltip says "Not seen
+  yet". Clicking it looks for one by name: if one is in reach it becomes your target. It's your click, not
+  detection, so nothing alerts until you find one.
 - Hover a button to see roughly how far its NPC is (e.g. "25-30 yd"), while a nameplate, your target or your
   mouse shows it. Addons can't read other units' positions, so it's bracketed with range checks, as
   NameplateDistance by Nedyar does (MIT; its notice is
