@@ -27,13 +27,18 @@ local QUEST_MAX = 8          -- quest buttons at most; the watch list's are outs
 local REBUILD_DELAY = 0.2    -- quest events come in bursts (FOREVER-PROBE.md, `events`)
 
 -- The tiers a target can be in. NEAR is "the player is near a known spawn",
--- from the provider's Spawns, for the NPCs to turn in to or talk to.
-local VISIBLE, LINGERING, NEAR, NONE = 3, 2, 1, 0
+-- from the provider's Spawns, for the NPCs to turn in to or talk to. HUNT
+-- (#81, opt-in) is a mob the quests still want with a known spawn on the
+-- player's map, not seen yet: the button is there to be clicked until it finds
+-- one. It only fills the slots the others leave.
+local VISIBLE, LINGERING, NEAR, HUNT, NONE = 3, 2, 1, 0.5, 0
+local TIERS = { VISIBLE, LINGERING, NEAR, HUNT }   -- the selection's order
 
 -- Yards. An NPC is near within NEAR_IN of one of its spawns and stays near
 -- until NEAR_OUT, so standing at the edge doesn't flicker the button. A click
 -- reaches a friendly NPC with no nameplate at 100 yd and more (FOREVER-PROBE.md,
--- `range`). Mobs get no NEAR: reaching a live hostile with no plate is unmeasured.
+-- `range`). Mobs get no NEAR: reaching a live hostile with no plate is unmeasured (HUNT,
+-- opt-in, is how to find out).
 local NEAR_IN, NEAR_OUT = 80, 100
 
 -- Raid markers for the right-click /tm: skull, cross, square for mobs; star,
@@ -236,6 +241,11 @@ local function OtherEnabled()
     return StakeoutDB ~= nil and StakeoutDB.questOther == true
 end
 
+-- Hunt mode (#81): mobs get a button before they're seen. Off by default.
+local function HuntEnabled()
+    return StakeoutDB ~= nil and StakeoutDB.questHunt == true
+end
+
 -- The NPC ID of a plain creature GUID ("Creature-0-<server>-<instance>-<zone>-<id>-<spawn>").
 local function NpcIdFromGuid(guid)
     if type(guid) ~= "string" or C.IsSecret(guid) then return nil end
@@ -252,6 +262,7 @@ local function Tier(m, now)
     if next(m.tokens) then return VISIBLE end
     if m.lastSeen and now - m.lastSeen <= LINGER then return LINGERING end
     if m.near then return NEAR end
+    if m.hunt then return HUNT end
     return NONE
 end
 
@@ -373,9 +384,20 @@ local function WantsNear(m)
     return false
 end
 
+-- Whether a member is a mob to hunt by its spawn (#81): a kill or a dropper
+-- an unfinished objective still wants, with a name to /targetexact.
+local function WantsHunt(m)
+    if not (m.npcId and m.dbName and HuntEnabled()) then return false end
+    for _, ref in ipairs(m.refs) do
+        if ref.eligible and (ref.kind == "kill" or ref.kind == "item") then return true end
+    end
+    return false
+end
+
 local function UpdateNear(m, pos)
     local best
-    if pos and WantsNear(m) then
+    local near, hunt = WantsNear(m), WantsHunt(m)
+    if pos and (near or hunt) then
         if m.spawns == nil then
             local spawns = Ask("Spawns", m.npcId)
             m.spawns = type(spawns) == "table" and spawns or false
@@ -390,7 +412,10 @@ local function UpdateNear(m, pos)
         end
     end
     m.dist = best
-    m.near = best ~= nil and best <= (m.near and NEAR_OUT or NEAR_IN)
+    m.near = near and best ~= nil and best <= (m.near and NEAR_OUT or NEAR_IN)
+    -- Anywhere on the map: the nearest spawn ranks first (Prefer), and the
+    -- click is what finds out whether one is in reach.
+    m.hunt = hunt and best ~= nil
 end
 
 -- Every member's NEAR, from one read of the player's position (only when one
@@ -401,7 +426,7 @@ local nearOrder = ""
 local function UpdateAllNear()
     local pos
     for _, m in pairs(members) do
-        if WantsNear(m) then
+        if WantsNear(m) or WantsHunt(m) then
             pos = PlayerPosition()
             break
         end
@@ -826,8 +851,8 @@ end
 -- Selection: which targets get one of the QUEST_MAX buttons
 --   1. One slot is reserved for a turn-in, only when an eligible one exists:
 --      seen before near-only, then the nearest, then by name.
---   2. Tiers: visible > lingering > near. Kill and item rank equally; other
---      quest units come last in each tier.
+--   2. Tiers: visible > lingering > near > hunt (#81, opt-in). Kill and item
+--      rank equally; other quest units come last in each tier.
 --   3. Fairness: within a tier, a round-robin over objectives in quest log
 --      order. A target several objectives share is picked once and serves
 --      each of them. This can take a slot from an incumbent of the same tier
@@ -874,7 +899,7 @@ local function Select(candidates)
     end
     if reserved then take(reserved) end
 
-    for tier = VISIBLE, NEAR, -1 do
+    for _, tier in ipairs(TIERS) do
         if #chosen >= QUEST_MAX then break end
         local objectives, order, others = {}, {}, {}
         for _, nt in ipairs(candidates) do
@@ -1038,6 +1063,7 @@ local function ButtonSpecs()
         local tooltip = {}
         for _, ref in ipairs(nt.refs) do tooltip[#tooltip + 1] = Progress(ref) end
         if nt.other then tooltip[#tooltip + 1] = "Related to one of your quests" end
+        if nt.tier == HUNT then tooltip[#tooltip + 1] = "Not seen yet: click to look for one" end
         local mark
         if StakeoutDB.enableMarking then
             local marks = Marks(nt.row)
@@ -1083,6 +1109,11 @@ local function SetOther(on)
     ScheduleRebuild()
 end
 
+local function SetHunt(on)
+    C.SetConfig("questHunt", on and true or false)
+    ScheduleRebuild()
+end
+
 local function SetMute(key, on)
     if not C.SetQuestMute(key, on) then return false end
     dirty = true
@@ -1093,6 +1124,9 @@ end
 local function PrintState()
     if not Enabled() then
         C.Print("Quest targets (experimental): |cffff6666off|r. |cff00ff00/stakeout quests on|r to try it.")
+        if HuntEnabled() then
+            C.Print("Hunt: |cff00ff00on|r, for when quest targets are on (it needs Questie's data).")
+        end
         return
     end
     C.Print("Quest targets (experimental): |cff00ff00on|r, %d quests read. |cff00ff00/stakeout quests off|r " ..
@@ -1101,6 +1135,13 @@ local function PrintState()
         C.Print("With Questie's data: objective mobs, item droppers, and the NPC to turn in to when you're near.")
     else
         C.Print("Without quest data (Questie), only mobs you see whose name is in a kill objective get a button.")
+    end
+    if HuntEnabled() then
+        C.Print("Hunt: |cff00ff00on|r, quest mobs with a spawn on this map get a button before they're seen%s. " ..
+            "|cff00ff00/stakeout quests hunt off|r turns it off.", HasProvider() and "" or " (needs Questie's data)")
+    else
+        C.Print("Hunt: off. |cff00ff00/stakeout quests hunt on|r shows quest mobs before they're seen, to click until " ..
+            "one is found.")
     end
 end
 
@@ -1123,6 +1164,7 @@ ns.quests = {
     OnUnit = OnUnit, OnPlateRemoved = OnPlateRemoved, OnUnitDied = OnUnitDied, Tick = Tick,
     ButtonSpecs = ButtonSpecs, Rebuild = Rebuild, ScheduleRebuild = ScheduleRebuild,
     SetEnabled = SetEnabled, Enabled = Enabled, SetOther = SetOther, PrintState = PrintState,
+    SetHunt = SetHunt, HuntEnabled = HuntEnabled,
     SetMute = SetMute, QuestMuteKey = QuestMuteKey, TargetMuteKey = TargetMuteKey,
     -- The last read of the log, for the quest pane (Phase 4). Read only.
     QuestList = function() return questList end,
@@ -1131,7 +1173,7 @@ ns.quests = {
 -- Test seam (tests/). Harmless in game.
 ns.quests._test = {
     members = members, holders = holders, Associate = Associate, Select = Select,
-    NpcIdFromGuid = NpcIdFromGuid, QUEST_MAX = QUEST_MAX, NEAR_IN = NEAR_IN, NEAR_OUT = NEAR_OUT,
+    NpcIdFromGuid = NpcIdFromGuid, QUEST_MAX = QUEST_MAX, NEAR_IN = NEAR_IN, NEAR_OUT = NEAR_OUT, HUNT = HUNT,
     initialized = function() return loggedIn and logReady end,
     nameRows = function() return nameRows end,
     lastShown = function() return lastShown end,

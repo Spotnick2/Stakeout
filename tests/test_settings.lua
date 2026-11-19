@@ -53,6 +53,7 @@ eq(StakeoutDB.svLoadCheck, 1, "the sentinel is written")
 eq(#StakeoutDB.npcList, 0, "defaults: empty watch list")
 eq(StakeoutDB.questTargets, false, "defaults: quest targets off (experimental)")
 eq(StakeoutDB.questOther, false, "defaults: other quest units off")
+eq(StakeoutDB.questHunt, false, "defaults: hunt mode off (#81)")
 eq(type(StakeoutDB.questMutes), "table", "defaults: no quest mutes")
 eq(next(StakeoutDB.questMutes), nil, "...an empty table")
 -- The mutes are written only by the owner's functions (ns.core exports them).

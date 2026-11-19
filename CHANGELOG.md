@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Hunt for quest mobs you haven't seen yet
+
+A new option for the experimental quest targets: "Show quest mobs before they're seen" in the settings window,
+or `/stakeout quests hunt on`. With Questie installed, the mobs your unfinished quests want (to kill, or that
+drop a quest item) get a button as soon as Questie knows they spawn on your map, nearest first, instead of only
+once a nameplate shows them. Click it to look for one beyond nameplate range: if one is in reach it becomes your
+target. Mobs you can see still come first. Off by default.
+
 ## v2.5.0 - 2026-11-06
 
 ### Quest targets use Questie's data
