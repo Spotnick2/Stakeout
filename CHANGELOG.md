@@ -9,7 +9,8 @@
 - Hunt mode only gives a button to quest mobs that spawn within about 80 yards of you (they go past 100), instead
   of every spawn on the map. The buttons are the ones a click can reach.
 - A button keeps its NPC's portrait for the rest of the session once you've seen it, even after the NPC is out of
-  sight or the button moves, instead of going back to the icon.
+  sight or the button moves, instead of going back to the icon. An NPC you first see mid-fight gets its portrait
+  too.
 
 ## v2.6.0 - 2026-11-18
 
