@@ -242,6 +242,9 @@ do
     eq(f:IsShown(), true, "/fp so hud wide shows it")
     SlashCmdList.FOREVERPROBE("so hud off")
     eq(f:IsShown(), false, "/fp so hud off hides it")
+    local ok, why = H.startFace()
+    eq(ok, false, "the face test needs a target: " .. tostring(why))
+    eq(H.pollFace(), false, "...and polls nothing before Read face")
 end
 
 local errors = 0

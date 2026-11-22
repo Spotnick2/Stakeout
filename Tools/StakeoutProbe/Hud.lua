@@ -9,7 +9,7 @@
 --   /fp so hud off                            hide it
 --   /fp so face                               the target's display ID, and a face drawn from it alone
 --
--- Procedure: /fp steps so hud.
+-- Procedures: /fp steps so hud (the layouts), face (a face from a display ID).
 
 local _, NS = ...
 local Probe = NS.Probe
@@ -316,38 +316,97 @@ end
 -- A face from a display ID alone (#88, question 3)
 --------------------------------------------------------------------------------
 
-local model, faceTex
--- The target's display ID through a model (no unit API returns it), and a face
--- drawn from that number only. Returns id, why.
-local function readFace()
-    if not unitName("target") then return nil, "no target (or its name is secret)" end
+local model, faceFrame
+local face = {}   -- this attempt: name, the ID read, when it started
+
+-- A small frame above the centre: the face from the unit (left) beside the
+-- face from the display ID alone (right), to compare.
+local function faceBoard()
+    if faceFrame then return faceFrame end
+    local f = CreateFrame("Frame", "StakeoutProbeFace", UIParent, "BackdropTemplate")
+    f:SetSize(220, 92)
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 220)
+    dress(f, "large", "forever")
+    f.unitTex = f:CreateTexture(nil, "ARTWORK")
+    f.unitTex:SetSize(56, 56)
+    f.unitTex:SetPoint("TOPLEFT", 24, -10)
+    f.idTex = f:CreateTexture(nil, "ARTWORK")
+    f.idTex:SetSize(56, 56)
+    f.idTex:SetPoint("TOPRIGHT", -24, -10)
+    f.left = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    f.left:SetPoint("TOP", f.unitTex, "BOTTOM", 0, -4)
+    f.left:SetText("from the unit")
+    f.right = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    f.right:SetPoint("TOP", f.idTex, "BOTTOM", 0, -4)
+    faceFrame = f
+    return f
+end
+
+-- Starts reading the target's display ID through a model (no unit API
+-- returns it). The model loads over a few frames: pollFace reads it.
+local function startFace()
+    local name = unitName("target")
+    if not name then return false, "no target (or its name is secret)" end
+    local okDead, dead = pcall(G("UnitIsDead"), "target")
+    if okDead and dead == true then return false, "the target is dead: pick a living one" end
     model = model or CreateFrame("PlayerModel", nil, UIParent)
     model:SetSize(64, 64)
     model:SetPoint("TOPLEFT", UIParent, "BOTTOMRIGHT", 10, -10)   -- off screen, still shown
     model:Show()
+    model:ClearModel()
     model:SetUnit("target")
+    face = { name = name, started = GetTime() }
+    local f = faceBoard()
+    SetPortraitTexture(f.unitTex, "target")
+    f.idTex:SetTexture(nil)
+    f.right:SetText("from the display ID: waiting")
+    f:Show()
+    return true, name
+end
+
+-- true, id, how long it took, once the ID is read and the face drawn from it.
+local function pollFace()
+    if not face.name then return false, "Read face first" end
     local ok, id = pcall(model.GetDisplayInfo, model)
-    if not ok then return nil, "GetDisplayInfo: " .. tostring(id) end
-    if secret(id) then return nil, "the display ID is secret" end
-    if type(id) ~= "number" or id <= 0 then return nil, "no display ID (" .. tostring(id) .. ")" end
-    build()
-    if not faceTex then
-        faceTex = frame:CreateTexture(nil, "ARTWORK")
-        faceTex:SetSize(40, 40)
-        faceTex:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, 4)
-        faceTex.label = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        faceTex.label:SetPoint("LEFT", faceTex, "RIGHT", 6, 0)
+    if not ok then return false, "GetDisplayInfo: " .. tostring(id) end
+    if secret(id) then return true, "the display ID is secret" end
+    if type(id) ~= "number" or id <= 0 then
+        return false, ("display ID %s after %.1f s"):format(tostring(id), GetTime() - face.started)
     end
+    local f = faceBoard()
     local fn = G("SetPortraitTextureFromCreatureDisplayID")
-    if type(fn) ~= "function" then return id, "SetPortraitTextureFromCreatureDisplayID is missing" end
-    local drawn, err = pcall(fn, faceTex, id)
-    faceTex.label:SetText(("from display ID %d alone"):format(id))
-    faceTex:Show()
-    faceTex.label:Show()
-    frame:Show()
-    say(("face: %s display ID %d, drawn %s%s"):format(unitName("target"), id, tostring(drawn),
+    if type(fn) ~= "function" then
+        f.right:SetText("the function is missing")
+        return true, id, "SetPortraitTextureFromCreatureDisplayID is missing"
+    end
+    local drawn, err = pcall(fn, f.idTex, id)
+    f.right:SetText(("from display ID %d"):format(id))
+    local took = ("%.1f s"):format(GetTime() - face.started)
+    say(("face: %s display ID %d after %s, drawn %s%s"):format(face.name, id, took, tostring(drawn),
         drawn and "" or (": " .. tostring(err))))
-    return id, drawn and "drawn" or ("error: " .. tostring(err))
+    face.name = nil
+    return true, id, took, drawn and "drawn" or ("error: " .. tostring(err))
+end
+
+local function hideFace()
+    if faceFrame then faceFrame:Hide() end
+    return true
+end
+
+-- /fp so face: start, then poll for up to 10 s.
+local function readFace()
+    local ok, why = startFace()
+    if not ok then return nil, why end
+    local tries = 0
+    local function poll()
+        tries = tries + 1
+        local done, a, b, c = pollFace()
+        if done then return end
+        if tries >= 40 then return say("face: gave up, " .. tostring(a)) end
+        C_Timer.After(0.25, poll)
+    end
+    poll()
+    return true, why
 end
 
 --------------------------------------------------------------------------------
@@ -362,8 +421,8 @@ Probe:Command("hud", function(arg)
 end, "compact|wide [forever|glass] | demo | off: the list layout mockup (#88)")
 
 Probe:Command("face", function()
-    local id, why = readFace()
-    if not id then say("face: " .. tostring(why)) end
+    local ok, why = readFace()
+    if not ok then say("face: " .. tostring(why)) end
 end, "the target's display ID, and a face drawn from it alone (#88)")
 
 -- Stakeout's rows, or the demo's when its frame shows none (a quiet spot,
@@ -386,7 +445,7 @@ local function step(layout, look)
 end
 
 Probe:Steps("hud", {
-    rev = 1,
+    rev = 2,
     title = "Stakeout: list layout mockups (#88)",
     { text = "Go where Stakeout shows a few quest buttons (Stranglethorn is ideal), out of combat. Target one of the "
           .. "mobs if you can: its row gets the target's outline. Then press Next." },
@@ -399,15 +458,29 @@ Probe:Steps("hud", {
     { text = "Compact, Glass: do you prefer it to WoW Forever's compact rows?", ask = true },
     step("wide", "glass"),
     { text = "Wide, Glass: is this the one closest to your mockup?", ask = true },
-    { text = "Faces for mobs not seen yet: target any mob or NPC, then press Read face (Retry if it says no display ID: the model may still be loading). A second face appears above "
-          .. "the mockup, drawn from the creature's display ID alone (no unit).", button = "Read face",
-      run = function() return readFace() end, screenshot = "face-from-display-id" },
-    { text = "Does the face above the mockup show that creature?", ask = true },
     { text = "Which would you build: type compact or wide, Forever or Glass, and anything to change, in the Note "
           .. "box. Then press Next." },
     { text = "Hiding the mockup.", auto = true, run = function() return hide() end },
 })
 
+Probe:Steps("face", {
+    rev = 1,
+    title = "Stakeout: a face from a display ID alone (#88, question 3)",
+    { text = "Target a living mob or NPC (not a corpse), out of combat, then press Read face. A small frame "
+          .. "opens above the centre: its face from the unit on the left.", button = "Read face",
+      run = function() return startFace() end },
+    { text = "Reading its display ID (the model takes a moment to load) and drawing a face from that number "
+          .. "alone, on the right.", wait = function() return pollFace() end, timeout = 15,
+      screenshot = "face-from-display-id" },
+    { text = "Does the face on the right show the same creature as the one on the left?", ask = true },
+    { text = "Once more with a different creature (another kind of mob, or an NPC): target it, then press Read "
+          .. "face.", button = "Read face", run = function() return startFace() end },
+    { text = "Reading it.", wait = function() return pollFace() end, timeout = 15, screenshot = "face-2" },
+    { text = "Does the right one match the left one this time too?", ask = true },
+    { text = "Closing the frame.", auto = true, run = function() return hideFace() end },
+})
+
 NS._test = NS._test or {}
 NS._test.hud = { show = show, hide = hide, render = render, rows = function() return hud.rows end,
-                 frame = function() return frame end, shortProgress = shortProgress, readFace = readFace }
+                 frame = function() return frame end, shortProgress = shortProgress, readFace = readFace,
+                 startFace = startFace, pollFace = pollFace }
