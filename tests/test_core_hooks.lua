@@ -389,6 +389,32 @@ eq(without, 1, "the one past the cap keeps its icon")
 WoW.units = {}
 SlashCmdList.STAKEOUT("remove " .. table.concat(names, "; "))
 
+-- A full cache, every face on a button: two names leave and a new one comes
+-- first. The new one gets a face on that same render (Codex on #90).
+clean()
+specs = {}
+for i = 1, T.PORTRAIT_MAX do
+    local n = ("Full Mob %02d"):format(i)
+    WoW.SetUnit("nameplate" .. i, { name = n, guid = "Creature-0-0-0-0-" .. (700 + i) .. "-1", plate = true })
+    specs[i] = spec(n, "enemy", { unit = "nameplate" .. i, icon = "QI" })
+end
+T.RefreshTargetFrame()
+eq(T.portraitCount(), T.PORTRAIT_MAX, "the cache is full")
+local newUnit = "nameplate" .. (T.PORTRAIT_MAX + 1)
+WoW.SetUnit(newUnit, { name = "Aardvark Newcomer", guid = "Creature-0-0-0-0-799-1", plate = true })
+local kept = { spec("Aardvark Newcomer", "enemy", { unit = newUnit, icon = "QI" }) }
+for i = 1, T.PORTRAIT_MAX - 2 do kept[#kept + 1] = specs[i] end
+specs = kept
+T.RefreshTargetFrame()
+local nb = buttonOf("Aardvark Newcomer")
+check(nb and nb.portrait and nb.portrait.portrait == newUnit,
+    "the newcomer has its face on the first render (" .. tostring(nb and nb.portrait and nb.portrait.portrait) .. ")")
+check(T.portraitCount() <= T.PORTRAIT_MAX, "and the cap still holds (" .. T.portraitCount() .. ")")
+local faced = 0
+for _, b in ipairs(T.buttons) do if b._shown and b.portrait then faced = faced + 1 end end
+eq(faced, T.PORTRAIT_MAX - 1, "every shown button has a face")
+WoW.units = {}
+
 ------------------------------------------------------------
 -- MacroSafeName
 ------------------------------------------------------------

@@ -670,6 +670,7 @@ local function PortraitFor(name, create)
             portraitCount = portraitCount + 1
         end
         portraits[name] = tex
+        tex.faceOf = name
     end
     if tex then tex.lastUsed = GetTime() end
     return tex
@@ -702,9 +703,15 @@ local function PutPortrait(btn, tex)
 end
 
 local function UpdateButtonLooks(list)
-    local questNames = {}
+    local questNames, wanted = {}, {}
     for _, e in ipairs(list) do
+        wanted[e.name] = true
         if e.group > 1 then questNames[#questNames + 1] = e.name end
+    end
+    -- Faces of names leaving the layout go back first, so a new name can
+    -- take one of them even when the cache is full (Codex on #90).
+    for _, btn in ipairs(targetButtons) do
+        if btn.portrait and not wanted[btn.portrait.faceOf] then TakePortrait(btn) end
     end
     for i, e in ipairs(list) do
         local btn = targetButtons[i]
