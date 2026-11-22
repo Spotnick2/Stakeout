@@ -103,6 +103,7 @@ LibQuestieDB = {
 
 local ns = {}
 assert(loadfile("Tools/StakeoutProbe/StakeoutProbe.lua"))("StakeoutProbe", ns)
+assert(loadfile("Tools/StakeoutProbe/Hud.lua"))("StakeoutProbe", ns)   -- the TOC's order
 WoW.fire("ADDON_LOADED", "StakeoutProbe")
 WoW.fire("PLAYER_LOGIN")
 local T = ns._test
@@ -218,6 +219,147 @@ eq(b._attrs.macrotext,
 eq(b._attrs.macrotext2, "/cleartarget\n/targetexact Pygmy Surf Crawler\n/tm 8", "right-click unchanged")
 eq(T.aim("Pygmy Surf Crawler", 3106, "8"), true, "no variant")
 eq(b._attrs.macrotext, "/cleartarget\n/targetexact Pygmy Surf Crawler", "...is the default macro")
+
+-- The list layout mockups (#88): plain frames, never secure.
+do
+    local H = T.hud
+    eq(H.shortProgress({ "Big Game: 3/10 Stranglethorn Tiger slain" }), "3/10", "progress: the count")
+    eq(H.shortProgress({ "Welcome: ready to turn in" }), "turn in", "...or the turn-in")
+    local layout, look, n = H.show("compact", "forever", false)
+    eq(layout .. " " .. look .. " " .. n, "compact forever 0", "nothing on Stakeout's frame: no rows")
+    layout, look, n = H.show("wide", "forever", true)
+    eq(n, 11, "the demo's eleven rows")
+    local f = H.frame()
+    check(f:IsShown() and not f._template:find("Secure", 1, true), "a plain frame, shown")
+    local tiger = H.rows()["Stranglethorn Tiger"]
+    eq(tiger.progress:GetText(), "4/10", "a row's progress")
+    eq(H.rows()["Jungle Stalker"].progress:GetText(), "1/10", "a hunted row keeps its progress")
+    H.show("compact", "glass", true)
+    check(H.rows()["Stranglethorn Tiger"] ~= tiger, "a new look: new rows")
+    H.hide()
+    eq(f:IsShown(), false, "hidden")
+    SlashCmdList.FOREVERPROBE("so hud wide")
+    eq(f:IsShown(), true, "/fp so hud wide shows it")
+    SlashCmdList.FOREVERPROBE("so hud off")
+    eq(f:IsShown(), false, "/fp so hud off hides it")
+    -- No row or group header overlaps another, in either layout (Codex: a
+    -- full line at a group's end was overlapped by the next header).
+    local function overlaps(layout)
+        H.show(layout, "forever", true)
+        local fr, boxes = H.frame(), {}
+        local rowH = layout == "wide" and 34 or 22
+        for _, row in pairs(H.rows()) do
+            if row:IsShown() then
+                local p = row._points[#row._points]
+                boxes[#boxes + 1] = { x = p[4], top = -p[5], bottom = -p[5] + rowH }
+            end
+        end
+        for _, h in ipairs(fr.headers) do
+            if h:IsShown() then
+                local p = h._points[#h._points]
+                boxes[#boxes + 1] = { x = nil, top = -p[5], bottom = -p[5] + 12 }
+            end
+        end
+        local bad = 0
+        for i = 1, #boxes do
+            for j = i + 1, #boxes do
+                local a, c = boxes[i], boxes[j]
+                local sameColumn = a.x == nil or c.x == nil or a.x == c.x
+                if sameColumn and a.top < c.bottom and c.top < a.bottom then bad = bad + 1 end
+            end
+        end
+        return bad, #boxes
+    end
+    local bad, boxes = overlaps("compact")
+    eq(bad, 0, "compact: nothing overlaps (" .. boxes .. " rows and headers)")
+    bad, boxes = overlaps("wide")
+    eq(bad, 0, "wide: nothing overlaps, a full line before a new group included (" .. boxes .. ")")
+
+    -- Glass, then Forever again: a frame per look, so no glass is left on Forever's.
+    H.show("compact", "glass", true)
+    local glassFrame = H.frame()
+    H.show("compact", "forever", true)
+    check(H.frame() ~= glassFrame and H.frame():IsShown() and not glassFrame:IsShown(),
+        "back to Forever: its own frame, the glass one hidden")
+    H.show("compact", "glass", true)
+    eq(H.frame(), glassFrame, "...and Glass again reuses the glass one")
+    -- Forever -> Glass -> Forever: each frame stands against UIParent, never
+    -- against the other look's frame (Codex on #91: a circular anchor).
+    H.show("compact", "forever", true)
+    local foreverFrame = H.frame()
+    local function anchoredTo(f, other)
+        for _, p in ipairs(f._points or {}) do if p[2] == other then return true end end
+        return false
+    end
+    check(not anchoredTo(foreverFrame, glassFrame) and not anchoredTo(glassFrame, foreverFrame),
+        "a look round trip leaves neither frame anchored to the other")
+    H.hide()
+
+    -- A rejected Read face throws, so the procedure stays on that step; the
+    -- command form just returns the reason (Codex on #91).
+    WoW.units = {}
+    local okStep, whyStep = pcall(H.startFaceStep)
+    check(not okStep and tostring(whyStep):find("no target", 1, true), "a rejected read keeps the step: " .. tostring(whyStep))
+    eq(H.faceDrawn(), false, "...and nothing counts as drawn")
+
+    -- Stakeout still showing a face the mockup missed: a boolean from either
+    -- representation (#90's btn.portrait, or main's btn.portraitOf).
+    WoW.allowGlobal("StakeoutBtn1")
+    WoW.allowGlobal("StakeoutBtn2")
+    local b1 = CreateFrame("Button", "StakeoutBtn1", UIParent)
+    b1.npcName, b1.portrait = "Face Kept", {}
+    b1.label = b1:CreateFontString()
+    b1.icon = b1:CreateTexture()
+    local b2 = CreateFrame("Button", "StakeoutBtn2", UIParent)
+    b2.npcName, b2.portraitOf = "Old Face", "Old Face"
+    b2.label = b2:CreateFontString()
+    b2.icon = b2:CreateTexture()
+    _G.StakeoutBtn1, _G.StakeoutBtn2 = b1, b2
+    local rows = H.stakeoutRows()
+    eq(rows[1] and rows[1].stakeoutFace, true, "#90's cache: true")
+    eq(rows[2] and rows[2].stakeoutFace, true, "main's portraitOf: true")
+    b2.portraitOf = "Someone Else"
+    eq(H.stakeoutRows()[2].stakeoutFace, false, "a face of another name: false, never a texture")
+    _G.StakeoutBtn1, _G.StakeoutBtn2 = nil, nil
+
+    local ok, why = H.startFace()
+    eq(ok, false, "the face test needs a target: " .. tostring(why))
+    eq(H.pollFace(), false, "...and polls nothing before Read face")
+
+    -- Through ForeverProbe's runner: a face that is never drawn (the display
+    -- ID stays 0, run #497) ends the wait by timeout or by Done, and neither
+    -- can give a yes/no match: the comparison is a note step whose check
+    -- FAILs without a draw (Codex on #91).
+    local S = FP.Steps
+    local take, nowFn = FP.Screenshots.Take, S.Now
+    FP.Screenshots.Take = function(_, _, cb) if cb then cb(nil) end end
+    local function faceRun(endWait)
+        WoW.SetUnit("target", { name = "Kurzen Jungle Fighter", guid = "Creature-0-0-0-0-937-1" })
+        fp("steps so face")
+        local rec = FP.db.steps.records["StakeoutProbe/face"]
+        S.Run()
+        eq(rec.at, 2, "Read face on a living target moves on to the wait")
+        endWait()
+        eq(rec.at, 3, "the wait ended")
+        S.Next()
+        local r = rec.results[3]
+        check(r.status ~= "yes" and r.status ~= "no", "no match answer is possible: " .. tostring(r.status))
+        eq(r.check, "FAIL", "the comparison's check fails without a draw")
+        fp("steps stop")
+        return rec
+    end
+    local rec = faceRun(function()
+        local t0 = S.Now()
+        S.Now = function() return t0 + 16 end
+        S.Poll()
+        S.Now = nowFn
+    end)
+    eq(rec.results[2].status, "timeout", "the first run timed out")
+    rec = faceRun(function() S.DoneByHand() end)
+    eq(rec.results[2].check, "FAIL", "Done by hand without a draw: the wait's check fails")
+    FP.Screenshots.Take = take
+    WoW.units = {}
+end
 
 local errors = 0
 for _, l in ipairs(db.log) do if l:find("ERROR") then errors = errors + 1 end end
