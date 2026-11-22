@@ -31,9 +31,11 @@ local LAYOUTS = {
 }
 
 -- Sample rows for /fp so hud demo: Stranglethorn's quest mobs, as in the
--- owner's mockup, with one watch name and one NPC so the groups show.
+-- owner's mockup, with two watch names (a full wide line before the next
+-- group) and one NPC so the groups show.
 local DEMO = {
     { group = 1, name = "King Bangalash" },
+    { group = 1, name = "Gorlash" },
     { group = 2, name = "Hemet Nesingwary Jr.", progress = "turn in" },
     { group = 3, name = "Stranglethorn Tiger", progress = "4/10" },
     { group = 3, name = "Stranglethorn Tigress", progress = "2/8", hunt = true },
@@ -46,6 +48,9 @@ local DEMO = {
 }
 
 local hud = { layout = "compact", look = "forever", demo = false, rows = {}, faces = {} }
+-- One frame per look, each with its own rows and faces: glass layers can't be
+-- taken off a frame, so switching back to Forever must not reuse it (Codex, P2).
+local looks = {}
 
 --------------------------------------------------------------------------------
 -- What Stakeout shows now
@@ -81,8 +86,11 @@ local function stakeoutRows()
         if name then
             local label = btn.label and plain(btn.label:GetText())
             local group = (label == nil or label == "") and 1 or (btn.friendly and 2 or 3)
+            -- btn.portrait: Stakeout still shows a face it drew before the
+            -- mockup opened, which the mockup can't copy (Codex, P3).
             out[#out + 1] = { group = group, name = name, unit = btn.unit, icon = btn.icon and btn.icon:GetTexture(),
-                              progress = shortProgress(btn.tooltipLines), hunt = isHunt(btn.tooltipLines) }
+                              progress = shortProgress(btn.tooltipLines), hunt = isHunt(btn.tooltipLines),
+                              stakeoutFace = btn.portrait ~= nil }
         end
     end
     return out
@@ -145,7 +153,7 @@ local function dress(f, size, look)
     end
 end
 
-local frame
+local frame   -- the current look's
 
 local function newRow(name)
     local r = CreateFrame("Frame", nil, frame, "BackdropTemplate")
@@ -166,10 +174,28 @@ local function newRow(name)
     return r
 end
 
-local function build()
-    if frame then return end
-    frame = CreateFrame("Frame", "StakeoutProbeHud", UIParent, "BackdropTemplate")
-    frame:SetPoint("CENTER", UIParent, "CENTER", 320, 0)
+-- The current look's frame, made and dressed once per look, where the
+-- previous one stood.
+local function build(look)
+    look = look or hud.look
+    local L = looks[look]
+    if L then
+        if frame and frame ~= L.frame then
+            L.frame:ClearAllPoints()
+            L.frame:SetPoint("TOPLEFT", frame, "TOPLEFT")
+            frame:Hide()
+        end
+        frame, hud.rows, hud.faces, hud.look = L.frame, L.rows, L.faces, look
+        return
+    end
+    local prev = frame
+    frame = CreateFrame("Frame", "StakeoutProbeHud_" .. look, UIParent, "BackdropTemplate")
+    if prev then
+        frame:SetPoint("TOPLEFT", prev, "TOPLEFT")
+        prev:Hide()
+    else
+        frame:SetPoint("CENTER", UIParent, "CENTER", 320, 0)
+    end
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
@@ -182,6 +208,9 @@ local function build()
     frame.sub:SetPoint("TOP", frame.title, "BOTTOM", 0, -2)
     frame.headers = {}
     frame:Hide()
+    dress(frame, "large", look)
+    looks[look] = { frame = frame, rows = {}, faces = {} }
+    hud.rows, hud.faces, hud.look = looks[look].rows, looks[look].faces, look
 end
 
 local function header(i)
@@ -210,10 +239,13 @@ local function render()
 
     local y = 40
     local width = L.cols * L.colW + (L.cols - 1) * GAP + 2 * PAD
-    local group, col, nHeaders = nil, L.cols, 0
+    -- col: rows placed on the current line (0: none yet). A new group, or a
+    -- full line, moves down past the line placed before it (Codex, P2: a
+    -- full line at a group's end used to be overlapped).
+    local group, col, nHeaders = nil, 0, 0
     for _, e in ipairs(list) do
         if e.group ~= group then
-            if col < L.cols then y = y + L.rowH + GAP end
+            if col > 0 then y = y + L.rowH + GAP end
             group, col = e.group, 0
             nHeaders = nHeaders + 1
             local h = header(nHeaders)
@@ -241,8 +273,11 @@ local function render()
             SetPortraitTexture(r.face, unit)
             hud.faces[e.name] = true
             r.face:SetTexCoord(0, 1, 0, 1)
+            r.face:SetDesaturated(false)
         elseif not hud.faces[e.name] then
             r.face:SetTexture(e.icon or QUEST_ICON)
+            -- Greyed: Stakeout shows a face here that the mockup missed.
+            r.face:SetDesaturated(e.stakeoutFace == true)
         end
 
         r.name:SetFontObject(L.font)
@@ -275,28 +310,9 @@ ticker:SetScript("OnUpdate", function(self, dt)
 end)
 ticker:Hide()
 
-local function restyle(look)
-    -- A row is dressed once; a new look means new rows.
-    for _, r in pairs(hud.rows) do r:Hide() end
-    hud.rows, hud.faces = {}, {}
-    hud.look = look
-    if frame then
-        if frame.SetBackdrop then frame:SetBackdrop(nil) end
-        if frame.glassDressed then
-            say("hud: the frame keeps its glass until /reload; rows follow the new look")
-        end
-        dress(frame, "large", look)
-        frame.glassDressed = frame.glassDressed or (look == "glass")
-    end
-end
-
 local function show(layout, look, demo)
-    build()
+    build(look == "glass" and "glass" or "forever")
     hud.layout = LAYOUTS[layout] and layout or "compact"
-    if look ~= hud.look or not frame.dressed then
-        restyle(look == "glass" and "glass" or "forever")
-        frame.dressed = true
-    end
     hud.demo = demo and true or false
     frame:Show()
     ticker:Show()

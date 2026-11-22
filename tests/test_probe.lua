@@ -228,7 +228,7 @@ do
     local layout, look, n = H.show("compact", "forever", false)
     eq(layout .. " " .. look .. " " .. n, "compact forever 0", "nothing on Stakeout's frame: no rows")
     layout, look, n = H.show("wide", "forever", true)
-    eq(n, 10, "the demo's ten rows")
+    eq(n, 11, "the demo's eleven rows")
     local f = H.frame()
     check(f:IsShown() and not f._template:find("Secure", 1, true), "a plain frame, shown")
     local tiger = H.rows()["Stranglethorn Tiger"]
@@ -242,6 +242,49 @@ do
     eq(f:IsShown(), true, "/fp so hud wide shows it")
     SlashCmdList.FOREVERPROBE("so hud off")
     eq(f:IsShown(), false, "/fp so hud off hides it")
+    -- No row or group header overlaps another, in either layout (Codex: a
+    -- full line at a group's end was overlapped by the next header).
+    local function overlaps(layout)
+        H.show(layout, "forever", true)
+        local fr, boxes = H.frame(), {}
+        local rowH = layout == "wide" and 34 or 22
+        for _, row in pairs(H.rows()) do
+            if row:IsShown() then
+                local p = row._points[#row._points]
+                boxes[#boxes + 1] = { x = p[4], top = -p[5], bottom = -p[5] + rowH }
+            end
+        end
+        for _, h in ipairs(fr.headers) do
+            if h:IsShown() then
+                local p = h._points[#h._points]
+                boxes[#boxes + 1] = { x = nil, top = -p[5], bottom = -p[5] + 12 }
+            end
+        end
+        local bad = 0
+        for i = 1, #boxes do
+            for j = i + 1, #boxes do
+                local a, c = boxes[i], boxes[j]
+                local sameColumn = a.x == nil or c.x == nil or a.x == c.x
+                if sameColumn and a.top < c.bottom and c.top < a.bottom then bad = bad + 1 end
+            end
+        end
+        return bad, #boxes
+    end
+    local bad, boxes = overlaps("compact")
+    eq(bad, 0, "compact: nothing overlaps (" .. boxes .. " rows and headers)")
+    bad, boxes = overlaps("wide")
+    eq(bad, 0, "wide: nothing overlaps, a full line before a new group included (" .. boxes .. ")")
+
+    -- Glass, then Forever again: a frame per look, so no glass is left on Forever's.
+    H.show("compact", "glass", true)
+    local glassFrame = H.frame()
+    H.show("compact", "forever", true)
+    check(H.frame() ~= glassFrame and H.frame():IsShown() and not glassFrame:IsShown(),
+        "back to Forever: its own frame, the glass one hidden")
+    H.show("compact", "glass", true)
+    eq(H.frame(), glassFrame, "...and Glass again reuses the glass one")
+    H.hide()
+
     local ok, why = H.startFace()
     eq(ok, false, "the face test needs a target: " .. tostring(why))
     eq(H.pollFace(), false, "...and polls nothing before Read face")
