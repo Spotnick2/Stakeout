@@ -283,7 +283,44 @@ do
         "back to Forever: its own frame, the glass one hidden")
     H.show("compact", "glass", true)
     eq(H.frame(), glassFrame, "...and Glass again reuses the glass one")
+    -- Forever -> Glass -> Forever: each frame stands against UIParent, never
+    -- against the other look's frame (Codex on #91: a circular anchor).
+    H.show("compact", "forever", true)
+    local foreverFrame = H.frame()
+    local function anchoredTo(f, other)
+        for _, p in ipairs(f._points or {}) do if p[2] == other then return true end end
+        return false
+    end
+    check(not anchoredTo(foreverFrame, glassFrame) and not anchoredTo(glassFrame, foreverFrame),
+        "a look round trip leaves neither frame anchored to the other")
     H.hide()
+
+    -- A rejected Read face throws, so the procedure stays on that step; the
+    -- command form just returns the reason (Codex on #91).
+    WoW.units = {}
+    local okStep, whyStep = pcall(H.startFaceStep)
+    check(not okStep and tostring(whyStep):find("no target", 1, true), "a rejected read keeps the step: " .. tostring(whyStep))
+    eq(H.faceDrawn(), false, "...and nothing counts as drawn")
+
+    -- Stakeout still showing a face the mockup missed: a boolean from either
+    -- representation (#90's btn.portrait, or main's btn.portraitOf).
+    WoW.allowGlobal("StakeoutBtn1")
+    WoW.allowGlobal("StakeoutBtn2")
+    local b1 = CreateFrame("Button", "StakeoutBtn1", UIParent)
+    b1.npcName, b1.portrait = "Face Kept", {}
+    b1.label = b1:CreateFontString()
+    b1.icon = b1:CreateTexture()
+    local b2 = CreateFrame("Button", "StakeoutBtn2", UIParent)
+    b2.npcName, b2.portraitOf = "Old Face", "Old Face"
+    b2.label = b2:CreateFontString()
+    b2.icon = b2:CreateTexture()
+    _G.StakeoutBtn1, _G.StakeoutBtn2 = b1, b2
+    local rows = H.stakeoutRows()
+    eq(rows[1] and rows[1].stakeoutFace, true, "#90's cache: true")
+    eq(rows[2] and rows[2].stakeoutFace, true, "main's portraitOf: true")
+    b2.portraitOf = "Someone Else"
+    eq(H.stakeoutRows()[2].stakeoutFace, false, "a face of another name: false, never a texture")
+    _G.StakeoutBtn1, _G.StakeoutBtn2 = nil, nil
 
     local ok, why = H.startFace()
     eq(ok, false, "the face test needs a target: " .. tostring(why))

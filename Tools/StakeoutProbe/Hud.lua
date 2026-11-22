@@ -86,11 +86,12 @@ local function stakeoutRows()
         if name then
             local label = btn.label and plain(btn.label:GetText())
             local group = (label == nil or label == "") and 1 or (btn.friendly and 2 or 3)
-            -- btn.portrait: Stakeout still shows a face it drew before the
-            -- mockup opened, which the mockup can't copy (Codex, P3).
+            -- Stakeout still shows a face it drew before the mockup opened,
+            -- which the mockup can't copy (Codex, P3): btn.portrait since
+            -- #90's cache, btn.portraitOf before it. A boolean either way.
             out[#out + 1] = { group = group, name = name, unit = btn.unit, icon = btn.icon and btn.icon:GetTexture(),
                               progress = shortProgress(btn.tooltipLines), hunt = isHunt(btn.tooltipLines),
-                              stakeoutFace = btn.portrait ~= nil }
+                              stakeoutFace = btn.portrait ~= nil or btn.portraitOf == name }
         end
     end
     return out
@@ -174,6 +175,19 @@ local function newRow(name)
     return r
 end
 
+-- Places `f` where `old` stands, by screen coordinates against UIParent:
+-- never anchored to the other look's frame, which a round trip would make
+-- circular (Codex on #91).
+local function standWhere(f, old)
+    local left, top = old and old:GetLeft(), old and old:GetTop()
+    f:ClearAllPoints()
+    if type(left) == "number" and type(top) == "number" then
+        f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+    else
+        f:SetPoint("CENTER", UIParent, "CENTER", 320, 0)
+    end
+end
+
 -- The current look's frame, made and dressed once per look, where the
 -- previous one stood.
 local function build(look)
@@ -181,8 +195,7 @@ local function build(look)
     local L = looks[look]
     if L then
         if frame and frame ~= L.frame then
-            L.frame:ClearAllPoints()
-            L.frame:SetPoint("TOPLEFT", frame, "TOPLEFT")
+            standWhere(L.frame, frame)
             frame:Hide()
         end
         frame, hud.rows, hud.faces, hud.look = L.frame, L.rows, L.faces, look
@@ -190,12 +203,8 @@ local function build(look)
     end
     local prev = frame
     frame = CreateFrame("Frame", "StakeoutProbeHud_" .. look, UIParent, "BackdropTemplate")
-    if prev then
-        frame:SetPoint("TOPLEFT", prev, "TOPLEFT")
-        prev:Hide()
-    else
-        frame:SetPoint("CENTER", UIParent, "CENTER", 320, 0)
-    end
+    standWhere(frame, prev)
+    if prev then prev:Hide() end
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
@@ -361,6 +370,12 @@ end
 -- Starts reading the target's display ID through a model (no unit API
 -- returns it). The model loads over a few frames: pollFace reads it.
 local function startFace()
+    -- A fresh attempt: nothing from the last one survives (Codex on #91).
+    face = {}
+    if faceFrame then
+        faceFrame.idTex:SetTexture(nil)
+        faceFrame.right:SetText("")
+    end
     local name = unitName("target")
     if not name then return false, "no target (or its name is secret)" end
     local okDead, dead = pcall(G("UnitIsDead"), "target")
@@ -381,11 +396,14 @@ local function startFace()
 end
 
 -- true, id, how long it took, once the ID is read and the face drawn from it.
+-- Anything short of a completed draw keeps waiting (a secret ID, a missing
+-- function, a failed call), so a timeout or an early Done stays inconclusive
+-- (Codex on #91): face.drawn is what the step's check reads.
 local function pollFace()
     if not face.name then return false, "Read face first" end
     local ok, id = pcall(model.GetDisplayInfo, model)
     if not ok then return false, "GetDisplayInfo: " .. tostring(id) end
-    if secret(id) then return true, "the display ID is secret" end
+    if secret(id) then return false, "the display ID is secret" end
     if type(id) ~= "number" or id <= 0 then
         return false, ("display ID %s after %.1f s"):format(tostring(id), GetTime() - face.started)
     end
@@ -393,15 +411,31 @@ local function pollFace()
     local fn = G("SetPortraitTextureFromCreatureDisplayID")
     if type(fn) ~= "function" then
         f.right:SetText("the function is missing")
-        return true, id, "SetPortraitTextureFromCreatureDisplayID is missing"
+        return false, "SetPortraitTextureFromCreatureDisplayID is missing"
     end
     local drawn, err = pcall(fn, f.idTex, id)
+    if not drawn then
+        f.right:SetText("drawing failed")
+        return false, "SetPortraitTextureFromCreatureDisplayID: " .. tostring(err)
+    end
     f.right:SetText(("from display ID %d"):format(id))
     local took = ("%.1f s"):format(GetTime() - face.started)
-    say(("face: %s display ID %d after %s, drawn %s%s"):format(face.name, id, took, tostring(drawn),
-        drawn and "" or (": " .. tostring(err))))
-    face.name = nil
-    return true, id, took, drawn and "drawn" or ("error: " .. tostring(err))
+    say(("face: %s display ID %d after %s, drawn"):format(face.name, id, took))
+    face.name, face.drawn = nil, true
+    return true, id, took, "drawn"
+end
+
+-- The procedure's Read face: a rejected read throws, which keeps the step
+-- (ForeverProbe's runner advances on any normal return). The /fp so face
+-- command calls startFace itself and just reports the reason.
+local function startFaceStep()
+    local ok, why = startFace()
+    if not ok then error(why, 0) end
+    return ok, why
+end
+
+local function faceDrawn()
+    return face.drawn == true, face.drawn and "drawn" or "no face drawn from the display ID"
 end
 
 local function hideFace()
@@ -484,19 +518,23 @@ Probe:Steps("face", {
     title = "Stakeout: a face from a display ID alone (#88, question 3)",
     { text = "Target a living mob or NPC (not a corpse), out of combat, then press Read face. A small frame "
           .. "opens above the centre: its face from the unit on the left.", button = "Read face",
-      run = function() return startFace() end },
+      run = startFaceStep },
     { text = "Reading its display ID (the model takes a moment to load) and drawing a face from that number "
-          .. "alone, on the right.", wait = function() return pollFace() end, timeout = 15,
+          .. "alone, on the right.", wait = function() return pollFace() end, timeout = 15, check = faceDrawn,
       screenshot = "face-from-display-id" },
-    { text = "Does the face on the right show the same creature as the one on the left?", ask = true },
+    { text = "Does the face on the right show the same creature as the one on the left? (Not sure if the right "
+          .. "side is empty.)", ask = true },
     { text = "Once more with a different creature (another kind of mob, or an NPC): target it, then press Read "
-          .. "face.", button = "Read face", run = function() return startFace() end },
-    { text = "Reading it.", wait = function() return pollFace() end, timeout = 15, screenshot = "face-2" },
-    { text = "Does the right one match the left one this time too?", ask = true },
+          .. "face.", button = "Read face", run = startFaceStep },
+    { text = "Reading it.", wait = function() return pollFace() end, timeout = 15, check = faceDrawn,
+      screenshot = "face-2" },
+    { text = "Does the right one match the left one this time too? (Not sure if the right side is empty.)",
+      ask = true },
     { text = "Closing the frame.", auto = true, run = function() return hideFace() end },
 })
 
 NS._test = NS._test or {}
 NS._test.hud = { show = show, hide = hide, render = render, rows = function() return hud.rows end,
                  frame = function() return frame end, shortProgress = shortProgress, readFace = readFace,
-                 startFace = startFace, pollFace = pollFace }
+                 startFace = startFace, pollFace = pollFace, startFaceStep = startFaceStep,
+                 faceDrawn = faceDrawn, stakeoutRows = stakeoutRows }
