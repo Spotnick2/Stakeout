@@ -640,7 +640,8 @@ end
 -- NPC and moved onto whichever button has the name now, as RestedXP does: a
 -- name's button changes place as the list changes, and a portrait can't be
 -- copied from one texture to another. At most PORTRAIT_MAX are kept; a new
--- name takes the least recently used one that no button shows.
+-- name takes the least recently used one that no button shows, and gets none
+-- when every one is on a button.
 local PORTRAIT_MAX = 30
 local portraits, portraitCount = {}, 0   -- name -> texture
 local portraitHome                       -- a hidden frame holding the unused ones
@@ -655,6 +656,10 @@ local function PortraitFor(name, create)
             end
             if oldName then
                 tex, portraits[oldName] = portraits[oldName], nil
+            else
+                -- Every one is on a button: no new face, the button keeps
+                -- its icon (Codex on #90: the cap must hold).
+                return nil
             end
         end
         if not tex then
@@ -709,7 +714,7 @@ local function UpdateButtonLooks(list)
         btn.friendly = e.friendly
         local seen = e.unit and ReadNPC(e.unit) == e.name
         local portrait = PortraitFor(e.name, seen)
-        if seen then SetPortraitTexture(portrait, e.unit) end
+        if seen and portrait then SetPortraitTexture(portrait, e.unit) end
         if portrait then
             PutPortrait(btn, portrait)
         else
@@ -718,6 +723,9 @@ local function UpdateButtonLooks(list)
         end
         btn.label:SetText(e.group > 1 and ShortLabel(e.name, questNames) or "")
     end
+    -- Buttons the layout no longer uses give their faces back, so a hidden
+    -- button never pins one (Codex on #90).
+    for i = #list + 1, #targetButtons do TakePortrait(targetButtons[i]) end
 end
 
 -- The signature of the layout on the frame now: nil until one is applied. A
@@ -736,36 +744,35 @@ local function RenderTargetFrame()
     UpdateButtonLooks(list)
 end
 
--- In combat the buttons keep the layout applied before it, but a face can
--- still be drawn: an NPC first seen mid-fight is often gone when it ends, and
--- its button would never get one. Only what the client allows a protected
--- frame's regions in combat (porting guide, measured on 70959): a texture
--- change on the button's own icon. The name's cache texture, on its plain
--- hidden frame, is drawn too, and moves onto the button after combat.
-local function UpdateFacesInCombat()
-    if not appliedList then return end
-    local units = {}
-    for _, e in ipairs(DesiredButtons()) do
-        if e.unit then units[e.name] = e.unit end
-    end
+-- A sighting draws the NPC's face into its name's cache at once, combat or
+-- not, while the token still shows it: an NPC first seen mid-fight is often
+-- gone when the fight ends (Codex on #90). Called from the sightings
+-- themselves (the watch list's Sighted, Quests.lua's Hold), never through
+-- DesiredButtons, whose quest selection would remember the wrong incumbents.
+-- In combat the buttons keep the layout applied before it; a button already
+-- showing this name gets the face on its own icon, a texture change, which
+-- the client allows a protected frame's regions in combat (porting guide,
+-- 70959). The cache texture moves onto the button after combat.
+local function CacheFace(name, unit)
+    if type(name) ~= "string" or type(unit) ~= "string" or ReadNPC(unit) ~= name then return end
+    local tex = PortraitFor(name, true)
+    if not tex then return end
+    SetPortraitTexture(tex, unit)
+    if not (InCombatLockdown() and appliedList) then return end
     for i, e in ipairs(appliedList) do
-        local btn, unit = targetButtons[i], units[e.name]
-        if btn and btn:IsShown() and unit and ReadNPC(unit) == e.name then
-            local tex = PortraitFor(e.name, true)
-            SetPortraitTexture(tex, unit)
-            if btn.portrait ~= tex then SetPortraitTexture(btn.icon, unit) end
+        local btn = targetButtons[i]
+        if e.name == name and btn and btn:IsShown() and btn.portrait ~= tex then
+            SetPortraitTexture(btn.icon, unit)
         end
     end
 end
 
 -- Every change to the buttons comes through here. The frame is protected, so
--- in combat this only notes that a refresh is owed (and draws faces);
--- OnCombatEnd refreshes.
+-- in combat this only notes that a refresh is owed; OnCombatEnd refreshes.
 local function RefreshTargetFrame()
     if not targetFrame then return end
     if InCombatLockdown() then
         pendingRefresh = true
-        UpdateFacesInCombat()
         return
     end
     pendingRefresh = false
@@ -827,6 +834,7 @@ local function Sighted(name, guid, unit, isPlate)
     if isPlate then entry.plates[unit] = guid or true end
     entry.unitId = unit
     entry.lastSeen = GetTime()
+    CacheFace(name, unit)
     -- Only a new name changes the buttons; rebuilding on every mouseover
     -- would also hide the tooltip of a hovered button.
     if isNew then
@@ -2178,7 +2186,7 @@ end
 -------------------------------------------------------------------------------
 ns.core = {
     Print = Print, IsSecret = IsSecret, ReadNPC = ReadNPC, RegisterEvents = RegisterEvents,
-    SetConfig = SetConfig, RequestFrameRefresh = RefreshTargetFrame, Rescan = Rescan,
+    SetConfig = SetConfig, RequestFrameRefresh = RefreshTargetFrame, CacheFace = CacheFace, Rescan = Rescan,
     MacroSafeName = MacroSafeName, NAME_MAX = NAME_MAX, IsWatchDisplayed = IsWatchDisplayed,
     IsRefreshPending = function() return pendingRefresh end,
     SetQuestMute = SetQuestMute, PruneQuestMutes = PruneQuestMutes, LINGER = LINGER,
@@ -2203,6 +2211,7 @@ Stakeout._test = {
     LINGER = LINGER, MEASURED_ON_BUILD = MEASURED_ON_BUILD,
     Tick = Tick, MacroSafeName = MacroSafeName, ResetDetections = ResetDetections,
     lastApplied = function() return lastApplied end,
+    portraitCount = function() return portraitCount end, PORTRAIT_MAX = PORTRAIT_MAX, CacheFace = CacheFace,
     pendingRefresh = function() return pendingRefresh end,
     look = function() return Theme.Active() end,
 }

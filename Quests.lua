@@ -312,6 +312,8 @@ local function Hold(m, token, guid, name)
     m.observed = name
     m.unit = token
     m.lastSeen = GetTime()
+    -- Its face, while this token shows it (Stakeout.lua's CacheFace).
+    if name and type(C.CacheFace) == "function" then C.CacheFace(name, token) end
     Touch(m)
 end
 
