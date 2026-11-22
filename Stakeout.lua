@@ -59,7 +59,7 @@ local defaults = {
     followGlassUI    = true,    -- with Glass UI loaded, wear its look (Theme.lua; after a /reload)
     questTargets     = false,   -- experimental: buttons for what the quest log wants (Quests.lua)
     questOther       = false,   -- ...and for other units the client relates to a quest
-    questHunt        = false,   -- ...and for quest mobs not seen yet, with a spawn on this map (#81)
+    questHunt        = false,   -- ...and for quest mobs not seen yet, with a spawn within reach (#81)
     questMutes       = {},      -- [muteKey] = true; see SetQuestMute
 }
 
@@ -633,8 +633,69 @@ end
 
 -- The insecure part, on every refresh: who each button is for, its tooltip,
 -- its label and its picture. The picture is the NPC's portrait while a unit
--- token shows it, and stays while the button lingers after that (the portrait
--- is of that NPC, at most LINGER seconds old); otherwise the button's icon.
+-- token shows it, then for the rest of the session wherever that name's button
+-- is (a portrait, once drawn, is a still image); the button's icon until then.
+--
+-- One texture per name, drawn by SetPortraitTexture while a token shows the
+-- NPC and moved onto whichever button has the name now, as RestedXP does: a
+-- name's button changes place as the list changes, and a portrait can't be
+-- copied from one texture to another. At most PORTRAIT_MAX are kept; a new
+-- name takes the least recently used one that no button shows.
+local PORTRAIT_MAX = 30
+local portraits, portraitCount = {}, 0   -- name -> texture
+local portraitHome                       -- a hidden frame holding the unused ones
+
+local function PortraitFor(name, create)
+    local tex = portraits[name]
+    if not tex and create then
+        if portraitCount >= PORTRAIT_MAX then
+            local oldName
+            for n, t in pairs(portraits) do
+                if not t.shownOn and (not oldName or t.lastUsed < portraits[oldName].lastUsed) then oldName = n end
+            end
+            if oldName then
+                tex, portraits[oldName] = portraits[oldName], nil
+            end
+        end
+        if not tex then
+            portraitHome = portraitHome or CreateFrame("Frame")
+            portraitHome:Hide()
+            tex = portraitHome:CreateTexture(nil, "BACKGROUND")
+            tex:Hide()
+            portraitCount = portraitCount + 1
+        end
+        portraits[name] = tex
+    end
+    if tex then tex.lastUsed = GetTime() end
+    return tex
+end
+
+local function TakePortrait(btn)
+    local tex = btn.portrait
+    if not tex then return end
+    if btn.iconMask then tex:RemoveMaskTexture(btn.iconMask) end
+    tex:Hide()
+    tex:SetParent(portraitHome)
+    btn.portrait, tex.shownOn = nil, nil
+    btn.icon:Show()
+end
+
+-- Over the button's icon, placed and rounded like it (Theme.Button).
+local function PutPortrait(btn, tex)
+    if btn.portrait == tex then return end
+    TakePortrait(btn)
+    if tex.shownOn then TakePortrait(tex.shownOn) end
+    tex:SetParent(btn)
+    tex:ClearAllPoints()
+    local inset = btn.iconInset or 0
+    tex:SetPoint("TOPLEFT", btn, "TOPLEFT", inset, -inset)
+    tex:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -inset, inset)
+    if btn.iconMask then tex:AddMaskTexture(btn.iconMask) end
+    tex:Show()
+    btn.icon:Hide()
+    btn.portrait, tex.shownOn = tex, btn
+end
+
 local function UpdateButtonLooks(list)
     local questNames = {}
     for _, e in ipairs(list) do
@@ -646,12 +707,14 @@ local function UpdateButtonLooks(list)
         btn.unit = e.unit
         btn.tooltipLines = e.tooltip
         btn.friendly = e.friendly
-        if e.unit and ReadNPC(e.unit) == e.name then
-            SetPortraitTexture(btn.icon, e.unit)
-            btn.portraitOf = e.name
-        elseif btn.portraitOf ~= e.name then
+        local seen = e.unit and ReadNPC(e.unit) == e.name
+        local portrait = PortraitFor(e.name, seen)
+        if seen then SetPortraitTexture(portrait, e.unit) end
+        if portrait then
+            PutPortrait(btn, portrait)
+        else
+            TakePortrait(btn)
             btn.icon:SetTexture(e.icon or GetButtonIcon())
-            btn.portraitOf = nil
         end
         btn.label:SetText(e.group > 1 and ShortLabel(e.name, questNames) or "")
     end
@@ -1795,7 +1858,7 @@ local function CreateConfigFrame()
         -- Hunt mode (#81): the same switch as /stakeout quests hunt.
         y = y - 44
         local huntCheck = Check(f, x, y, "Show quest mobs before they're seen",
-            "Needs Questie. Nearest spawns on this map; click to find one.")
+            "Needs Questie. Spawns within about 80 yd, nearest first; click to find one.")
         huntCheck:SetScript("OnClick", function(self)
             quests.SetHunt(self:GetChecked() and true or false)
             ShowQuestCheck()

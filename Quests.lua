@@ -28,17 +28,19 @@ local REBUILD_DELAY = 0.2    -- quest events come in bursts (FOREVER-PROBE.md, `
 
 -- The tiers a target can be in. NEAR is "the player is near a known spawn",
 -- from the provider's Spawns, for the NPCs to turn in to or talk to. HUNT
--- (#81, opt-in) is a mob the quests still want with a known spawn on the
--- player's map, not seen yet: the button is there to be clicked until it finds
--- one. It only fills the slots the others leave.
+-- (#81, opt-in) is a mob the quests still want with a known spawn within a
+-- click's reach (NEAR_IN / NEAR_OUT), not seen yet: the button is there to be
+-- clicked until it finds one. It only fills the slots the others leave.
 local VISIBLE, LINGERING, NEAR, HUNT, NONE = 3, 2, 1, 0.5, 0
 local TIERS = { VISIBLE, LINGERING, NEAR, HUNT }   -- the selection's order
 
 -- Yards. An NPC is near within NEAR_IN of one of its spawns and stays near
 -- until NEAR_OUT, so standing at the edge doesn't flicker the button. A click
 -- reaches a friendly NPC with no nameplate at 100 yd and more (FOREVER-PROBE.md,
--- `range`). Mobs get no NEAR: reaching a live hostile with no plate is unmeasured (HUNT,
--- opt-in, is how to find out).
+-- `range`). Mobs get no NEAR: reaching a live hostile with no plate is unmeasured.
+-- HUNT (opt-in) uses the same radius: a mob whose spawns are all farther than a
+-- click reaches gets no button (a map-wide hunt filled every slot with mobs
+-- out of reach).
 local NEAR_IN, NEAR_OUT = 80, 100
 
 -- Raid markers for the right-click /tm: skull, cross, square for mobs; star,
@@ -413,9 +415,10 @@ local function UpdateNear(m, pos)
     end
     m.dist = best
     m.near = near and best ~= nil and best <= (m.near and NEAR_OUT or NEAR_IN)
-    -- Anywhere on the map: the nearest spawn ranks first (Prefer), and the
-    -- click is what finds out whether one is in reach.
-    m.hunt = hunt and best ~= nil
+    -- Within a click's reach of a spawn, with the same in/out margin as NEAR
+    -- so the edge doesn't flicker. The nearest spawn still ranks first
+    -- (Prefer); the click finds out whether one is there now.
+    m.hunt = hunt and best ~= nil and best <= (m.hunt and NEAR_OUT or NEAR_IN)
 end
 
 -- Every member's NEAR, from one read of the player's position (only when one
@@ -1138,7 +1141,7 @@ local function PrintState()
         C.Print("Without quest data (Questie), only mobs you see whose name is in a kill objective get a button.")
     end
     if HuntEnabled() then
-        C.Print("Hunt: |cff00ff00on|r, quest mobs with a spawn on this map get a button before they're seen%s. " ..
+        C.Print("Hunt: |cff00ff00on|r, quest mobs with a spawn within about 80 yards get a button before they're seen%s. " ..
             "|cff00ff00/stakeout quests hunt off|r turns it off.", HasProvider() and "" or " (needs Questie's data)")
     else
         C.Print("Hunt: off. |cff00ff00/stakeout quests hunt on|r shows quest mobs before they're seen, to click until " ..

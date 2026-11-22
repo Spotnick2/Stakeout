@@ -177,20 +177,34 @@ eq(T.buttons[2].label._width, 90 - 8, "...and alone on its line, its label may u
 eq(xOf(T.buttons[2]), (90 - 26) / 2, "a lone button is centred in the frame")
 eq(xOf(T.buttons[1]), (90 - 26) / 2, "...and so is a lone watch button on its own line")
 
--- The picture: the face while a token shows the NPC, kept while the button
--- lingers after that, and never carried over to another NPC in that place.
+-- The picture: the face while a token shows the NPC, then for the session
+-- wherever that name's button is (as RestedXP keeps them), and never on
+-- another NPC's button.
 WoW.SetUnit("nameplate2", { name = "Kul Tiras Sailor", guid = "Creature-0-0-0-0-3128-1", plate = true })
 specs = { spec("Kul Tiras Sailor", "enemy", { unit = "nameplate2", icon = "QI" }) }
 T.RefreshTargetFrame()
 local qb = T.buttons[2]
-eq(qb.icon.portrait, "nameplate2", "in sight, a quest button shows the NPC's face")
-qb.icon._file = nil
+local face = qb.portrait
+check(face and face.portrait == "nameplate2" and face:IsShown() and face:GetParent() == qb,
+    "in sight, a quest button shows the NPC's face")
+eq(qb.icon:IsShown(), false, "...over its icon")
 specs = { spec("Kul Tiras Sailor", "enemy", { icon = "QI" }) }
 T.RefreshTargetFrame()
-eq(qb.icon._file, nil, "lingering, it keeps the face instead of going back to the icon")
+eq(qb.portrait, face, "out of sight, it keeps the face instead of going back to the icon")
 specs = { spec("Kul Tiras Marine", "enemy", { icon = "QI" }) }
 T.RefreshTargetFrame()
-eq(qb.icon._file, "QI", "another NPC in that place gets the icon, not the old face")
+check(qb.portrait == nil and qb.icon:IsShown() and qb.icon._file == "QI",
+    "another NPC in that place gets the icon, not the old face")
+eq(face:IsShown(), false, "...and the face is put away")
+specs = { spec("Kul Tiras Marine", "enemy", { icon = "QI" }), spec("Kul Tiras Sailor", "enemy", { icon = "QI" }) }
+T.RefreshTargetFrame()
+check(T.buttons[3].portrait == face and face:GetParent() == T.buttons[3] and face:IsShown(),
+    "the Sailor back, in another place, not in sight: its face follows its name")
+eq(T.buttons[2].portrait, nil, "...and the Marine, never seen, keeps the icon")
+specs = { spec("Kul Tiras Sailor", "enemy", { icon = "QI" }) }
+T.RefreshTargetFrame()
+check(T.buttons[2].portrait == face and face:GetParent() == T.buttons[2] and face:IsShown()
+    and T.buttons[3].portrait == nil, "moved back: one face, on one button")
 
 -- Six watch names wrap at five; the quest group still starts on a fresh line.
 clean()

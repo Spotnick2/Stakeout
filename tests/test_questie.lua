@@ -283,8 +283,8 @@ WoW.questLog = {}
 rebuild()
 
 ------------------------------------------------------------
--- Hunt mode (#81): mobs with a spawn on this map get a button before
--- they're seen, in the slots nothing seen or near wants
+-- Hunt mode (#81): mobs with a spawn within a click's reach get a button
+-- before they're seen, in the slots nothing seen or near wants
 ------------------------------------------------------------
 do
     local function tip(name)
@@ -293,10 +293,12 @@ do
         end
     end
     -- Clacker drops the eye, and spawns at 60, 80; the crawler drops it too,
-    -- 1000 yd east of that; a third dropper is only known on another map.
-    DB.Npc[3106].spawns = { [14] = { { 60.0 + 1000 / W * 100, 80.0 } } }
+    -- 70 yd east of that; a third dropper spawns 1000 yd east, out of reach;
+    -- a fourth is only known on another map.
+    DB.Npc[3106].spawns = { [14] = { { 60.0 + 70 / W * 100, 80.0 } } }
     DB.Npc[3110] = { name = "Far Makrura", spawns = { [215] = { { 50.0, 50.0 } } } }
-    DB.Item[5002].npcDrops = { 3103, 3106, 3110 }
+    DB.Npc[3111] = { name = "Distant Makrura", spawns = { [14] = { { 60.0 + 1000 / W * 100, 80.0 } } } }
+    DB.Item[5002].npcDrops = { 3103, 3106, 3110, 3111 }
     local eyes = { type = "item", text = "1/4 Intact Makrura Eye", numFulfilled = 1, numRequired = 4 }
     WoW.questLog = { { questID = 818, title = "A Solvent Spirit", complete = false, rows = { eyes } } }
     stand(60, 80, 5)
@@ -307,7 +309,8 @@ do
     Q.SetHunt(true)
     WoW.flushTimers()
     eq(StakeoutDB.questHunt, true, "turned on through the owner")
-    eq(order(), "Makrura Clacker,Pygmy Surf Crawler", "on: every dropper with a spawn on this map, none from another")
+    eq(order(), "Makrura Clacker,Pygmy Surf Crawler",
+        "on: every dropper with a spawn within reach (5, 65 yd); none 995 yd off, none from another map")
     local b = T.buttons[1]
     check(not b.friendly, "...in the mob row")
     eq(b:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Makrura Clacker\n/cleartarget [dead]",
@@ -316,7 +319,17 @@ do
     check(tip("Makrura Clacker"):find("1/4 Intact Makrura Eye", 1, true), "...under the objective it serves")
 
     stand(60, 80, 3000); Q.Tick()
-    eq(order(), "Makrura Clacker,Pygmy Surf Crawler", "3000 yd off, the same map: still there (the click finds out)")
+    eq(order(), "", "3000 yd off, the same map: none, a click wouldn't reach them")
+    stand(60, 80, 1000); Q.Tick()
+    eq(order(), "Distant Makrura", "at the distant one's spawn: only it")
+    stand(60, 80, 1000 + 90); Q.Tick()
+    eq(order(), "Distant Makrura", "90 yd from it: kept (it goes at 100, so the edge doesn't flicker)")
+    stand(60, 80, 1000 + 101); Q.Tick()
+    eq(order(), "", "101 yd: gone")
+    stand(60, 80, 1000 + 90); Q.Tick()
+    eq(order(), "", "back to 90: not yet (it comes back at 80)")
+    stand(60, 80, 1000 + 79); Q.Tick()
+    eq(order(), "Distant Makrura", "79: back")
     WoW.position = { map = 1412, x = 0.5, y = 0.5 }
     Q.Tick()
     eq(order(), "Far Makrura", "on the other map, only the dropper known there")
@@ -357,7 +370,7 @@ do
             plate = true, attackable = true })
         WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate" .. i)
     end
-    stand(60 + 1000 / W * 100, 80, 5)
+    stand(60 + 70 / W * 100, 80, 5)
     Q.Tick()
     local shown = order()
     eq(select(2, shown:gsub("Mob ", "")), 7, "hunt off: the seven seen mobs")
@@ -365,7 +378,7 @@ do
     WoW.flushTimers()
     shown = order()
     check(shown:find("Pygmy Surf Crawler", 1, true) and not shown:find("Makrura Clacker", 1, true),
-        "hunt on: seen mobs keep theirs; the last slot goes to the nearer dropper (5 yd vs 1000): " .. shown)
+        "hunt on: seen mobs keep theirs; the last slot goes to the nearer dropper (5 yd vs 75): " .. shown)
     stand(60, 80, 5); Q.Tick()
     shown = order()
     check(shown:find("Pygmy Surf Crawler", 1, true) and not shown:find("Makrura Clacker", 1, true),

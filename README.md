@@ -93,7 +93,7 @@ Blizzard's Forever client doesn't allow some of what Stakeout did on TBC:
   NPC to turn a finished quest in to gets one while you're within about 80 yards of where Questie says they stand.
   Questie has no droppers for many of Forever's own quest items; those get no button.
 - Hunt mode (off by default, needs Questie) gives the mobs your unfinished quests want a button as soon as Questie
-  knows they spawn on your map, nearest first, in the slots mobs you can see leave free. Its tooltip says "Not seen
+  knows they spawn within about 80 yards of you, nearest first, in the slots mobs you can see leave free. Its tooltip says "Not seen
   yet". Clicking it looks for one by name: if one is in reach it becomes your target. It's your click, not
   detection, so nothing alerts until you find one.
 - Hover a button to see roughly how far its NPC is (e.g. "25-30 yd"), while a nameplate, your target or your
