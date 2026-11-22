@@ -114,8 +114,11 @@ so act on it then. Bump `MEASURED_ON_BUILD` after re-measuring.
   *every* call, for names that don't exist too, so it can't detect anything. RXPGuides disables it on Forever
   for the same reason. Don't bring it back.
 - **No addon-placed raid marks.** `SetRaidTarget` from addon code is forbidden. Marking happens through the
-  player's click on a secure button: the left-click macro ends with `/tm !<index>` (`!` keeps the mark on a second
-  click; plain `/tm N` toggles it off, §12 `range`), and the right-click macro only targets (#70).
+  player's click on a secure button: the left-click macro ends with `/tm [exists,nodead] !<index>` (`!` keeps the mark on a
+  second click; plain `/tm N` toggles it off, §12 `range`), and the right-click macro only targets (#70). Keep the
+  `[exists,nodead]`: without it `/tm` calls `SetRaidTarget` on no target whenever the click finds no live unit (only
+  corpses, which `/cleartarget [dead]` drops, or none in reach), and spam-clicking showed "You can't do that right
+  now" where RestedXP, which stays on the corpse, didn't.
 - **No combat log.** Registering `COMBAT_LOG_EVENT_UNFILTERED` is forbidden (returns `false` and raises a
   forbidden action), and there is no reader. Deaths come from the **`UNIT_DIED`** event (payload: GUID).
 - **SavedVariables are written but never read back**, per-character included. Every session starts from

@@ -478,9 +478,12 @@ local function DesiredButtons()
         -- player's click: left-click targets and marks in one press, as
         -- RestedXP's buttons do, and right-click only targets. /tm !N keeps
         -- the mark on a second click (/tm N would take it off: the `range`
-        -- probe), and does nothing without a target.
+        -- probe). [exists,nodead] skips the mark when the click ends with no
+        -- live target: a bare /tm calls SetRaidTarget on no target anyway,
+        -- the source of the "You can't do that right now" a spammed
+        -- click gave once the mob was dead (RestedXP stays on the corpse).
         if StakeoutDB.enableMarking then
-            entry.macrotext = fmt("%s\n/tm !%d", target, StakeoutDB.markerIndex)
+            entry.macrotext = fmt("%s\n/tm [exists,nodead] !%d", target, StakeoutDB.markerIndex)
             entry.macrotext2 = target
         end
         list[#list + 1] = entry

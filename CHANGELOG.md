@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Clicking a target button over and over no longer shows "You can't do that right now" once the mob is dead or
+  none is in reach. The click now only marks a live target.
+
 ## v2.6.0 - 2026-11-18
 
 ### Hunt for quest mobs you haven't seen yet
