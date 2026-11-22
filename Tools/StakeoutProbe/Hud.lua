@@ -513,8 +513,13 @@ Probe:Steps("hud", {
     { text = "Hiding the mockup.", auto = true, run = function() return hide() end },
 })
 
+-- The comparisons are note steps, not yes/no questions: the runner moves on
+-- to the next step after a timeout or a Done by hand, so a yes/no would be
+-- answerable over an empty right side (run #495 recorded a "yes" that way).
+-- A note can't be read as a match result, and its check records whether this
+-- attempt drew a face at all (Codex on #91).
 Probe:Steps("face", {
-    rev = 1,
+    rev = 2,
     title = "Stakeout: a face from a display ID alone (#88, question 3)",
     { text = "Target a living mob or NPC (not a corpse), out of combat, then press Read face. A small frame "
           .. "opens above the centre: its face from the unit on the left.", button = "Read face",
@@ -522,14 +527,13 @@ Probe:Steps("face", {
     { text = "Reading its display ID (the model takes a moment to load) and drawing a face from that number "
           .. "alone, on the right.", wait = function() return pollFace() end, timeout = 15, check = faceDrawn,
       screenshot = "face-from-display-id" },
-    { text = "Does the face on the right show the same creature as the one on the left? (Not sure if the right "
-          .. "side is empty.)", ask = true },
+    { text = "Compare the two faces and type what you see in the box: the same creature, a different one, or "
+          .. "nothing on the right. Then press Next.", check = faceDrawn },
     { text = "Once more with a different creature (another kind of mob, or an NPC): target it, then press Read "
           .. "face.", button = "Read face", run = startFaceStep },
     { text = "Reading it.", wait = function() return pollFace() end, timeout = 15, check = faceDrawn,
       screenshot = "face-2" },
-    { text = "Does the right one match the left one this time too? (Not sure if the right side is empty.)",
-      ask = true },
+    { text = "Compare them again and type what you see in the box, then press Next.", check = faceDrawn },
     { text = "Closing the frame.", auto = true, run = function() return hideFace() end },
 })
 

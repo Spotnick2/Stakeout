@@ -325,6 +325,40 @@ do
     local ok, why = H.startFace()
     eq(ok, false, "the face test needs a target: " .. tostring(why))
     eq(H.pollFace(), false, "...and polls nothing before Read face")
+
+    -- Through ForeverProbe's runner: a face that is never drawn (the display
+    -- ID stays 0, run #497) ends the wait by timeout or by Done, and neither
+    -- can give a yes/no match: the comparison is a note step whose check
+    -- FAILs without a draw (Codex on #91).
+    local S = FP.Steps
+    local take, nowFn = FP.Screenshots.Take, S.Now
+    FP.Screenshots.Take = function(_, _, cb) if cb then cb(nil) end end
+    local function faceRun(endWait)
+        WoW.SetUnit("target", { name = "Kurzen Jungle Fighter", guid = "Creature-0-0-0-0-937-1" })
+        fp("steps so face")
+        local rec = FP.db.steps.records["StakeoutProbe/face"]
+        S.Run()
+        eq(rec.at, 2, "Read face on a living target moves on to the wait")
+        endWait()
+        eq(rec.at, 3, "the wait ended")
+        S.Next()
+        local r = rec.results[3]
+        check(r.status ~= "yes" and r.status ~= "no", "no match answer is possible: " .. tostring(r.status))
+        eq(r.check, "FAIL", "the comparison's check fails without a draw")
+        fp("steps stop")
+        return rec
+    end
+    local rec = faceRun(function()
+        local t0 = S.Now()
+        S.Now = function() return t0 + 16 end
+        S.Poll()
+        S.Now = nowFn
+    end)
+    eq(rec.results[2].status, "timeout", "the first run timed out")
+    rec = faceRun(function() S.DoneByHand() end)
+    eq(rec.results[2].check, "FAIL", "Done by hand without a draw: the wait's check fails")
+    FP.Screenshots.Take = take
+    WoW.units = {}
 end
 
 local errors = 0
