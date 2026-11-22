@@ -296,6 +296,35 @@ T.RefreshTargetFrame()
 eq(writes, after, "applied once: the next refresh writes nothing")
 for _, btn in ipairs(T.buttons) do btn.SetAttribute = nil end
 
+-- A face in combat: an NPC first seen mid-fight is often gone when it ends.
+-- It's drawn on the button's own icon (a texture change, which combat allows)
+-- and in the name's cache, which moves onto the button once combat ends.
+clean()
+local function buttonOf(name)
+    for _, b in ipairs(T.buttons) do if b._shown and b.npcName == name then return b end end
+end
+specs = { spec("Bloodscalp Warrior", "enemy", { icon = "QI" }) }
+T.RefreshTargetFrame()
+local wb = buttonOf("Bloodscalp Warrior")
+eq(wb.portrait, nil, "not seen yet: no face")
+countWrites()
+WoW.combat = true
+WoW.SetUnit("nameplate3", { name = "Bloodscalp Warrior", guid = "Creature-0-0-0-0-597-1", plate = true })
+specs = { spec("Bloodscalp Warrior", "enemy", { unit = "nameplate3", icon = "QI" }) }
+ok, err = pcall(T.RefreshTargetFrame)
+check(ok, "a face in combat throws nothing (" .. tostring(err) .. ")")
+eq(writes, 0, "...writes no attribute")
+eq(wb.icon.portrait, "nameplate3", "seen in combat: the face is drawn on the button's icon")
+eq(wb.portrait, nil, "...and the cache texture isn't moved onto the protected button in combat")
+WoW.units = {}
+specs = { spec("Bloodscalp Warrior", "enemy", { icon = "QI" }) }
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+local face = wb.portrait
+check(face and face.portrait == "nameplate3" and face:GetParent() == wb and face:IsShown(),
+    "out of sight when combat ends: the face drawn in the fight goes on the button")
+for _, btn in ipairs(T.buttons) do btn.SetAttribute = nil end
+
 ------------------------------------------------------------
 -- MacroSafeName
 ------------------------------------------------------------

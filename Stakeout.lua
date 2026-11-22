@@ -722,7 +722,8 @@ end
 
 -- The signature of the layout on the frame now: nil until one is applied. A
 -- refresh that wanted a change in combat applies nothing and leaves it alone.
-local lastApplied
+-- appliedList is that layout's list, button by button.
+local lastApplied, appliedList
 local pendingRefresh = false
 
 local function RenderTargetFrame()
@@ -730,17 +731,41 @@ local function RenderTargetFrame()
     local signature = Signature(list)
     if signature ~= lastApplied then
         ApplyLayout(list)
-        lastApplied = signature
+        lastApplied, appliedList = signature, list
     end
     UpdateButtonLooks(list)
 end
 
+-- In combat the buttons keep the layout applied before it, but a face can
+-- still be drawn: an NPC first seen mid-fight is often gone when it ends, and
+-- its button would never get one. Only what the client allows a protected
+-- frame's regions in combat (porting guide, measured on 70959): a texture
+-- change on the button's own icon. The name's cache texture, on its plain
+-- hidden frame, is drawn too, and moves onto the button after combat.
+local function UpdateFacesInCombat()
+    if not appliedList then return end
+    local units = {}
+    for _, e in ipairs(DesiredButtons()) do
+        if e.unit then units[e.name] = e.unit end
+    end
+    for i, e in ipairs(appliedList) do
+        local btn, unit = targetButtons[i], units[e.name]
+        if btn and btn:IsShown() and unit and ReadNPC(unit) == e.name then
+            local tex = PortraitFor(e.name, true)
+            SetPortraitTexture(tex, unit)
+            if btn.portrait ~= tex then SetPortraitTexture(btn.icon, unit) end
+        end
+    end
+end
+
 -- Every change to the buttons comes through here. The frame is protected, so
--- in combat this only notes that a refresh is owed; OnCombatEnd refreshes.
+-- in combat this only notes that a refresh is owed (and draws faces);
+-- OnCombatEnd refreshes.
 local function RefreshTargetFrame()
     if not targetFrame then return end
     if InCombatLockdown() then
         pendingRefresh = true
+        UpdateFacesInCombat()
         return
     end
     pendingRefresh = false
