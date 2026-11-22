@@ -169,6 +169,12 @@ for _, tex in ipairs({ btn.icon, btn.highlight }) do
     local p = tex._points[#tex._points]
     eq(p and p[1] .. p[4] .. p[5], "BOTTOMRIGHT-22", "inset 2 px so the rim shows")
 end
+-- The NPC's face is its own texture, moved onto the button: rounded and inset the same.
+local face = btn.portrait
+check(face and face._masks and #face._masks == 1 and face._masks[1] == btn.iconMask,
+    "a portrait on the button is rounded by the same mask")
+local fp = face and face._points[#face._points]
+eq(fp and fp[1] .. fp[4] .. fp[5], "BOTTOMRIGHT-22", "...and inset the same")
 
 -- Nothing glass builds on the target frame takes the mouse: clicks reach the
 -- secure buttons, and the frame's own drag stays the frame's.

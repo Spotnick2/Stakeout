@@ -59,7 +59,7 @@ local defaults = {
     followGlassUI    = true,    -- with Glass UI loaded, wear its look (Theme.lua; after a /reload)
     questTargets     = false,   -- experimental: buttons for what the quest log wants (Quests.lua)
     questOther       = false,   -- ...and for other units the client relates to a quest
-    questHunt        = false,   -- ...and for quest mobs not seen yet, with a spawn on this map (#81)
+    questHunt        = false,   -- ...and for quest mobs not seen yet, with a spawn within reach (#81)
     questMutes       = {},      -- [muteKey] = true; see SetQuestMute
 }
 
@@ -633,33 +633,118 @@ end
 
 -- The insecure part, on every refresh: who each button is for, its tooltip,
 -- its label and its picture. The picture is the NPC's portrait while a unit
--- token shows it, and stays while the button lingers after that (the portrait
--- is of that NPC, at most LINGER seconds old); otherwise the button's icon.
+-- token shows it, then for the rest of the session wherever that name's button
+-- is (a portrait, once drawn, is a still image); the button's icon until then.
+--
+-- One texture per name, drawn by SetPortraitTexture while a token shows the
+-- NPC and moved onto whichever button has the name now, as RestedXP does: a
+-- name's button changes place as the list changes, and a portrait can't be
+-- copied from one texture to another. At most PORTRAIT_MAX are kept; a new
+-- name takes the least recently used one that no button shows, and gets none
+-- when every one is on a button.
+local PORTRAIT_MAX = 30
+local portraits, portraitCount = {}, 0   -- name -> texture
+local portraitHome                       -- a hidden frame holding the unused ones
+local portraitKeep                       -- while a layout is dressed: its names, whose faces stay
+
+local function PortraitFor(name, create)
+    local tex = portraits[name]
+    if not tex and create then
+        if portraitCount >= PORTRAIT_MAX then
+            local oldName
+            for n, t in pairs(portraits) do
+                -- A face moving to another button is briefly on none: the
+                -- names of the layout being dressed keep theirs (Codex on #90).
+                if not t.shownOn and not (portraitKeep and portraitKeep[n])
+                    and (not oldName or t.lastUsed < portraits[oldName].lastUsed) then oldName = n end
+            end
+            if oldName then
+                tex, portraits[oldName] = portraits[oldName], nil
+            else
+                -- Every one is on a button: no new face, the button keeps
+                -- its icon (Codex on #90: the cap must hold).
+                return nil
+            end
+        end
+        if not tex then
+            portraitHome = portraitHome or CreateFrame("Frame")
+            portraitHome:Hide()
+            tex = portraitHome:CreateTexture(nil, "BACKGROUND")
+            tex:Hide()
+            portraitCount = portraitCount + 1
+        end
+        portraits[name] = tex
+        tex.faceOf = name
+    end
+    if tex then tex.lastUsed = GetTime() end
+    return tex
+end
+
+local function TakePortrait(btn)
+    local tex = btn.portrait
+    if not tex then return end
+    if btn.iconMask then tex:RemoveMaskTexture(btn.iconMask) end
+    tex:Hide()
+    tex:SetParent(portraitHome)
+    btn.portrait, tex.shownOn = nil, nil
+    btn.icon:Show()
+end
+
+-- Over the button's icon, placed and rounded like it (Theme.Button).
+local function PutPortrait(btn, tex)
+    if btn.portrait == tex then return end
+    TakePortrait(btn)
+    if tex.shownOn then TakePortrait(tex.shownOn) end
+    tex:SetParent(btn)
+    tex:ClearAllPoints()
+    local inset = btn.iconInset or 0
+    tex:SetPoint("TOPLEFT", btn, "TOPLEFT", inset, -inset)
+    tex:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -inset, inset)
+    if btn.iconMask then tex:AddMaskTexture(btn.iconMask) end
+    tex:Show()
+    btn.icon:Hide()
+    btn.portrait, tex.shownOn = tex, btn
+end
+
 local function UpdateButtonLooks(list)
-    local questNames = {}
+    local questNames, wanted = {}, {}
     for _, e in ipairs(list) do
+        wanted[e.name] = true
         if e.group > 1 then questNames[#questNames + 1] = e.name end
     end
+    -- Faces of names leaving the layout go back first, so a new name can
+    -- take one of them even when the cache is full (Codex on #90).
+    for _, btn in ipairs(targetButtons) do
+        if btn.portrait and not wanted[btn.portrait.faceOf] then TakePortrait(btn) end
+    end
+    portraitKeep = wanted
     for i, e in ipairs(list) do
         local btn = targetButtons[i]
         btn.npcName = e.name
         btn.unit = e.unit
         btn.tooltipLines = e.tooltip
         btn.friendly = e.friendly
-        if e.unit and ReadNPC(e.unit) == e.name then
-            SetPortraitTexture(btn.icon, e.unit)
-            btn.portraitOf = e.name
-        elseif btn.portraitOf ~= e.name then
+        local seen = e.unit and ReadNPC(e.unit) == e.name
+        local portrait = PortraitFor(e.name, seen)
+        if seen and portrait then SetPortraitTexture(portrait, e.unit) end
+        if portrait then
+            PutPortrait(btn, portrait)
+        else
+            TakePortrait(btn)
             btn.icon:SetTexture(e.icon or GetButtonIcon())
-            btn.portraitOf = nil
         end
         btn.label:SetText(e.group > 1 and ShortLabel(e.name, questNames) or "")
     end
+    portraitKeep = nil
+    -- Buttons the layout no longer uses give their faces back, so a hidden
+    -- button never pins one (Codex on #90).
+    for i = #list + 1, #targetButtons do TakePortrait(targetButtons[i]) end
 end
 
 -- The signature of the layout on the frame now: nil until one is applied. A
 -- refresh that wanted a change in combat applies nothing and leaves it alone.
-local lastApplied
+-- appliedList is that layout's list, button by button.
+local lastApplied, appliedList
 local pendingRefresh = false
 
 local function RenderTargetFrame()
@@ -667,9 +752,32 @@ local function RenderTargetFrame()
     local signature = Signature(list)
     if signature ~= lastApplied then
         ApplyLayout(list)
-        lastApplied = signature
+        lastApplied, appliedList = signature, list
     end
     UpdateButtonLooks(list)
+end
+
+-- A sighting draws the NPC's face into its name's cache at once, combat or
+-- not, while the token still shows it: an NPC first seen mid-fight is often
+-- gone when the fight ends (Codex on #90). Called from the sightings
+-- themselves (the watch list's Sighted, Quests.lua's Hold), never through
+-- DesiredButtons, whose quest selection would remember the wrong incumbents.
+-- In combat the buttons keep the layout applied before it; a button already
+-- showing this name gets the face on its own icon, a texture change, which
+-- the client allows a protected frame's regions in combat (porting guide,
+-- 70959). The cache texture moves onto the button after combat.
+local function CacheFace(name, unit)
+    if type(name) ~= "string" or type(unit) ~= "string" or ReadNPC(unit) ~= name then return end
+    local tex = PortraitFor(name, true)
+    if not tex then return end
+    SetPortraitTexture(tex, unit)
+    if not (InCombatLockdown() and appliedList) then return end
+    for i, e in ipairs(appliedList) do
+        local btn = targetButtons[i]
+        if e.name == name and btn and btn:IsShown() and btn.portrait ~= tex then
+            SetPortraitTexture(btn.icon, unit)
+        end
+    end
 end
 
 -- Every change to the buttons comes through here. The frame is protected, so
@@ -739,6 +847,7 @@ local function Sighted(name, guid, unit, isPlate)
     if isPlate then entry.plates[unit] = guid or true end
     entry.unitId = unit
     entry.lastSeen = GetTime()
+    CacheFace(name, unit)
     -- Only a new name changes the buttons; rebuilding on every mouseover
     -- would also hide the tooltip of a hovered button.
     if isNew then
@@ -1795,7 +1904,7 @@ local function CreateConfigFrame()
         -- Hunt mode (#81): the same switch as /stakeout quests hunt.
         y = y - 44
         local huntCheck = Check(f, x, y, "Show quest mobs before they're seen",
-            "Needs Questie. Nearest spawns on this map; click to find one.")
+            "Needs Questie. Spawns within about 80 yd, nearest first; click to find one.")
         huntCheck:SetScript("OnClick", function(self)
             quests.SetHunt(self:GetChecked() and true or false)
             ShowQuestCheck()
@@ -2090,7 +2199,7 @@ end
 -------------------------------------------------------------------------------
 ns.core = {
     Print = Print, IsSecret = IsSecret, ReadNPC = ReadNPC, RegisterEvents = RegisterEvents,
-    SetConfig = SetConfig, RequestFrameRefresh = RefreshTargetFrame, Rescan = Rescan,
+    SetConfig = SetConfig, RequestFrameRefresh = RefreshTargetFrame, CacheFace = CacheFace, Rescan = Rescan,
     MacroSafeName = MacroSafeName, NAME_MAX = NAME_MAX, IsWatchDisplayed = IsWatchDisplayed,
     IsRefreshPending = function() return pendingRefresh end,
     SetQuestMute = SetQuestMute, PruneQuestMutes = PruneQuestMutes, LINGER = LINGER,
@@ -2115,6 +2224,7 @@ Stakeout._test = {
     LINGER = LINGER, MEASURED_ON_BUILD = MEASURED_ON_BUILD,
     Tick = Tick, MacroSafeName = MacroSafeName, ResetDetections = ResetDetections,
     lastApplied = function() return lastApplied end,
+    portraitCount = function() return portraitCount end, PORTRAIT_MAX = PORTRAIT_MAX, CacheFace = CacheFace,
     pendingRefresh = function() return pendingRefresh end,
     look = function() return Theme.Active() end,
 }

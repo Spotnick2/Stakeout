@@ -338,6 +338,8 @@ function Theme.Button(btn)
         tex:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -ICON_INSET, ICON_INSET)
         tex:AddMaskTexture(mask)
     end
+    -- A portrait moved onto the button later (Stakeout.lua) takes the same.
+    btn.iconMask, btn.iconInset = mask, ICON_INSET
     btn.glassPill = pill
     return true
 end

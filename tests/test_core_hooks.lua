@@ -36,7 +36,7 @@ ns.quests = {
     OnPlateRemoved = function(token) calls.removed[#calls.removed + 1] = token end,
     OnUnitDied = function(guid) calls.died[#calls.died + 1] = guid end,
     Tick = function() calls.ticks = calls.ticks + 1 end,
-    ButtonSpecs = function() return specs end,
+    ButtonSpecs = function() calls.specs = (calls.specs or 0) + 1 return specs end,
 }
 
 local function clean()
@@ -177,20 +177,34 @@ eq(T.buttons[2].label._width, 90 - 8, "...and alone on its line, its label may u
 eq(xOf(T.buttons[2]), (90 - 26) / 2, "a lone button is centred in the frame")
 eq(xOf(T.buttons[1]), (90 - 26) / 2, "...and so is a lone watch button on its own line")
 
--- The picture: the face while a token shows the NPC, kept while the button
--- lingers after that, and never carried over to another NPC in that place.
+-- The picture: the face while a token shows the NPC, then for the session
+-- wherever that name's button is (as RestedXP keeps them), and never on
+-- another NPC's button.
 WoW.SetUnit("nameplate2", { name = "Kul Tiras Sailor", guid = "Creature-0-0-0-0-3128-1", plate = true })
 specs = { spec("Kul Tiras Sailor", "enemy", { unit = "nameplate2", icon = "QI" }) }
 T.RefreshTargetFrame()
 local qb = T.buttons[2]
-eq(qb.icon.portrait, "nameplate2", "in sight, a quest button shows the NPC's face")
-qb.icon._file = nil
+local face = qb.portrait
+check(face and face.portrait == "nameplate2" and face:IsShown() and face:GetParent() == qb,
+    "in sight, a quest button shows the NPC's face")
+eq(qb.icon:IsShown(), false, "...over its icon")
 specs = { spec("Kul Tiras Sailor", "enemy", { icon = "QI" }) }
 T.RefreshTargetFrame()
-eq(qb.icon._file, nil, "lingering, it keeps the face instead of going back to the icon")
+eq(qb.portrait, face, "out of sight, it keeps the face instead of going back to the icon")
 specs = { spec("Kul Tiras Marine", "enemy", { icon = "QI" }) }
 T.RefreshTargetFrame()
-eq(qb.icon._file, "QI", "another NPC in that place gets the icon, not the old face")
+check(qb.portrait == nil and qb.icon:IsShown() and qb.icon._file == "QI",
+    "another NPC in that place gets the icon, not the old face")
+eq(face:IsShown(), false, "...and the face is put away")
+specs = { spec("Kul Tiras Marine", "enemy", { icon = "QI" }), spec("Kul Tiras Sailor", "enemy", { icon = "QI" }) }
+T.RefreshTargetFrame()
+check(T.buttons[3].portrait == face and face:GetParent() == T.buttons[3] and face:IsShown(),
+    "the Sailor back, in another place, not in sight: its face follows its name")
+eq(T.buttons[2].portrait, nil, "...and the Marine, never seen, keeps the icon")
+specs = { spec("Kul Tiras Sailor", "enemy", { icon = "QI" }) }
+T.RefreshTargetFrame()
+check(T.buttons[2].portrait == face and face:GetParent() == T.buttons[2] and face:IsShown()
+    and T.buttons[3].portrait == nil, "moved back: one face, on one button")
 
 -- Six watch names wrap at five; the quest group still starts on a fresh line.
 clean()
@@ -281,6 +295,154 @@ local after = writes
 T.RefreshTargetFrame()
 eq(writes, after, "applied once: the next refresh writes nothing")
 for _, btn in ipairs(T.buttons) do btn.SetAttribute = nil end
+
+-- A face in combat: an NPC first seen mid-fight is often gone when it ends.
+-- The sighting (here Quests.lua's Hold, through CacheFace) draws it on the
+-- button's own icon (a texture change, which combat allows) and in the name's
+-- cache, which moves onto the button once combat ends.
+clean()
+local function buttonOf(name)
+    for _, b in ipairs(T.buttons) do if b._shown and b.npcName == name then return b end end
+end
+specs = { spec("Bloodscalp Warrior", "enemy", { icon = "QI" }) }
+T.RefreshTargetFrame()
+local wb = buttonOf("Bloodscalp Warrior")
+eq(wb.portrait, nil, "not seen yet: no face")
+countWrites()
+WoW.combat = true
+WoW.SetUnit("nameplate3", { name = "Bloodscalp Warrior", guid = "Creature-0-0-0-0-597-1", plate = true })
+specs = { spec("Bloodscalp Warrior", "enemy", { unit = "nameplate3", icon = "QI" }) }
+calls.specs = 0
+ok, err = pcall(function()
+    T.CacheFace("Bloodscalp Warrior", "nameplate3")
+    T.RefreshTargetFrame()
+end)
+check(ok, "a face in combat throws nothing (" .. tostring(err) .. ")")
+eq(calls.specs, 0, "a refresh in combat asks Quests for no buttons: its incumbents stay as rendered (Codex on #90)")
+eq(writes, 0, "...writes no attribute")
+eq(wb.icon.portrait, "nameplate3", "seen in combat: the face is drawn on the button's icon")
+eq(wb.portrait, nil, "...and the cache texture isn't moved onto the protected button in combat")
+WoW.units = {}
+specs = { spec("Bloodscalp Warrior", "enemy", { icon = "QI" }) }
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+local face = wb.portrait
+check(face and face.portrait == "nameplate3" and face:GetParent() == wb and face:IsShown(),
+    "out of sight when combat ends: the face drawn in the fight goes on the button")
+for _, btn in ipairs(T.buttons) do btn.SetAttribute = nil end
+
+-- A watched NPC with no button yet, seen mid-fight (as the target) and out of
+-- sight before combat ends, inside its linger (Codex on #90): the sighting
+-- caches its face, and the button it gets after combat shows it.
+clean()
+SlashCmdList.STAKEOUT("add Brisk Watcher")
+WoW.combat = true
+WoW.SetUnit("target", { name = "Brisk Watcher", guid = "Creature-0-0-0-0-4242-1" })
+WoW.fire("PLAYER_TARGET_CHANGED")
+eq(buttonOf("Brisk Watcher"), nil, "in combat: no button yet")
+check(detected["Brisk Watcher"] ~= nil, "...but it is detected")
+WoW.units = {}
+WoW.fire("PLAYER_TARGET_CHANGED")
+check(detected["Brisk Watcher"] ~= nil, "...and lingers once it's no longer the target")
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+local bw = buttonOf("Brisk Watcher")
+check(bw and bw.portrait and bw.portrait.portrait == "target" and bw.portrait:IsShown(),
+    "its button after combat shows the face cached at the sighting (button " .. tostring(bw ~= nil)
+    .. ", face " .. tostring(bw and bw.portrait and bw.portrait.portrait) .. ")")
+SlashCmdList.STAKEOUT("remove Brisk Watcher")
+
+-- Faces go back when their buttons leave the layout (Codex on #90).
+clean()
+specs = {}
+for i = 1, 8 do
+    local n = "Face Mob " .. i
+    WoW.SetUnit("nameplate" .. i, { name = n, guid = "Creature-0-0-0-0-" .. (500 + i) .. "-1", plate = true })
+    specs[i] = spec(n, "enemy", { unit = "nameplate" .. i, icon = "QI" })
+end
+T.RefreshTargetFrame()
+local pictured = 0
+for _, b in ipairs(T.buttons) do if b._shown and b.portrait then pictured = pictured + 1 end end
+eq(pictured, 8, "eight buttons, eight faces")
+specs = { specs[1] }
+T.RefreshTargetFrame()
+local pinned = 0
+for _, b in ipairs(T.buttons) do if not b._shown and b.portrait then pinned = pinned + 1 end end
+eq(pinned, 0, "down to one: the seven hidden buttons hold no face")
+WoW.units = {}
+
+-- The cap holds even when every face is on a button.
+clean()
+local names = {}
+for i = 1, T.PORTRAIT_MAX + 1 do
+    local n = "Cap Mob " .. i
+    names[#names + 1] = n
+    WoW.SetUnit("nameplate" .. i, { name = n, guid = "Creature-0-0-0-0-" .. (600 + i) .. "-1", plate = true })
+end
+SlashCmdList.STAKEOUT("add " .. table.concat(names, "; "))
+for i = 1, T.PORTRAIT_MAX + 1 do WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate" .. i) end
+T.RefreshTargetFrame()
+check(T.portraitCount() <= T.PORTRAIT_MAX, "never more than " .. T.PORTRAIT_MAX .. " faces (" .. T.portraitCount() .. ")")
+local without = 0
+for _, b in ipairs(T.buttons) do if b._shown and not b.portrait then without = without + 1 end end
+eq(without, 1, "the one past the cap keeps its icon")
+WoW.units = {}
+SlashCmdList.STAKEOUT("remove " .. table.concat(names, "; "))
+
+-- A full cache, every face on a button: two names leave and a new one comes
+-- first. The new one gets a face on that same render (Codex on #90).
+clean()
+specs = {}
+for i = 1, T.PORTRAIT_MAX do
+    local n = ("Full Mob %02d"):format(i)
+    WoW.SetUnit("nameplate" .. i, { name = n, guid = "Creature-0-0-0-0-" .. (700 + i) .. "-1", plate = true })
+    specs[i] = spec(n, "enemy", { unit = "nameplate" .. i, icon = "QI" })
+end
+T.RefreshTargetFrame()
+eq(T.portraitCount(), T.PORTRAIT_MAX, "the cache is full")
+local newUnit = "nameplate" .. (T.PORTRAIT_MAX + 1)
+WoW.SetUnit(newUnit, { name = "Aardvark Newcomer", guid = "Creature-0-0-0-0-799-1", plate = true })
+local kept = { spec("Aardvark Newcomer", "enemy", { unit = newUnit, icon = "QI" }) }
+for i = 1, T.PORTRAIT_MAX - 2 do kept[#kept + 1] = specs[i] end
+specs = kept
+T.RefreshTargetFrame()
+local nb = buttonOf("Aardvark Newcomer")
+check(nb and nb.portrait and nb.portrait.portrait == newUnit,
+    "the newcomer has its face on the first render (" .. tostring(nb and nb.portrait and nb.portrait.portrait) .. ")")
+check(T.portraitCount() <= T.PORTRAIT_MAX, "and the cap still holds (" .. T.portraitCount() .. ")")
+local faced = 0
+for _, b in ipairs(T.buttons) do if b._shown and b.portrait then faced = faced + 1 end end
+eq(faced, T.PORTRAIT_MAX - 1, "every shown button has a face")
+WoW.units = {}
+
+-- Full again, then two names leave and two new ones come first. The first
+-- newcomer takes a survivor's button, so the survivor's face is on no button
+-- for a moment; it is the oldest, and its NPC is out of sight. The second
+-- newcomer must take a departed face, not the survivor's (Codex on #90).
+clean()
+specs = {}
+for i = 1, T.PORTRAIT_MAX do
+    local n = ("Full Mob %02d"):format(i)
+    WoW.SetUnit("nameplate" .. i, { name = n, guid = "Creature-0-0-0-0-" .. (700 + i) .. "-1", plate = true })
+    specs[i] = spec(n, "enemy", { unit = "nameplate" .. i, icon = "QI" })
+end
+T.RefreshTargetFrame()
+buttonOf("Full Mob 01").portrait.lastUsed = 0
+WoW.units = {}
+local n1, n2 = "nameplate" .. (T.PORTRAIT_MAX + 1), "nameplate" .. (T.PORTRAIT_MAX + 2)
+WoW.SetUnit(n1, { name = "Aardvark One", guid = "Creature-0-0-0-0-801-1", plate = true })
+WoW.SetUnit(n2, { name = "Aardvark Two", guid = "Creature-0-0-0-0-802-1", plate = true })
+kept = { spec("Aardvark One", "enemy", { unit = n1, icon = "QI" }), spec("Aardvark Two", "enemy", { unit = n2, icon = "QI" }) }
+for i = 1, T.PORTRAIT_MAX - 2 do kept[#kept + 1] = spec(("Full Mob %02d"):format(i), "enemy", { icon = "QI" }) end
+specs = kept
+T.RefreshTargetFrame()
+local survivor = buttonOf("Full Mob 01")
+check(survivor and survivor.portrait and survivor.portrait.portrait == "nameplate1",
+    "the survivor out of sight keeps its face while moving (" .. tostring(survivor and survivor.portrait and survivor.portrait.portrait) .. ")")
+local a2 = buttonOf("Aardvark Two")
+check(a2 and a2.portrait and a2.portrait.portrait == n2, "and the second newcomer has its own")
+check(T.portraitCount() <= T.PORTRAIT_MAX, "the cap holds (" .. T.portraitCount() .. ")")
+WoW.units = {}
 
 ------------------------------------------------------------
 -- MacroSafeName
