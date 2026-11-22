@@ -203,7 +203,7 @@ local function render()
     local target = unitName("target")
     frame.title:SetText("Stakeout")
     frame.sub:SetText(("mockup #88: %s, %s%s (not clickable)"):format(hud.layout, hud.look,
-        hud.demo and ", demo" or ""))
+        hud.demo and ", sample rows" or ""))
 
     for _, r in pairs(hud.rows) do r:Hide() end
     for _, h in ipairs(frame.headers) do h:Hide() end
@@ -366,11 +366,20 @@ Probe:Command("face", function()
     if not id then say("face: " .. tostring(why)) end
 end, "the target's display ID, and a face drawn from it alone (#88)")
 
+-- Stakeout's rows, or the demo's when its frame shows none (a quiet spot,
+-- or Questie still loading): an empty mockup makes an empty screenshot.
+local function showForStep(layout, look)
+    local l, k, n = show(layout, look, false)
+    if (n or 0) > 0 then return l, k, n, "Stakeout's rows" end
+    l, k, n = show(layout, look, true)
+    return l, k, n, "demo rows: Stakeout showed none"
+end
+
 local function step(layout, look)
     return {
         text = ("Showing the %s list, %s look (to the right of the centre; drag it if it's in the way)."):format(
             layout, look == "glass" and "Glass" or "WoW Forever"),
-        auto = true, run = function() return show(layout, look, false) end,
+        auto = true, run = function() return showForStep(layout, look) end,
         check = function() return frame and frame:IsShown(), "shown" end,
         screenshot = layout .. "-" .. look,
     }
@@ -385,7 +394,7 @@ Probe:Steps("hud", {
     { text = "Compact, WoW Forever: readable at a glance, and a size you'd keep on screen while questing?", ask = true },
     step("wide", "forever"),
     { text = "Wide (two columns), WoW Forever: worth the extra room over compact?", ask = true },
-    { text = "Switching to the Glass look.", auto = true, run = function() return show("compact", "glass", false) end,
+    { text = "Switching to the Glass look.", auto = true, run = function() return showForStep("compact", "glass") end,
       screenshot = "compact-glass" },
     { text = "Compact, Glass: do you prefer it to WoW Forever's compact rows?", ask = true },
     step("wide", "glass"),
