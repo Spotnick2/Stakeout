@@ -25,12 +25,15 @@
 --   /fp so events on|off    log quest and death events, and objective changes
 --   /fp so clear            empty the saved log
 --
--- Procedures: /fp steps so quests, range, events, core, mulgore.
+--   /fp so hud ... | face    the list layout mockups (#88): Hud.lua
+--
+-- Procedures: /fp steps so quests, range, events, core, mulgore; hud (Hud.lua).
 
 local ADDON, NS = ...
 local MAX_LOG = 4000
 
 local Probe = ForeverProbe:Module("StakeoutProbe", { api = 1, cmd = "so" })
+NS.Probe = Probe   -- for Hud.lua
 
 local function say(msg) Probe:Say(msg) end
 local function str(v) return Probe.Show(v, true) end

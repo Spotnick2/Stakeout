@@ -103,6 +103,7 @@ LibQuestieDB = {
 
 local ns = {}
 assert(loadfile("Tools/StakeoutProbe/StakeoutProbe.lua"))("StakeoutProbe", ns)
+assert(loadfile("Tools/StakeoutProbe/Hud.lua"))("StakeoutProbe", ns)   -- the TOC's order
 WoW.fire("ADDON_LOADED", "StakeoutProbe")
 WoW.fire("PLAYER_LOGIN")
 local T = ns._test
@@ -218,6 +219,30 @@ eq(b._attrs.macrotext,
 eq(b._attrs.macrotext2, "/cleartarget\n/targetexact Pygmy Surf Crawler\n/tm 8", "right-click unchanged")
 eq(T.aim("Pygmy Surf Crawler", 3106, "8"), true, "no variant")
 eq(b._attrs.macrotext, "/cleartarget\n/targetexact Pygmy Surf Crawler", "...is the default macro")
+
+-- The list layout mockups (#88): plain frames, never secure.
+do
+    local H = T.hud
+    eq(H.shortProgress({ "Big Game: 3/10 Stranglethorn Tiger slain" }), "3/10", "progress: the count")
+    eq(H.shortProgress({ "Welcome: ready to turn in" }), "turn in", "...or the turn-in")
+    local layout, look, n = H.show("compact", "forever", false)
+    eq(layout .. " " .. look .. " " .. n, "compact forever 0", "nothing on Stakeout's frame: no rows")
+    layout, look, n = H.show("wide", "forever", true)
+    eq(n, 10, "the demo's ten rows")
+    local f = H.frame()
+    check(f:IsShown() and not f._template:find("Secure", 1, true), "a plain frame, shown")
+    local tiger = H.rows()["Stranglethorn Tiger"]
+    eq(tiger.progress:GetText(), "4/10", "a row's progress")
+    eq(H.rows()["Jungle Stalker"].progress:GetText(), "1/10", "a hunted row keeps its progress")
+    H.show("compact", "glass", true)
+    check(H.rows()["Stranglethorn Tiger"] ~= tiger, "a new look: new rows")
+    H.hide()
+    eq(f:IsShown(), false, "hidden")
+    SlashCmdList.FOREVERPROBE("so hud wide")
+    eq(f:IsShown(), true, "/fp so hud wide shows it")
+    SlashCmdList.FOREVERPROBE("so hud off")
+    eq(f:IsShown(), false, "/fp so hud off hides it")
+end
 
 local errors = 0
 for _, l in ipairs(db.log) do if l:find("ERROR") then errors = errors + 1 end end

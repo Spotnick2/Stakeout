@@ -8,3 +8,4 @@
 ## SavedVariables: StakeoutProbeDB
 
 StakeoutProbe.lua
+Hud.lua
