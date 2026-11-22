@@ -415,6 +415,35 @@ for _, b in ipairs(T.buttons) do if b._shown and b.portrait then faced = faced +
 eq(faced, T.PORTRAIT_MAX - 1, "every shown button has a face")
 WoW.units = {}
 
+-- Full again, then two names leave and two new ones come first. The first
+-- newcomer takes a survivor's button, so the survivor's face is on no button
+-- for a moment; it is the oldest, and its NPC is out of sight. The second
+-- newcomer must take a departed face, not the survivor's (Codex on #90).
+clean()
+specs = {}
+for i = 1, T.PORTRAIT_MAX do
+    local n = ("Full Mob %02d"):format(i)
+    WoW.SetUnit("nameplate" .. i, { name = n, guid = "Creature-0-0-0-0-" .. (700 + i) .. "-1", plate = true })
+    specs[i] = spec(n, "enemy", { unit = "nameplate" .. i, icon = "QI" })
+end
+T.RefreshTargetFrame()
+buttonOf("Full Mob 01").portrait.lastUsed = 0
+WoW.units = {}
+local n1, n2 = "nameplate" .. (T.PORTRAIT_MAX + 1), "nameplate" .. (T.PORTRAIT_MAX + 2)
+WoW.SetUnit(n1, { name = "Aardvark One", guid = "Creature-0-0-0-0-801-1", plate = true })
+WoW.SetUnit(n2, { name = "Aardvark Two", guid = "Creature-0-0-0-0-802-1", plate = true })
+kept = { spec("Aardvark One", "enemy", { unit = n1, icon = "QI" }), spec("Aardvark Two", "enemy", { unit = n2, icon = "QI" }) }
+for i = 1, T.PORTRAIT_MAX - 2 do kept[#kept + 1] = spec(("Full Mob %02d"):format(i), "enemy", { icon = "QI" }) end
+specs = kept
+T.RefreshTargetFrame()
+local survivor = buttonOf("Full Mob 01")
+check(survivor and survivor.portrait and survivor.portrait.portrait == "nameplate1",
+    "the survivor out of sight keeps its face while moving (" .. tostring(survivor and survivor.portrait and survivor.portrait.portrait) .. ")")
+local a2 = buttonOf("Aardvark Two")
+check(a2 and a2.portrait and a2.portrait.portrait == n2, "and the second newcomer has its own")
+check(T.portraitCount() <= T.PORTRAIT_MAX, "the cap holds (" .. T.portraitCount() .. ")")
+WoW.units = {}
+
 ------------------------------------------------------------
 -- MacroSafeName
 ------------------------------------------------------------

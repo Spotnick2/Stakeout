@@ -645,6 +645,7 @@ end
 local PORTRAIT_MAX = 30
 local portraits, portraitCount = {}, 0   -- name -> texture
 local portraitHome                       -- a hidden frame holding the unused ones
+local portraitKeep                       -- while a layout is dressed: its names, whose faces stay
 
 local function PortraitFor(name, create)
     local tex = portraits[name]
@@ -652,7 +653,10 @@ local function PortraitFor(name, create)
         if portraitCount >= PORTRAIT_MAX then
             local oldName
             for n, t in pairs(portraits) do
-                if not t.shownOn and (not oldName or t.lastUsed < portraits[oldName].lastUsed) then oldName = n end
+                -- A face moving to another button is briefly on none: the
+                -- names of the layout being dressed keep theirs (Codex on #90).
+                if not t.shownOn and not (portraitKeep and portraitKeep[n])
+                    and (not oldName or t.lastUsed < portraits[oldName].lastUsed) then oldName = n end
             end
             if oldName then
                 tex, portraits[oldName] = portraits[oldName], nil
@@ -713,6 +717,7 @@ local function UpdateButtonLooks(list)
     for _, btn in ipairs(targetButtons) do
         if btn.portrait and not wanted[btn.portrait.faceOf] then TakePortrait(btn) end
     end
+    portraitKeep = wanted
     for i, e in ipairs(list) do
         local btn = targetButtons[i]
         btn.npcName = e.name
@@ -730,6 +735,7 @@ local function UpdateButtonLooks(list)
         end
         btn.label:SetText(e.group > 1 and ShortLabel(e.name, questNames) or "")
     end
+    portraitKeep = nil
     -- Buttons the layout no longer uses give their faces back, so a hidden
     -- button never pins one (Codex on #90).
     for i = #list + 1, #targetButtons do TakePortrait(targetButtons[i]) end
