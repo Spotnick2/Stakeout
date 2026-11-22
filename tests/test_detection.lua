@@ -33,9 +33,9 @@ check(WoW.chatText():find("Detected: Rare Mob", 1, true), "the chat names it")
 local btn = T.buttons[1]
 check(btn and btn._shown, "a target button is shown")
 eq(btn:GetAttribute("type"), "macro", "left-click runs a macro")
-eq(btn:GetAttribute("macrotext"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]\n/tm !6",
+eq(btn:GetAttribute("macrotext"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]\n/tm [exists,nodead] !6",
     "left-click targets by exact name, never a corpse (the corpse probe), and marks: SetRaidTarget is " ..
-    "forbidden to addon code, the click does it; ! keeps the mark on a second click")
+    "forbidden to addon code, the click does it; ! keeps the mark on a second click; no live target, no /tm")
 eq(btn:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]",
     "right-click only targets")
 eq(btn:GetAttribute("typerelease"), nil, "no typerelease: it would double-fire")

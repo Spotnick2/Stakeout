@@ -1073,9 +1073,10 @@ local function ButtonSpecs()
         if mark then
             -- Left-click targets and marks, right-click only targets, as the
             -- watch list's do. !N keeps the mark on a second click; /tm N
-            -- would take it off.
+            -- would take it off. [exists,nodead]: no mark (and no error)
+            -- when the click finds no live one, as on a hunt button.
             right = left
-            left = fmt("%s\n/tm !%d", left, mark)
+            left = fmt("%s\n/tm [exists,nodead] !%d", left, mark)
             tooltip[#tooltip + 1] = "Left-click: target and mark"
             tooltip[#tooltip + 1] = "Right-click: target only"
         else
