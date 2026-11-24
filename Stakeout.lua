@@ -1771,7 +1771,9 @@ local function RowLabel(parent, x, y, text)
 end
 
 -- A checkbox with its label in white and, optionally, a line under the label
--- in grey. Takes 30 px down, or 44 with the line.
+-- in grey. Takes 30 px down, or 44 with the line. The line is one line, as
+-- wide as the column leaves it: a longer one ends in "...", never past the
+-- window's edge (the hunt line did, on the owner's screen).
 local function Check(parent, x, y, label, desc)
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     cb:SetSize(CHECK, CHECK)
@@ -1788,6 +1790,9 @@ local function Check(parent, x, y, label, desc)
         else
             cb.desc:SetPoint("TOPLEFT", cb, "BOTTOMRIGHT", 2, 2)
         end
+        cb.desc:SetWidth(COL_W - CHECK)
+        cb.desc:SetJustifyH("LEFT")
+        cb.desc:SetWordWrap(false)
         cb.desc:SetText(desc)
     end
     return cb
@@ -2223,7 +2228,7 @@ local function CreateConfigFrame()
         -- Hunt mode (#81): the same switch as /stakeout quests hunt.
         y = y - 44
         local huntCheck = Check(f, x, y, "Show quest mobs before they're seen",
-            "Needs Questie. Spawns within about 80 yd, nearest first; click to find one.")
+            "Needs Questie. Spawns within 80 yd, nearest first.")
         huntCheck:SetScript("OnClick", function(self)
             quests.SetHunt(self:GetChecked() and true or false)
             ShowQuestCheck()

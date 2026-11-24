@@ -25,6 +25,7 @@
 - A button keeps its NPC's portrait for the rest of the session once you've seen it, even after the NPC is out of
   sight or the button moves, instead of going back to the icon. An NPC you first see mid-fight gets its portrait
   too.
+- The settings' line under "Show quest mobs before they're seen" no longer runs past the window's edge.
 
 ## v2.6.0 - 2026-11-18
 
