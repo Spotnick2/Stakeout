@@ -104,6 +104,7 @@ LibQuestieDB = {
 local ns = {}
 assert(loadfile("Tools/StakeoutProbe/StakeoutProbe.lua"))("StakeoutProbe", ns)
 assert(loadfile("Tools/StakeoutProbe/Hud.lua"))("StakeoutProbe", ns)   -- the TOC's order
+assert(loadfile("Tools/StakeoutProbe/Layout.lua"))("StakeoutProbe", ns)
 WoW.fire("ADDON_LOADED", "StakeoutProbe")
 WoW.fire("PLAYER_LOGIN")
 local T = ns._test
@@ -203,7 +204,7 @@ eq(b._shown, false, "button off hides it")
 -- Procedures
 --------------------------------------------------------------------------------
 
-for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore", "corpse", "look" }) do
+for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore", "corpse", "look", "rows" }) do
     fp("steps so " .. name)
     local rec = FP.db.steps.records["StakeoutProbe/" .. name]
     eq(rec and rec.status, "active", "procedure " .. name .. " starts")

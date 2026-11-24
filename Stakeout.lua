@@ -55,6 +55,7 @@ local defaults = {
     soundChoice      = "Raid Warning",  -- alert sound name (see GetAlertSounds)
     frameScale       = 1.0,
     lockFrame        = false,
+    layout           = "icons",    -- the target frame: "icons", "list" or "list2" (two columns; #88)
     theme            = "forever",  -- the windows' look, "forever" or "glass" (Theme.lua; after a /reload)
     followGlassUI    = true,    -- with Glass UI loaded, wear its look (Theme.lua; after a /reload)
     questTargets     = false,   -- experimental: buttons for what the quest log wants (Quests.lua)
@@ -320,9 +321,11 @@ local targetButtons = {}
 local detected  = {}   -- [name] = { plates = {[token]=guid|true}, guids = {[guid]=true}, unitId, lastSeen }
 local announced = {}   -- [name] = true; one alert per name until it dies or is reset
 
+-- The offsets are in the frame's own units, so the scale they were taken at
+-- is saved with them (#88: FitScale can lower it).
 local function SaveFramePosition(frame)
     local point, _, relPoint, x, y = frame:GetPoint()
-    SetConfig("framePos", { point, relPoint, x, y })
+    SetConfig("framePos", { point, relPoint, x, y, frame:GetScale() })
 end
 
 local BUTTONS_PER_ROW = 5
@@ -331,6 +334,54 @@ local BUTTON_PAD      = 2
 local HEADER_HEIGHT   = 16
 local LABEL_HEIGHT    = 9    -- the name under a quest button (groups 2 and 3)
 
+-- The list layouts (#88): the same secure buttons, made into rows. A row is
+-- ROW_H tall, its face on the left, the whole name, the quest progress on the
+-- right. Every row is as wide as the widest name needs, within ROW_W_MIN and
+-- ROW_W_MAX (past that a name ends in "...").
+local LAYOUTS       = { "icons", "list", "list2" }
+local LAYOUT_LABELS = { icons = "Icons", list = "List", list2 = "List, two columns" }
+local ROW_H         = 22
+local ROW_GAP       = 2
+local ROW_W_MIN     = 190
+local ROW_W_MAX     = 320
+local ROW_PAD       = 6      -- the frame's margin left and right of the rows
+local GROUP_HEAD_H  = 12     -- "Watch list", "NPCs", "Quest mobs" above each group
+local GROUP_NAMES   = { "Watch list", "NPCs", "Quest mobs" }
+-- What a row's right side can say besides a count (UpdateButtonLooks).
+local STATUS_WORDS  = { "not seen", "turn in", "talk" }
+-- A face not drawn yet: a shadowed generic one, as the Armory does.
+local PLACEHOLDER      = "Interface\\Garrison\\Portraits\\FollowerPortrait_NoPortrait"
+local PLACEHOLDER_OLD  = "Interface\\CharacterFrame\\TempPortrait"
+
+local function CurrentLayout()
+    local l = StakeoutDB.layout
+    return LAYOUT_LABELS[l] and l or "icons"
+end
+
+-- The player's scale, made smaller only when the frame wouldn't fit on the
+-- screen at it (a long list at 300%, Codex on #88): every button stays in
+-- reach. Out of combat only, the frame is protected; OnCombatEnd calls it.
+local function FitScale()
+    if not targetFrame or InCombatLockdown() or targetFrame.isMoving then return end
+    local scale = StakeoutDB.frameScale or 1.0
+    local w, h = targetFrame:GetWidth(), targetFrame:GetHeight()
+    local sw, sh = UIParent:GetWidth(), UIParent:GetHeight()
+    if type(w) == "number" and type(h) == "number" and w > 0 and h > 0
+        and type(sw) == "number" and type(sh) == "number" and sw > 0 and sh > 0 then
+        scale = math.min(scale, sw / w, sh / h)
+    end
+    local old = targetFrame:GetScale()
+    if type(old) == "number" and math.abs(old - scale) < 0.0001 then return end
+    -- Where it is on the screen stays: the anchor's offsets are in the
+    -- frame's units, so they change by old / new (as Blizzard's Edit Mode does).
+    local point, rel, relPoint, x, y = targetFrame:GetPoint()
+    targetFrame:SetScale(scale)
+    if point and type(old) == "number" and type(x) == "number" and type(y) == "number" then
+        targetFrame:ClearAllPoints()
+        targetFrame:SetPoint(point, rel, relPoint, x * old / scale, y * old / scale)
+    end
+end
+
 local function CreateTargetFrame()
     if targetFrame then return end
 
@@ -338,6 +389,7 @@ local function CreateTargetFrame()
 
     local f = targetFrame
     f:SetSize(120, 30)
+    f:SetScale(StakeoutDB.frameScale or 1.0)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 200)
     f:SetClampedToScreen(true)
     f:SetMovable(true)
@@ -379,15 +431,19 @@ local function CreateTargetFrame()
         self.isMoving = nil
         self:StopMovingOrSizing()
         SaveFramePosition(self)
+        FitScale()   -- the list may have grown during the drag
     end)
 
     if StakeoutDB.framePos then
         local p = StakeoutDB.framePos
+        -- At the scale its offsets were saved at (before #88: the player's).
+        local saved = tonumber(p[5])
+        if saved and saved > 0 then f:SetScale(saved) end
         f:ClearAllPoints()
         f:SetPoint(p[1], UIParent, p[2], p[3], p[4])
     end
 
-    f:SetScale(StakeoutDB.frameScale or 1.0)
+    FitScale()
 end
 
 -- How far the button's NPC is (Range.lua), while a token still shows it.
@@ -503,6 +559,7 @@ local function DesiredButtons()
                     group = group.n, name = spec.name, unit = spec.unit, icon = spec.icon,
                     macrotext = spec.macrotext, macrotext2 = spec.macrotext2,
                     tooltip = spec.tooltip, friendly = row == "friendly",
+                    progress = spec.progress, progressMax = spec.progressMax, hunt = spec.hunt == true,
                 }
             end
         end
@@ -537,12 +594,45 @@ local function NewButton(i)
     ht:SetBlendMode("ADD")
     btn.highlight = ht
 
-    -- A quest button's name, under it: placed by ApplyLayout, written by
+    -- A quest button's name, under it: placed by PlaceButtons, written by
     -- UpdateButtonLooks. A watch button's is empty: the player typed those.
     btn.label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     btn.label:SetFontHeight(8)
     btn.label:SetWordWrap(false)
-    -- Only ever made by ApplyLayout, which runs out of combat.
+    -- The list layouts' regions (#88), dressed by DressButton. The whole
+    -- name, the progress on the right, a dark backing so both read on bright
+    -- ground, and the shadowed face shown until the real one is drawn.
+    btn.nameText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    btn.nameText:SetWordWrap(false)
+    btn.nameText:SetJustifyH("LEFT")
+    btn.nameText:Hide()
+    btn.progress = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    btn.progress:SetWordWrap(false)
+    btn.progress:SetJustifyH("RIGHT")
+    btn.progress:Hide()
+    btn.backing = btn:CreateTexture(nil, "BACKGROUND", nil, -1)
+    btn.backing:SetAllPoints(btn)
+    btn.backing:SetColorTexture(0, 0, 0, 0.5)
+    btn.backing:Hide()
+    btn.placeholder = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
+    if btn.placeholder:SetTexture(PLACEHOLDER) == false then btn.placeholder:SetTexture(PLACEHOLDER_OLD) end
+    btn.placeholder:SetDesaturated(true)
+    btn.placeholder:SetAllPoints(btn.icon)
+    btn.placeholder:Hide()
+    -- The target's outline, both layouts: four one-pixel gold edges, shown
+    -- and hidden by UpdateTargetRing (a region's Show/Hide works in combat).
+    btn.ring = {}
+    for _, edge in ipairs({ { "TOPLEFT", "TOPRIGHT", "h" }, { "BOTTOMLEFT", "BOTTOMRIGHT", "h" },
+                            { "TOPLEFT", "BOTTOMLEFT", "v" }, { "TOPRIGHT", "BOTTOMRIGHT", "v" } }) do
+        local t = btn:CreateTexture(nil, "OVERLAY", nil, 7)
+        t:SetColorTexture(1, 0.82, 0, 1)
+        t:SetPoint(edge[1], btn, edge[1])
+        t:SetPoint(edge[2], btn, edge[2])
+        if edge[3] == "h" then t:SetHeight(1) else t:SetWidth(1) end
+        t:Hide()
+        btn.ring[#btn.ring + 1] = t
+    end
+    -- Only ever made by ApplyAttributes, which runs out of combat.
     Theme.Button(btn)
 
     btn:SetScript("OnEnter", BtnOnEnter)
@@ -552,51 +642,27 @@ local function NewButton(i)
     return btn
 end
 
--- The secure part: sizes, anchors, attributes, shown and hidden. Every
--- attribute is written for every button, so one that changes role (a watch
--- name, then a quest target) keeps nothing from the old one.
-local function ApplyLayout(list)
+-- A texture's mask, one at a time: the one it wears is kept on it
+-- (tex.maskOn), so the right one comes off (Theme.Button, PutPortrait).
+local function MaskWith(tex, mask)
+    if tex.maskOn == mask then return end
+    if tex.maskOn then tex:RemoveMaskTexture(tex.maskOn) end
+    if mask then tex:AddMaskTexture(mask) end
+    tex.maskOn = mask
+end
+
+-- The secure part: the buttons the list needs, their attributes, shown and
+-- hidden. Every attribute is written for every button, so one that changes
+-- role (a watch name, then a quest target) keeps nothing from the old one.
+-- Runs only when the signature changed, out of combat.
+local function ApplyAttributes(list)
     for _, btn in ipairs(targetButtons) do btn:Hide() end
     if #list == 0 then
         targetFrame:Hide()
         return
     end
-
-    -- Each group starts a new line, and a line holds BUTTONS_PER_ROW. A quest
-    -- line is taller by its labels.
-    local spots, line, col, cols, group = {}, -1, BUTTONS_PER_ROW, 0, nil
-    local y, lineHeight = 0, 0
-    for i, e in ipairs(list) do
-        if e.group ~= group or col == BUTTONS_PER_ROW then
-            y = y + lineHeight
-            line, col, group = line + 1, 0, e.group
-            lineHeight = BUTTON_SIZE + BUTTON_PAD + (e.group > 1 and LABEL_HEIGHT or 0)
-        end
-        spots[i] = { line = line, col = col, y = y }
-        col = col + 1
-        cols = math.max(cols, col)
-    end
-    local pitch  = BUTTON_SIZE + BUTTON_PAD
-    local width  = math.max(cols * pitch + BUTTON_PAD + 8, 90)
-    local height = HEADER_HEIGHT + y + lineHeight + BUTTON_PAD + 4
-    targetFrame:SetSize(width, height)
-    local perLine = {}
-    for _, s in ipairs(spots) do perLine[s.line] = (perLine[s.line] or 0) + 1 end
-
     for i, e in ipairs(list) do
         local btn = targetButtons[i] or NewButton(i)
-        -- Each line is centred in the frame (the widest keeps 6 px a side).
-        local n = perLine[spots[i].line]
-        local x = math.floor((width - (n * pitch - BUTTON_PAD)) / 2) + spots[i].col * pitch
-        btn:ClearAllPoints()
-        btn:SetPoint("TOPLEFT", targetFrame, "TOPLEFT", x, -(HEADER_HEIGHT + 2 + spots[i].y))
-        -- A label is centred under its button and fits its pitch, except a
-        -- button alone on its line, whose label may use the frame's width: a
-        -- lone "Kul Tiras Sailor" fits whole.
-        btn.label:ClearAllPoints()
-        btn.label:SetPoint("TOP", btn, "BOTTOM", 0, -1)
-        btn.label:SetWidth(n == 1 and width - 8 or pitch)
-        btn.label:SetJustifyH("CENTER")
         -- The key mechanic: a secure macro targets the NPC by exact name.
         btn:SetAttribute("type", "macro")
         btn:SetAttribute("macrotext", e.macrotext)
@@ -611,6 +677,163 @@ local function ApplyLayout(list)
         btn:Show()
     end
     targetFrame:Show()
+end
+
+-- A text's width in a font, from one hidden font string per font.
+local measurers = {}
+local function TextWidth(font, text)
+    local fs = measurers[font]
+    if not fs then
+        fs = targetFrame:CreateFontString(nil, "OVERLAY", font)
+        fs:Hide()
+        measurers[font] = fs
+    end
+    fs:SetText(text)
+    local w = fs:GetUnboundedStringWidth()
+    return type(w) == "number" and w or 0
+end
+
+-- The rows' width and their status column's, for the list layouts: wide
+-- enough for every name whole and for any status a row can come to show
+-- (its count at its end, "not seen", "turn in", "talk"), so a count going
+-- up never pushes its name into "..." (Codex on the plan).
+local function RowGeometry(list)
+    local status = 0
+    for _, word in ipairs(STATUS_WORDS) do status = math.max(status, TextWidth("GameFontNormalSmall", word)) end
+    local name = 0
+    for _, e in ipairs(list) do
+        name = math.max(name, TextWidth("GameFontHighlightSmall", e.name))
+        if type(e.progressMax) == "string" then
+            status = math.max(status, TextWidth("GameFontNormalSmall", e.progressMax))
+        end
+    end
+    status = math.ceil(status)
+    -- face (ROW_H - 4) at 2 px, 6 px, the name, 8 px, the status, 6 px.
+    local width = 2 + (ROW_H - 4) + 6 + math.ceil(name) + 8 + status + 6
+    return math.min(ROW_W_MAX, math.max(ROW_W_MIN, width)), status
+end
+
+-- A button's regions for a layout. Out of combat only (anchors and sizes).
+local function DressButton(btn, layout, status)
+    local inset = btn.iconInset or 0
+    local rows = layout ~= "icons"
+    btn.icon:ClearAllPoints()
+    btn.highlight:ClearAllPoints()
+    btn.highlight:SetPoint("TOPLEFT", btn, "TOPLEFT", inset, -inset)
+    btn.highlight:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -inset, inset)
+    -- A row's face is a small square at its left: the row's own rounded
+    -- mask would cut it wrongly, so it wears one of its own (Theme.Button).
+    btn.faceMask = rows and btn.pictureMask or btn.iconMask
+    if rows then
+        local pad = math.max(2, inset)
+        local face = ROW_H - 2 * pad
+        btn.icon:SetPoint("LEFT", btn, "LEFT", pad, 0)
+        btn.icon:SetSize(face, face)
+        btn.progress:ClearAllPoints()
+        btn.progress:SetPoint("RIGHT", btn, "RIGHT", -6, 0)
+        btn.progress:SetWidth(status)
+        btn.nameText:ClearAllPoints()
+        btn.nameText:SetPoint("LEFT", btn.icon, "RIGHT", 6, 0)
+        btn.nameText:SetPoint("RIGHT", btn.progress, "LEFT", -8, 0)
+    else
+        btn.icon:SetPoint("TOPLEFT", btn, "TOPLEFT", inset, -inset)
+        btn.icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -inset, inset)
+    end
+    if btn.iconMask then
+        MaskWith(btn.icon, btn.faceMask)
+        if btn.portrait then MaskWith(btn.portrait, btn.faceMask) end
+    end
+    btn.label:SetShown(not rows)
+    btn.nameText:SetShown(rows)
+    btn.progress:SetShown(rows)
+    btn.backing:SetShown(rows)
+    if not rows then btn.placeholder:Hide() end
+end
+
+-- A group's title over its rows, made on demand.
+local function GroupHeader(i)
+    targetFrame.groupHeaders = targetFrame.groupHeaders or {}
+    local h = targetFrame.groupHeaders[i]
+    if not h then
+        h = targetFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        h:SetJustifyH("LEFT")
+        targetFrame.groupHeaders[i] = h
+    end
+    return h
+end
+
+-- Where the buttons stand and how they're dressed: sizes and anchors only,
+-- never an attribute, so a layout switch alone writes none. Out of combat.
+local function PlaceButtons(list, layout, width, status)
+    for _, h in ipairs(targetFrame.groupHeaders or {}) do h:Hide() end
+    if #list == 0 then return end
+
+    if layout == "icons" then
+        -- Each group starts a new line, and a line holds BUTTONS_PER_ROW. A
+        -- quest line is taller by its labels.
+        local spots, line, col, cols, group = {}, -1, BUTTONS_PER_ROW, 0, nil
+        local y, lineHeight = 0, 0
+        for i, e in ipairs(list) do
+            if e.group ~= group or col == BUTTONS_PER_ROW then
+                y = y + lineHeight
+                line, col, group = line + 1, 0, e.group
+                lineHeight = BUTTON_SIZE + BUTTON_PAD + (e.group > 1 and LABEL_HEIGHT or 0)
+            end
+            spots[i] = { line = line, col = col, y = y }
+            col = col + 1
+            cols = math.max(cols, col)
+        end
+        local pitch  = BUTTON_SIZE + BUTTON_PAD
+        local frameW = math.max(cols * pitch + BUTTON_PAD + 8, 90)
+        targetFrame:SetSize(frameW, HEADER_HEIGHT + y + lineHeight + BUTTON_PAD + 4)
+        local perLine = {}
+        for _, sp in ipairs(spots) do perLine[sp.line] = (perLine[sp.line] or 0) + 1 end
+        for i in ipairs(list) do
+            local btn = targetButtons[i]
+            -- Each line is centred in the frame (the widest keeps 6 px a side).
+            local n = perLine[spots[i].line]
+            local x = math.floor((frameW - (n * pitch - BUTTON_PAD)) / 2) + spots[i].col * pitch
+            btn:SetSize(BUTTON_SIZE, BUTTON_SIZE)
+            btn:ClearAllPoints()
+            btn:SetPoint("TOPLEFT", targetFrame, "TOPLEFT", x, -(HEADER_HEIGHT + 2 + spots[i].y))
+            -- A label is centred under its button and fits its pitch, except a
+            -- button alone on its line, whose label may use the frame's width: a
+            -- lone "Kul Tiras Sailor" fits whole.
+            btn.label:ClearAllPoints()
+            btn.label:SetPoint("TOP", btn, "BOTTOM", 0, -1)
+            btn.label:SetWidth(n == 1 and frameW - 8 or pitch)
+            btn.label:SetJustifyH("CENTER")
+            DressButton(btn, layout)
+        end
+        return
+    end
+
+    -- The lists: a title per group, then its rows, `cols` to a line. A group
+    -- always starts a new line; an odd last row takes the left column.
+    local cols = layout == "list2" and 2 or 1
+    local y, group, col, heads, used = HEADER_HEIGHT + 2, nil, 0, 0, 1
+    for i, e in ipairs(list) do
+        if e.group ~= group then
+            if group then y = y + ROW_H + ROW_GAP end
+            group, col, heads = e.group, 0, heads + 1
+            local h = GroupHeader(heads)
+            h:ClearAllPoints()
+            h:SetPoint("TOPLEFT", targetFrame, "TOPLEFT", ROW_PAD + 2, -y)
+            h:SetText(GROUP_NAMES[e.group] or "")
+            h:Show()
+            y = y + GROUP_HEAD_H
+        elseif col == cols then
+            y, col = y + ROW_H + ROW_GAP, 0
+        end
+        local btn = targetButtons[i]
+        btn:SetSize(width, ROW_H)
+        btn:ClearAllPoints()
+        btn:SetPoint("TOPLEFT", targetFrame, "TOPLEFT", ROW_PAD + col * (width + ROW_GAP), -y)
+        DressButton(btn, layout, status)
+        col = col + 1
+        used = math.max(used, col)
+    end
+    targetFrame:SetSize(2 * ROW_PAD + used * width + (used - 1) * ROW_GAP, y + ROW_H + 6)
 end
 
 -- A quest button's label: its name without the words it shares with another
@@ -683,30 +906,32 @@ end
 local function TakePortrait(btn)
     local tex = btn.portrait
     if not tex then return end
-    if btn.iconMask then tex:RemoveMaskTexture(btn.iconMask) end
+    MaskWith(tex, nil)
     tex:Hide()
     tex:SetParent(portraitHome)
     btn.portrait, tex.shownOn = nil, nil
     btn.icon:Show()
 end
 
--- Over the button's icon, placed and rounded like it (Theme.Button).
+-- Over the button's icon, wherever the layout put it, and rounded like it
+-- (Theme.Button, DressButton): moving the icon moves the face.
 local function PutPortrait(btn, tex)
     if btn.portrait == tex then return end
     TakePortrait(btn)
     if tex.shownOn then TakePortrait(tex.shownOn) end
     tex:SetParent(btn)
+    tex:SetDrawLayer("BACKGROUND", 1)
     tex:ClearAllPoints()
-    local inset = btn.iconInset or 0
-    tex:SetPoint("TOPLEFT", btn, "TOPLEFT", inset, -inset)
-    tex:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -inset, inset)
-    if btn.iconMask then tex:AddMaskTexture(btn.iconMask) end
+    tex:SetAllPoints(btn.icon)
+    if btn.iconMask then MaskWith(tex, btn.faceMask or btn.iconMask) end
     tex:Show()
     btn.icon:Hide()
+    btn.placeholder:Hide()
     btn.portrait, tex.shownOn = tex, btn
 end
 
-local function UpdateButtonLooks(list)
+local function UpdateButtonLooks(list, layout)
+    local rows = layout ~= nil and layout ~= "icons"
     local questNames, wanted = {}, {}
     for _, e in ipairs(list) do
         wanted[e.name] = true
@@ -732,8 +957,27 @@ local function UpdateButtonLooks(list)
         else
             TakePortrait(btn)
             btn.icon:SetTexture(e.icon or GetButtonIcon())
+            -- A row without a face yet shows the shadowed one; the icons keep
+            -- the player's chosen icon. The icon itself is never tinted.
+            if rows then
+                btn.icon:Hide()
+                if e.friendly then
+                    btn.placeholder:SetVertexColor(0.42, 0.36, 0.28)
+                else
+                    btn.placeholder:SetVertexColor(0.30, 0.33, 0.38)
+                end
+                btn.placeholder:Show()
+            else
+                btn.placeholder:Hide()
+                btn.icon:Show()
+            end
         end
         btn.label:SetText(e.group > 1 and ShortLabel(e.name, questNames) or "")
+        -- A count or a word wins over "not seen": a hunt row that has "3/10"
+        -- says so, its grey name and shadowed face say it's not seen.
+        btn.nameText:SetText(e.name)
+        if e.hunt then btn.nameText:SetTextColor(0.65, 0.65, 0.65) else btn.nameText:SetTextColor(1, 1, 1) end
+        btn.progress:SetText(e.progress or (e.hunt and "not seen") or "")
     end
     portraitKeep = nil
     -- Buttons the layout no longer uses give their faces back, so a hidden
@@ -744,17 +988,43 @@ end
 -- The signature of the layout on the frame now: nil until one is applied. A
 -- refresh that wanted a change in combat applies nothing and leaves it alone.
 -- appliedList is that layout's list, button by button.
+-- appliedLayout and appliedWidth are what PlaceButtons last did: placement
+-- runs again on a new signature, a new layout, or rows that must grow, and
+-- only a new signature writes attributes.
 local lastApplied, appliedList
+local appliedLayout, appliedWidth, appliedStatus
 local pendingRefresh = false
+
+-- The target's outline: on the shown button whose name is the live target's,
+-- in both layouts. btn.npcName is what the secure button clicks, also while a
+-- new layout waits for combat to end. Show/Hide only: safe in combat.
+local function UpdateTargetRing()
+    local name = ReadNPC("target")
+    for _, btn in ipairs(targetButtons) do
+        local on = name ~= nil and btn:IsShown() and btn.npcName == name
+        for _, t in ipairs(btn.ring) do t:SetShown(on) end
+    end
+end
 
 local function RenderTargetFrame()
     local list = DesiredButtons()
     local signature = Signature(list)
-    if signature ~= lastApplied then
-        ApplyLayout(list)
+    local layout = CurrentLayout()
+    local width, status
+    if layout ~= "icons" then width, status = RowGeometry(list) end
+    local changed = signature ~= lastApplied
+    if changed then
+        ApplyAttributes(list)
         lastApplied, appliedList = signature, list
     end
-    UpdateButtonLooks(list)
+    if changed or layout ~= appliedLayout
+        or (width and (width > (appliedWidth or 0) or status > (appliedStatus or 0))) then
+        PlaceButtons(list, layout, width, status)
+        appliedLayout, appliedWidth, appliedStatus = layout, width, status
+        FitScale()
+    end
+    UpdateButtonLooks(list, layout)
+    UpdateTargetRing()
 end
 
 -- A sighting draws the NPC's face into its name's cache at once, combat or
@@ -762,20 +1032,34 @@ end
 -- gone when the fight ends (Codex on #90). Called from the sightings
 -- themselves (the watch list's Sighted, Quests.lua's Hold), never through
 -- DesiredButtons, whose quest selection would remember the wrong incumbents.
--- In combat the buttons keep the layout applied before it; a button already
--- showing this name gets the face on its own icon, a texture change, which
--- the client allows a protected frame's regions in combat (porting guide,
--- 70959). The cache texture moves onto the button after combat.
+-- Out of combat a button already showing this name gets the cached face at
+-- once. In combat the buttons keep the layout applied before it; such a
+-- button gets the face on its own icon, a texture change, which the client
+-- allows a protected frame's regions in combat (porting guide, 70959). The
+-- cache texture moves onto the button after combat.
 local function CacheFace(name, unit)
     if type(name) ~= "string" or type(unit) ~= "string" or ReadNPC(unit) ~= name then return end
     local tex = PortraitFor(name, true)
     if not tex then return end
     SetPortraitTexture(tex, unit)
-    if not (InCombatLockdown() and appliedList) then return end
+    if not appliedList then return end
+    local combat = InCombatLockdown()
     for i, e in ipairs(appliedList) do
         local btn = targetButtons[i]
         if e.name == name and btn and btn:IsShown() and btn.portrait ~= tex then
-            SetPortraitTexture(btn.icon, unit)
+            if combat then
+                -- A region's texture and Show/Hide: allowed in combat. A
+                -- row's placeholder gives way to the face.
+                SetPortraitTexture(btn.icon, unit)
+                if not btn.portrait then
+                    btn.placeholder:Hide()
+                    btn.icon:Show()
+                end
+            else
+                -- Out of combat the cached face goes on now: a sighting that
+                -- changes nothing else refreshes no button (Codex on #88).
+                PutPortrait(btn, tex)
+            end
         end
     end
 end
@@ -790,6 +1074,23 @@ local function RefreshTargetFrame()
     end
     pendingRefresh = false
     RenderTargetFrame()
+end
+
+-- The target frame's layout (#88): Icons, List or List, two columns. Only
+-- placement and regions change, never a button's attributes; in combat the
+-- frame is protected, so the switch applies when combat ends.
+local configFrame
+local function ShowLayoutChoice()
+    local dd = configFrame and configFrame.layoutDropdown
+    if dd then UIDropDownMenu_SetText(dd, LAYOUT_LABELS[CurrentLayout()]) end
+end
+
+local function SetLayout(layout)
+    if not LAYOUT_LABELS[layout] then return false end
+    SetConfig("layout", layout)
+    RefreshTargetFrame()
+    ShowLayoutChoice()
+    return true
 end
 
 -------------------------------------------------------------------------------
@@ -1347,9 +1648,8 @@ local function ShowExport()
 end
 
 -------------------------------------------------------------------------------
--- CONFIG GUI
+-- CONFIG GUI (configFrame is declared with the layout switch, above)
 -------------------------------------------------------------------------------
-local configFrame
 local MARKER_NAMES = { "Star", "Circle", "Diamond", "Triangle", "Moon", "Square", "Cross", "Skull" }
 local MARKER_ICONS = {}
 for i = 1, 8 do
@@ -1439,7 +1739,7 @@ end
 
 -- The config window (#34): the watch list on the left, the settings on the
 -- right. Each column is laid out down a y cursor, in px from the window's top.
-local CFG_W, CFG_H = 712, 540
+local CFG_W, CFG_H = 712, 574    -- 574: the Layout row (#88) took 34 px
 local QUEST_H = 136               -- the quest targets section, with Quests.lua loaded (two checkboxes)
 local COL_W = 324
 local LEFT, RIGHT = 16, 372   -- the columns' left edges
@@ -1793,7 +2093,26 @@ local function CreateConfigFrame()
     y = y - 26
     MakeCheckbox(f, x, y, "Lock frame position", "lockFrame", nil, "Alt + drag overrides the lock.")
 
+    -- Layout (#88): the same switch as /stakeout layout.
     y = y - 44
+    RowLabel(f, x + 4, y - 14, "Layout")
+    local layoutDropdown = CreateFrame("Frame", "StakeoutLayoutDropdown", f, "UIDropDownMenuTemplate")
+    layoutDropdown:SetPoint("LEFT", f, "TOPLEFT", x + 52, y - 14)
+    UIDropDownMenu_SetWidth(layoutDropdown, 160)
+    UIDropDownMenu_Initialize(layoutDropdown, function()
+        for _, layout in ipairs(LAYOUTS) do
+            local info   = UIDropDownMenu_CreateInfo()
+            info.text    = LAYOUT_LABELS[layout]
+            info.value   = layout
+            info.checked = (CurrentLayout() == layout)
+            info.func = function() SetLayout(layout) end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    f.layoutDropdown = layoutDropdown
+    ShowLayoutChoice()
+
+    y = y - 34
     local iconLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     iconLabel:SetPoint("TOPLEFT", f, "TOPLEFT", x + 4, y)
     iconLabel:SetText("Button icon")
@@ -1837,7 +2156,7 @@ local function CreateConfigFrame()
         val = math.floor(val / 10 + 0.5) * 10
         SetConfig("frameScale", val / 100)
         -- The target frame is protected; rescale it once combat ends.
-        if targetFrame and not InCombatLockdown() then targetFrame:SetScale(StakeoutDB.frameScale) end
+        FitScale()
         UpdateScaleLabel(val)
     end)
 
@@ -2001,7 +2320,7 @@ local function OnCombatEnd()
             targetFrame:StopMovingOrSizing()
             SaveFramePosition(targetFrame)
         end
-        targetFrame:SetScale(StakeoutDB.frameScale or 1.0)
+        FitScale()
     end
     if macroSyncPending then SyncMacros() end
     ApplyPendingMacroOn()
@@ -2046,7 +2365,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         RegisterEvents(self, "PLAYER_LOGIN", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
             "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
             "UPDATE_MOUSEOVER_UNIT", "UNIT_NAME_UPDATE", "UNIT_DIED", "UPDATE_MACROS",
-            "SPELLS_CHANGED")
+            "SPELLS_CHANGED", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED")
         C_Timer.NewTicker(1, Tick)
 
         Rescan()
@@ -2075,15 +2394,25 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "PLAYER_TARGET_CHANGED" then
         CheckUnit("target", false)
+        UpdateTargetRing()
+
+    elseif event == "UI_SCALE_CHANGED" or event == "DISPLAY_SIZE_CHANGED" then
+        -- A smaller screen may no longer hold the frame (in combat, its end does).
+        FitScale()
 
     elseif event == "UPDATE_MOUSEOVER_UNIT" then
         CheckUnit("mouseover", false)
 
     elseif event == "UNIT_DIED" then
         UnitDied(...)
+        -- A target that dies mid-fight changes no target (Codex on the plan).
+        UpdateTargetRing()
 
     elseif event == "UNIT_NAME_UPDATE" then
         NameUpdated(...)
+        -- The target's real name, a moment after "Unknown".
+        local unit = ...
+        if not IsSecret(unit) and unit == "target" then UpdateTargetRing() end
 
     elseif event == "SPELLS_CHANGED" then
         ns.range.Invalidate()
@@ -2152,6 +2481,16 @@ SlashCmdList["STAKEOUT"] = function(input)
                 Theme.Following() and "Glass UI's" or Theme.LABELS[Theme.Active()])
         end
 
+    elseif cmd == "layout" then
+        local arg = rest:lower()
+        if arg ~= "" and SetLayout(arg) then
+            Print("Layout: %s.%s", LAYOUT_LABELS[arg],
+                InCombatLockdown() and " It applies when combat ends." or "")
+        else
+            Print("Layout: %s. Use |cff00ff00/stakeout layout icons|r, |cff00ff00list|r or |cff00ff00list2|r.",
+                LAYOUT_LABELS[CurrentLayout()])
+        end
+
     elseif cmd == "quests" then
         -- Quests.lua owns the feature; the core only passes the command on.
         local quests = ns.quests
@@ -2186,6 +2525,7 @@ SlashCmdList["STAKEOUT"] = function(input)
         Print("  /stakeout export              — Copy the list as /stakeout add lines")
         Print("  /stakeout macro on / off      — Keep the list in a character macro")
         Print("  /stakeout look forever/glass  — The windows' look (after a /reload)")
+        Print("  /stakeout layout icons/list/list2 — The target frame: icons, or rows with whole names")
         Print("  /stakeout quests on / off     — Quest target buttons (experimental)")
         Print("  /stakeout quests hunt on / off — ...and quest mobs before they're seen")
         Print("  /stakeout clear               — Remove all NPCs")
@@ -2224,7 +2564,10 @@ Stakeout._test = {
     LINGER = LINGER, MEASURED_ON_BUILD = MEASURED_ON_BUILD,
     Tick = Tick, MacroSafeName = MacroSafeName, ResetDetections = ResetDetections,
     lastApplied = function() return lastApplied end,
-    portraitCount = function() return portraitCount end, PORTRAIT_MAX = PORTRAIT_MAX, CacheFace = CacheFace,
+    portraitCount = function() return portraitCount end, FitScale = FitScale, PORTRAIT_MAX = PORTRAIT_MAX, CacheFace = CacheFace,
     pendingRefresh = function() return pendingRefresh end,
     look = function() return Theme.Active() end,
+    ROW_W_MIN = ROW_W_MIN, ROW_W_MAX = ROW_W_MAX, ROW_H = ROW_H, UpdateTargetRing = UpdateTargetRing,
+    appliedWidth = function() return appliedWidth end,
+    appliedLayout = function() return appliedLayout end,
 }

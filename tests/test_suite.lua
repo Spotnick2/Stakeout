@@ -14,6 +14,14 @@
 ------------------------------------------------------------
 
 dofile("tests/wow_stubs.lua")
+
+-- The Hunt checkbox is the settings' last control: its box and the line under
+-- it (44 px) end inside the window, with a margin.
+local function huntInside(h)
+    local hc = StakeoutConfigFrame and StakeoutConfigFrame.huntCheck
+    local p = hc and hc._points[#hc._points]
+    return p ~= nil and -p[5] + 44 + 8 <= h
+end
 local H = dofile("tests/harness.lua")
 
 local SMOKED = { tint = { 0.05, 0.06, 0.08, 0.62 }, backing = { 0.04, 0.05, 0.07, 0.92 }, wash = 0.14 }
@@ -112,7 +120,8 @@ do
     check(StakeoutConfigFrame.followCheck and StakeoutConfigFrame.followCheck:GetChecked(),
         "the settings show the switch, on")
     local w, h = StakeoutConfigFrame:GetSize()
-    eq(h, 720, "and the window makes room for it (and for quest targets, two checkboxes)")
+    eq(h, 754, "and the window makes room for it (and for quest targets, two checkboxes, and the layout row)")
+    check(huntInside(h), "the Hunt control, the last one, still inside the window")
 
     -- The saved look is kept while following, and says so.
     SlashCmdList.STAKEOUT("look glass")
@@ -226,7 +235,8 @@ do
     SlashCmdList.STAKEOUT("config")
     eq(StakeoutConfigFrame.followCheck, nil, "and no switch in the settings")
     local _, h = StakeoutConfigFrame:GetSize()
-    eq(h, 676, "nor room for one (quest targets only)")
+    eq(h, 710, "nor room for one (quest targets and the layout row only)")
+    check(huntInside(h), "the Hunt control, the last one, still inside the window")
 end
 
 do

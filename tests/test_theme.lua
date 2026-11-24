@@ -173,8 +173,36 @@ end
 local face = btn.portrait
 check(face and face._masks and #face._masks == 1 and face._masks[1] == btn.iconMask,
     "a portrait on the button is rounded by the same mask")
+-- It follows the picture, wherever a layout puts it (#88): the icon's inset
+-- is the face's.
 local fp = face and face._points[#face._points]
-eq(fp and fp[1] .. fp[4] .. fp[5], "BOTTOMRIGHT-22", "...and inset the same")
+check(fp and fp[1] == "ALL" and fp[2] == btn.icon, "...and stands over the picture, inset the same")
+
+-- The list layouts (#88): a row's face is a small square at its left, rounded
+-- by a mask of its own over the picture; the row-sized mask stays on the
+-- highlight and the dark backing, inset so the pill's rim shows.
+local function masks(tex)
+    local out = {}
+    for _, m in ipairs(tex._masks or {}) do out[#out + 1] = m == btn.iconMask and "row" or m == btn.pictureMask and "picture" or "?" end
+    return table.concat(out, ",")
+end
+check(btn.pictureMask and btn.pictureMask._parent == btn, "a picture mask the button owns")
+local pm = btn.pictureMask._points[1]
+eq(pm and pm[2], btn.icon, "...over the picture, wherever it stands")
+eq(masks(btn.placeholder), "picture", "the placeholder wears it")
+eq(btn.backing._sublevel, -1, "the backing under the picture (BACKGROUND -1)")
+eq(masks(btn.backing), "row", "...rounded like the pill")
+local bp = btn.backing._points[#btn.backing._points]
+eq(bp and bp[1] .. bp[4] .. bp[5], "BOTTOMRIGHT-22", "...and inset 2 px so the rim shows")
+SlashCmdList.STAKEOUT("layout list")
+eq(masks(btn.icon), "picture", "list: the picture wears its own mask")
+eq(masks(face), "picture", "...and so does the face already on it")
+eq(masks(btn.highlight), "row", "the highlight keeps the row's")
+check(btn.backing._shown, "the backing shows on a row")
+SlashCmdList.STAKEOUT("layout icons")
+eq(masks(btn.icon), "row", "icons: the button's mask again")
+eq(masks(face), "row", "...on the face too")
+check(not btn.backing._shown and not btn.placeholder._shown, "no backing or placeholder on an icon")
 
 -- Nothing glass builds on the target frame takes the mouse: clicks reach the
 -- secure buttons, and the frame's own drag stays the frame's.

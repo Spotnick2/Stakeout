@@ -53,6 +53,7 @@ login, with nothing to click. It uses one character macro slot, or up to three f
 /stakeout list                   List the watch list in chat
 /stakeout export                 Copy the list as /stakeout add lines
 /stakeout macro on / off         Keep the list in a character macro (restored at login)
+/stakeout layout icons / list / list2   The target frame: icons, or rows with whole names (list2: two columns)
 /stakeout quests on / off        Show experimental quest target buttons
 /stakeout quests hunt on / off   Show quest mobs before you see them (with Questie)
 /stakeout clear                  Remove every NPC
@@ -66,7 +67,9 @@ NPC names must match exactly, spaces included (`/stakeout add Captain Flat Tusk`
 - **Alerts:** taskbar flash, sound on/off, and which sound (it previews when you pick it).
 - **Raid marking:** left-click a button to target the NPC and put your marker on it (clicking again keeps the
   mark); right-click only targets. Turn the mark off, or pick the marker.
-- **Target frame:** lock the position (Alt+drag still moves it), the button icon, and the scale.
+- **Target frame:** lock the position (Alt+drag still moves it), the layout, the button icon, and the scale.
+  The layout is *Icons* (the default), *List* (a row per NPC: portrait, whole name, quest progress) or *List,
+  two columns*. Your current target's button has a gold outline.
 - **Look:** WoW Forever (the default) or Glass, a smoked glass look shared with other glass addons. It
   applies to every Stakeout window after a `/reload`.
 - **Quest targets:** tick *Show buttons for quest mobs* for the experimental quest buttons (the same switch as
