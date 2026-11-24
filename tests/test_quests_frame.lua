@@ -305,4 +305,51 @@ WoW.ticker.fn()
 eq(writes, after, "and only once: nothing more is written")
 for _, btn in ipairs(T.buttons) do btn.SetAttribute = nil end
 
+------------------------------------------------------------
+-- The list layout's right side (#88): the count, "turn in", "talk"
+------------------------------------------------------------
+clean()
+StakeoutDB.layout = "list"
+killQuest(30, { "Vile Familiar" }, 3101)
+local qrow = WoW.questLog[1].rows[1]
+qrow.numFulfilled, qrow.numRequired = 0, 8
+turnin(31, "Orgnil Soulscar", 3142)
+Q.Rebuild()
+see("Vile Familiar", 3101)
+see("Orgnil Soulscar", 3142, false)
+local vf = button("Vile Familiar")
+eq(vf and vf.progress:GetText(), "0/8", "a kill row: its count")
+eq(button("Orgnil Soulscar").progress:GetText(), "turn in", "a turn-in: turn in")
+local spec1
+for _, s in ipairs(Q.ButtonSpecs()) do if s.name == "Vile Familiar" then spec1 = s end end
+eq(spec1 and spec1.progressMax, "8/8", "the count at its end, for the width")
+eq(spec1.hunt, false, "a seen mob is no hunt row")
+writes = 0
+for _, btn in ipairs(T.buttons) do
+    local real = getmetatable(btn).__index.SetAttribute
+    btn.SetAttribute = function(self, k, v) writes = writes + 1 return real(self, k, v) end
+end
+qrow.numFulfilled, qrow.text = 1, "1/8 Vile Familiar slain"
+WoW.fire("QUEST_LOG_UPDATE")
+WoW.flushTimers()
+eq(vf.progress:GetText(), "1/8", "a kill counted: 1/8, from the event alone")
+eq(writes, 0, "...with no attribute written")
+for _, btn in ipairs(T.buttons) do btn.SetAttribute = nil end
+-- No plain count: nothing short to say. The secrets are numbers, as the
+-- client's are (a proxy would fail the number check anyway); the marks last
+-- to the end of this file, so nothing after it uses 37 or 41.
+local function progressWith(have, need)
+    qrow.numFulfilled, qrow.numRequired = have, need
+    WoW.fire("QUEST_LOG_UPDATE")
+    WoW.flushTimers()
+    T.RefreshTargetFrame()
+    return vf.progress:GetText()
+end
+eq(progressWith(0, 0), "", "nothing to count (0 needed): nothing on the right")
+eq(progressWith(WoW.MarkSecret(37), 50), "", "a secret count done: nothing on the right")
+eq(progressWith(3, WoW.MarkSecret(41)), "", "a secret count needed: nothing on the right")
+eq(progressWith(3, 8), "3/8", "plain again: the count")
+StakeoutDB.layout = "icons"
+T.RefreshTargetFrame()
+
 done("test_quests_frame")

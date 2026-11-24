@@ -403,3 +403,28 @@ Note: "a lot of items seems overlapping the next row on the window, seems there 
   reading pane over the glass wasn't judged.
 - The auto steps' screenshots were taken before the windows they open had drawn: they show the scene only. The
   question steps' screenshots show the windows.
+
+### 14. The list layouts (#88)
+
+#### `rows` (2026-11-23, 1.60.1.70959, Stranglethorn Vale by Nesingwary's, Glass look, run #507)
+```
+list:  1 row  (Snapjaw Crocolisk 0/5, 190x22), placeholder shown, texture 1066622
+list2: 2 rows (+ Venture Co. Geologist 0/8, 196x22 each), both placeholders
+Names whole, progress on the right?                               YES
+A row not seen yet shows a dark, shadowed silhouette?             YES
+Readable against the ground (backing dark enough)?                YES
+Two rows to a line, under the group title, nothing overlapping?   YES
+The target's row has a thin gold outline?                         YES
+In combat, click another row: the outline moves to it?            YES
+The target dies: its outline goes?                                YES
+A mob first seen mid-fight gets its face on the row after?        YES
+icons: 26x26, Snapjaw's face kept, labels back                    YES
+```
+- **`Interface\Garrison\Portraits\FollowerPortrait_NoPortrait` draws on this client** (file ID 1066622), so the
+  `TempPortrait` fallback isn't needed here. Desaturated with the vertex tints in `UpdateButtonLooks`, it reads at
+  18 px as a dark silhouette on the glass backing. The tints stay as they are.
+- Both rows were hunt rows (found, not seen yet): the screenshots' name text peaks at about 0.7 of white, the 0.65
+  grey. Their count ("0/5") wins over "not seen", as designed.
+- The read after "target one" had a **dead** crocolisk as the target, so it logged no outline. That's right:
+  `ReadNPC` reads no dead unit. The outline answers came from live targets afterwards.
+- Bugsy: nothing from Stakeout in that session.

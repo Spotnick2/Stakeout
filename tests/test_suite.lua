@@ -14,6 +14,35 @@
 ------------------------------------------------------------
 
 dofile("tests/wow_stubs.lua")
+
+-- The Hunt checkbox is the settings' last control: its box and the line under
+-- it (44 px) end inside the window, with a margin.
+local function huntInside(h)
+    local hc = StakeoutConfigFrame and StakeoutConfigFrame.huntCheck
+    local p = hc and hc._points[#hc._points]
+    return p ~= nil and -p[5] + 44 + 8 <= h
+end
+-- Each checkbox's grey line stays on one line inside the window: its width
+-- bound to the column (past it, "..."), and its text short enough not to
+-- need that. About 5 units a character in GameFontDisableSmall (the owner's
+-- screenshot, 70959: "Experimental. With Questie: droppers and turn-ins too.",
+-- 54 characters, took 271 of the window's 712). The kit's 6 a character is
+-- an upper bound, too wide for this.
+local function descsInside()
+    local f, bad = StakeoutConfigFrame, {}
+    for _, cb in ipairs({ f.questCheck, f.huntCheck, f.followCheck }) do
+        local d = cb and cb.desc
+        if d then
+            local p = cb._points[#cb._points]
+            local text = d:GetText() or ""
+            if not d:GetWidth() or p[4] + 26 + d:GetWidth() > f:GetWidth()
+                or #text * 5.1 > d:GetWidth() then
+                bad[#bad + 1] = text
+            end
+        end
+    end
+    return #bad == 0, table.concat(bad, " | ")
+end
 local H = dofile("tests/harness.lua")
 
 local SMOKED = { tint = { 0.05, 0.06, 0.08, 0.62 }, backing = { 0.04, 0.05, 0.07, 0.92 }, wash = 0.14 }
@@ -112,7 +141,10 @@ do
     check(StakeoutConfigFrame.followCheck and StakeoutConfigFrame.followCheck:GetChecked(),
         "the settings show the switch, on")
     local w, h = StakeoutConfigFrame:GetSize()
-    eq(h, 720, "and the window makes room for it (and for quest targets, two checkboxes)")
+    eq(h, 754, "and the window makes room for it (and for quest targets, two checkboxes, and the layout row)")
+    check(huntInside(h), "the Hunt control, the last one, still inside the window")
+    local inside, which = descsInside()
+    check(inside, "every grey line under a checkbox stays inside the window: " .. which)
 
     -- The saved look is kept while following, and says so.
     SlashCmdList.STAKEOUT("look glass")
@@ -226,7 +258,8 @@ do
     SlashCmdList.STAKEOUT("config")
     eq(StakeoutConfigFrame.followCheck, nil, "and no switch in the settings")
     local _, h = StakeoutConfigFrame:GetSize()
-    eq(h, 676, "nor room for one (quest targets only)")
+    eq(h, 710, "nor room for one (quest targets and the layout row only)")
+    check(huntInside(h), "the Hunt control, the last one, still inside the window")
 end
 
 do

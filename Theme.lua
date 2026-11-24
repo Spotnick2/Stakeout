@@ -337,9 +337,25 @@ function Theme.Button(btn)
         tex:SetPoint("TOPLEFT", btn, "TOPLEFT", ICON_INSET, -ICON_INSET)
         tex:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -ICON_INSET, ICON_INSET)
         tex:AddMaskTexture(mask)
+        tex.maskOn = mask   -- Stakeout.lua's MaskWith swaps it
     end
     -- A portrait moved onto the button later (Stakeout.lua) takes the same.
     btn.iconMask, btn.iconInset = mask, ICON_INSET
+    -- A list row's face (#88) is a small square at the row's left, where the
+    -- row-sized mask can't round it: its own, unsliced, over the picture
+    -- wherever the layout puts it. The placeholder wears it for good.
+    btn.pictureMask = Glass.Mask(btn, "button_mask", nil, 0, btn.icon)
+    if btn.placeholder then btn.placeholder:AddMaskTexture(btn.pictureMask) end
+    -- A row's dark backing (shown in the lists only), inset so the pill's rim
+    -- shows round it, and rounded like it: names and counts stay readable
+    -- on bright ground.
+    if btn.backing then
+        btn.backing:ClearAllPoints()
+        btn.backing:SetPoint("TOPLEFT", btn, "TOPLEFT", ICON_INSET, -ICON_INSET)
+        btn.backing:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -ICON_INSET, ICON_INSET)
+        btn.backing:SetColorTexture(READING[1], READING[2], READING[3], 0.72)
+        btn.backing:AddMaskTexture(mask)
+    end
     btn.glassPill = pill
     return true
 end

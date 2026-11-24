@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- A list layout for the target frame: Settings, Target frame, **Layout**, or `/stakeout layout list`. Each
+  button becomes a row with the NPC's portrait, its whole name and, for quest targets, the progress ("3/10",
+  "turn in", "talk"). Rows are grouped under Watch list, NPCs and Quest mobs. *List, two columns*
+  (`/stakeout layout list2`) puts two rows on a line. Icons stays the default.
+- In the lists, a row shows a shadowed portrait until its NPC has been seen, and a quest mob hunt mode found but
+  you haven't seen yet has a grey name ("not seen" when there's no count).
+- The button of your current target has a gold outline, in every layout, in combat too.
+- A target frame too big for the screen at the chosen scale (a long list at 300%) is shrunk to fit, so every
+  button stays in reach. It goes back to your scale when it fits again.
+- Changing the target frame's scale (the slider, or the fit above) keeps it where it is on the screen. The saved
+  position now records the scale it was taken at.
+
 ### Fixed
 
 - Clicking a target button over and over no longer shows "You can't do that right now" once the mob is dead or
@@ -11,6 +25,7 @@
 - A button keeps its NPC's portrait for the rest of the session once you've seen it, even after the NPC is out of
   sight or the button moves, instead of going back to the icon. An NPC you first see mid-fight gets its portrait
   too.
+- The settings' line under "Show quest mobs before they're seen" no longer runs past the window's edge.
 
 ## v2.6.0 - 2026-11-18
 

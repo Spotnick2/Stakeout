@@ -985,6 +985,24 @@ local function Progress(ref)
     return title .. ": progress unknown"
 end
 
+-- A row's right side in the list layouts (#88): the count, "turn in" or
+-- "talk"; nil when there's nothing short to say (a related unit, a row with
+-- no plain count). The second return is the same count at its end, so the
+-- core can make room for the widest it will come to ("10/10").
+local function ShortProgress(ref)
+    if not ref then return nil end
+    if ref.kind == "turnin" then return "turn in" end
+    if ref.kind == "talk" then return "talk" end
+    if ref.kind ~= "kill" and ref.kind ~= "item" then return nil end
+    local row = ref.index and ref.quest and ref.quest.rows[ref.index]
+    local have, need = row and row.numFulfilled, row and row.numRequired
+    if C.IsSecret(have) or C.IsSecret(need) or type(have) ~= "number" or type(need) ~= "number"
+        or need <= 0 then
+        return nil
+    end
+    return fmt("%d/%d", have, need), fmt("%d/%d", need, need)
+end
+
 -- Every target that could have a button now, one per /targetexact name.
 local function CollectTargets(now)
     local byTarget, list = {}, {}
@@ -1087,9 +1105,12 @@ local function ButtonSpecs()
         else
             tooltip[#tooltip + 1] = "Left-click: target"
         end
+        -- The refs are ranked: the first one is what the row's right side says.
+        local progress, progressMax = ShortProgress(nt.refs[1])
         specs[#specs + 1] = {
             row = nt.row, name = nt.name, macrotext = left, macrotext2 = right,
             unit = nt.unit, icon = QUEST_ICON, tooltip = tooltip,
+            hunt = nt.tier == HUNT, progress = progress, progressMax = progressMax,
         }
     end
     lastShown = shown

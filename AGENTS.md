@@ -92,7 +92,7 @@ and checks the zip holds exactly the addon and the library's shipped files. Bump
 made anyway.
 
 The glass on the target frame is textures and plain child frames that never take the mouse, built out of
-combat (the frame's at `ADDON_LOADED`, a button's when `ApplyLayout` makes it) and never re-anchored,
+combat (the frame's at `ADDON_LOADED`, a button's when `ApplyAttributes` makes it) and never re-anchored,
 re-levelled or resized afterwards. Keep it that way: the frame is protected once it has a secure button.
 
 ## What the Client Allows (measured, build 1.60.1.70450)
@@ -155,6 +155,14 @@ so act on it then. Bump `MEASURED_ON_BUILD` after re-measuring.
 - Buttons register **both** mouse edges (`RegisterForClicks("AnyUp", "AnyDown")`). The client's secure
   handler acts on exactly one of them (`ActionButtonUseKeyDown`). Never set `typerelease`, because that double-fires.
 - No `SecureHandler*`, `_onstate-*` or state drivers: secure snippets are broken on this client.
+- **Layouts (#88).** Icons, List and List, two columns are the same secure buttons, placed and dressed
+  differently. `ApplyAttributes` writes attributes only when the layout's `Signature` changes;
+  `PlaceButtons`/`DressButton` set sizes, anchors and regions, and run on a new signature, a new layout or rows
+  that must grow. A layout switch alone writes no attribute. All of it is out of combat (`RefreshTargetFrame`
+  defers it). In combat only region `Show`/`Hide` and texture changes happen, which the client allows on a
+  protected frame's regions (70959): the target outline (`UpdateTargetRing`, on `PLAYER_TARGET_CHANGED`,
+  `UNIT_DIED` and the target's `UNIT_NAME_UPDATE`) and a face first seen mid-fight (`CacheFace`, which also
+  hides the row's placeholder). `PutPortrait`/`TakePortrait` reparent, so they stay out of combat.
 
 ## Settings
 

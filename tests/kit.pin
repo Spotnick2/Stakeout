@@ -1,5 +1,5 @@
 # WowTestKit for these tests: the commit, and the client build to test against.
 # build: Stakeout.lua's MEASURED_ON_BUILD (70959), the build it was last measured on.
-sha=3cba24fd68e35758c19671bcedfefa9ad228c60f
+sha=dbdca815b4c1cb32d90483c4b291e8df0fe7fac6
 build=70959
 api=2
