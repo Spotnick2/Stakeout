@@ -59,8 +59,11 @@ local function keyDown()
     return fn ~= nil and fn("ActionButtonUseKeyDown") and true or false
 end
 
+local restoreKeyDown   -- defined with the CVar steps below; the first step calls it
+
 local before   -- step 1's target and mark
 local function snapshot()
+    restoreKeyDown()   -- a run stopped by a /reload while switched
     if not seam() then error("Stakeout isn't loaded, or isn't this branch's build (no test seam).", 0) end
     local shown = questButtons()
     if #shown == 0 then
@@ -68,7 +71,6 @@ local function snapshot()
     end
     local g = targetGuid()
     if not g then error("Target something first (another mob or an NPC, not the quest mob), then Run again.", 0) end
-    restoreKeyDown()   -- a run stopped by a /reload while switched
     before = { guid = g, mark = targetMark() }
     return true, ("target %s (mark %s); quest buttons: %s; ActionButtonUseKeyDown %s"):format(g,
         tostring(before.mark), table.concat(shown, ", "), keyDown() and "1" or "0")
@@ -113,7 +115,7 @@ local function saved()
     local db = G("StakeoutProbeDB")
     return type(db) == "table" and db or nil
 end
-local function restoreKeyDown()
+restoreKeyDown = function()
     local db, set = saved(), G("SetCVar")
     if db and db.alertKeyDown ~= nil and set then
         set("ActionButtonUseKeyDown", db.alertKeyDown and "1" or "0")
@@ -183,7 +185,7 @@ local function alertSeen(key)
 end
 
 Probe:Steps("alert", {
-    rev = 3,
+    rev = 4,
     title = "Stakeout: an alert from a quest button (#94)",
     { text = "Out of combat, stand where Stakeout shows a button for a quest mob, with one of those mobs' nameplates "
           .. "in view. Target something ELSE (another mob or an NPC). Then press Run.", run = snapshot },
@@ -207,7 +209,8 @@ Probe:Steps("alert", {
       leave = restoreOn({ stopped = true, back = true }) },
     { text = "Alert off, target cleared. Hold Shift, RIGHT mouse button down, let go of Shift, let go of the mouse. "
           .. "Then press Run.", run = gesture(false), check = gesture(false), leave = restoreOn({ stopped = true }) },
-    { text = "Press Run to put ActionButtonUseKeyDown back as it was.", run = setKeyDown(false) },
+    { text = "Press Run to put ActionButtonUseKeyDown back as it was.", run = setKeyDown(false),
+      leave = restoreOn({ stopped = true, skipped = true }) },
     { text = "Turn its alert ON (Shift+right-click; clear the target if it got one). Walk away until its "
           .. "nameplates are gone, stay away for over a minute, then walk back. Stakeout should alert on its own "
           .. "when a nameplate shows (up to 5 minutes here).", wait = alertWait("walk"), timeout = 300,
@@ -226,5 +229,5 @@ Probe:Steps("alert", {
 })
 
 NS._test = NS._test or {}
-NS._test.alert = { questButtons = questButtons, gesture = gesture, targetMark = targetMark,
+NS._test.alert = { questButtons = questButtons, gesture = gesture, targetMark = targetMark, snapshot = snapshot,
     setKeyDown = setKeyDown, restoreOn = restoreOn, restoreKeyDown = restoreKeyDown }

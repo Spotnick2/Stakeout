@@ -591,6 +591,7 @@ check(not Q.AlertOn("Unknown"), "...arms nothing")
 -- Both mobs show "Unknown" for now, so one button covers both: a click on it
 -- must not reach the armed one's record and turn it off.
 check(Q.AlertOn("Bloodscalp Warrior"), "...and leaves the armed mob's alert on")
+check(WoW.chatText():find("name isn't known yet", 1, true), "...and says to try again once it's named")
 unplate("nameplate1"); unplate("nameplate2")
 
 -- An "other quest unit" alert merged with a hunt button's keeps its lifetime.

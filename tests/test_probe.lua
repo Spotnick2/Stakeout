@@ -229,8 +229,12 @@ do
     eq(WoW.useKeyDown, true, "Stop puts it back")
     eq(StakeoutProbeDB.alertKeyDown, nil, "...and forgets it")
     A.setKeyDown(true)()
-    A.restoreKeyDown()   -- what the first step does after a /reload
-    eq(WoW.useKeyDown, true, "a run left switched is put back by the next one")
+    local ok, err = pcall(A.snapshot)   -- the first step, after a /reload
+    eq(WoW.useKeyDown, true, "a run left switched is put back by the next one's first step")
+    check(not ok and tostring(err):find("Stakeout", 1, true), "...which then says what it needs: " .. tostring(err))
+    A.setKeyDown(true)()
+    A.restoreOn({ stopped = true, skipped = true })("skipped")
+    eq(WoW.useKeyDown, true, "Skip at the restore step puts it back")
     -- The gestures: Shift added before release targets at 1 and toggles at 0.
     WoW.SetUnit("target", { name = "Some Mob", guid = "Creature-0-1-2-3-55-A" })
     WoW.useKeyDown = true

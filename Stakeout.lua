@@ -579,6 +579,8 @@ local function BtnPostClick(self, button, down)
         Print("Alert on: %s. Shift+right-click again to stop.", name)
     elseif on == false then
         Print("Alert off: %s.", name)
+    elseif on == "unnamed" then
+        Print("Its name isn't known yet: Shift+right-click again once the button shows it.")
     else
         Print("%s isn't a quest target any more.", name)
     end

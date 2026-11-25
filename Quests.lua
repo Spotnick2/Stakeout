@@ -937,14 +937,15 @@ CheckAlerts = function(diedGuid, watchNames)
 end
 
 -- Shift+right-click on a quest button (the core's PostClick): true when it
--- armed an alert, false when it turned one off, nil when the button is stale
--- (quest targets off, or the target no longer wanted; it can still be on
--- screen in combat). keys: the members of the button's target (its spec's
--- alertKeys).
+-- armed an alert, false when it turned one off, "unnamed" for a button still
+-- showing the client's placeholder, nil when the button is stale (quest
+-- targets off, or the target no longer wanted; it can still be on screen in
+-- combat). keys: the members of the button's target (its spec's alertKeys).
 local function ToggleAlert(name, keys)
     -- A button still showing the client's placeholder arms nothing: the name
     -- would match any unnamed unit.
-    if not Enabled() or type(name) ~= "string" or name == UNKNOWN then return nil end
+    if not Enabled() or type(name) ~= "string" then return nil end
+    if name == UNKNOWN then return "unnamed" end
     local rec = FindAlert(name)
     if not rec and type(keys) == "table" then
         for _, r in ipairs(alerts) do
