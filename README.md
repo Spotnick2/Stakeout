@@ -15,13 +15,17 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
 - Detects them on **nameplates**, as your **target**, or under your **mouse**
 - A small frame with one button per NPC found: **left-click** targets it and puts your raid marker on it,
   **right-click** only targets it
+- Two layouts for that frame: **icons**, or a **list** of rows with each NPC's portrait, its whole name and its
+  quest progress ("3/10", "turn in"), in one or two columns (a very long name ends in "...", its tooltip has it
+  all). Your current target's button has a gold outline
+- A button keeps its NPC's portrait once you've seen it, even out of sight (Stakeout keeps up to 30 portraits)
 - Chat message, taskbar flash and sound alert (17 sounds, plus 7 more with DBM-Core)
 - Experimental quest buttons (a checkbox in the config, or `/stakeout quests on`): mobs named in unfinished kill
   objectives, and with Questie installed, the mobs that drop quest items and the NPC to turn a finished quest in to
 - An optional hunt mode for quest mobs (with Questie): a button before you see them, to click until one is in reach
 - An approximate distance in a button's tooltip while its NPC is visible
 - Two NPCs with the same name keep their button until both are dead
-- Movable, lockable, scalable frame
+- Movable, lockable, scalable frame, shrunk to fit the screen when your scale would make it too big
 
 ## Your settings
 
@@ -89,7 +93,8 @@ Blizzard's Forever client doesn't allow some of what Stakeout did on TBC:
 
 ## Notes
 
-- Stakeout never moves, shows or hides its frame during combat. Changes wait for the fight to end.
+- Stakeout never moves, shows or hides its frame or its buttons during combat: those changes wait for the fight
+  to end. Only your target's outline and a newly seen NPC's portrait update mid-fight.
 - It's designed for your own list, not a built-in rare database.
 - Quest targets are off by default and do not play alerts. Without Questie, they cover only mobs named in
   unfinished kill objectives. With Questie, a mob that drops a quest item gets a button once you see it, and the
