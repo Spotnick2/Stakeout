@@ -18,7 +18,7 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
 - Two layouts for that frame: **icons**, or a **list** of rows with each NPC's portrait, its whole name and its
   quest progress ("3/10", "turn in"), in one or two columns (a very long name ends in "...", its tooltip has it
   all). Your current target's button has a gold outline
-- A button keeps its NPC's portrait once you've seen it, even out of sight (the faces of the last 30 NPCs seen)
+- A button keeps its NPC's portrait once you've seen it, even out of sight (Stakeout keeps up to 30 portraits)
 - Chat message, taskbar flash and sound alert (17 sounds, plus 7 more with DBM-Core)
 - Experimental quest buttons (a checkbox in the config, or `/stakeout quests on`): mobs named in unfinished kill
   objectives, and with Questie installed, the mobs that drop quest items and the NPC to turn a finished quest in to

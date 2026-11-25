@@ -23,7 +23,7 @@
 - Hunt mode only gives a button to quest mobs with a spawn within about 80 yards of you (the button goes past 100),
   instead of every spawn on the map. Clicking it targets one if one is in reach.
 - A button keeps its NPC's portrait once you've seen it, even after the NPC is out of sight or the button moves,
-  instead of going back to the icon. Stakeout keeps the faces of the last 30 NPCs it saw. An NPC you first see mid-fight gets its portrait
+  instead of going back to the icon. Stakeout keeps up to 30 portraits. An NPC you first see mid-fight gets its portrait
   too.
 - The settings' line under "Show quest mobs before they're seen" no longer runs past the window's edge.
 
