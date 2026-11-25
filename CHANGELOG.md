@@ -6,7 +6,7 @@
 
 - A list layout for the target frame: Settings, Target frame, **Layout**, or `/stakeout layout list`. Each
   button becomes a row with the NPC's portrait, its whole name and, for quest targets, the progress ("3/10",
-  "turn in", "talk"). Rows are grouped under Watch list, NPCs and Quest mobs. *List, two columns*
+  "turn in", "talk"). A name too long even for the widest row ends in "..."; its tooltip has it all. Rows are grouped under Watch list, NPCs and Quest mobs. *List, two columns*
   (`/stakeout layout list2`) puts two rows on a line. Icons stays the default.
 - In the lists, a row shows a shadowed portrait until its NPC has been seen, and a quest mob hunt mode found but
   you haven't seen yet has a grey name ("not seen" when there's no count).
@@ -22,8 +22,8 @@
   none is in reach. The click now only marks a live target.
 - Hunt mode only gives a button to quest mobs with a spawn within about 80 yards of you (the button goes past 100),
   instead of every spawn on the map. Clicking it targets one if one is in reach.
-- A button keeps its NPC's portrait for the rest of the session once you've seen it, even after the NPC is out of
-  sight or the button moves, instead of going back to the icon. An NPC you first see mid-fight gets its portrait
+- A button keeps its NPC's portrait once you've seen it, even after the NPC is out of sight or the button moves,
+  instead of going back to the icon. Stakeout keeps the faces of the last 30 NPCs it saw. An NPC you first see mid-fight gets its portrait
   too.
 - The settings' line under "Show quest mobs before they're seen" no longer runs past the window's edge.
 
