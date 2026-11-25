@@ -194,6 +194,21 @@ Enum = { UITextureSliceMode = { Stretched = 0, Tiled = 1 } }
 ------------------------------------------------------------
 
 function IsAltKeyDown() return WoW.altDown end
+-- #94: the modifiers the kit's secure-click simulator samples on each edge
+-- (it reads these stubs when they exist), and the edge rule Stakeout's
+-- PostClick asks. Both read the kit's one switch, WoW.useKeyDown (the
+-- ActionButtonUseKeyDown CVar).
+function IsShiftKeyDown() return WoW.shiftDown end
+function IsControlKeyDown() return WoW.ctrlDown end
+function GetCVarBool(name)
+    if name == "ActionButtonUseKeyDown" then return WoW.useKeyDown end
+    return nil
+end
+function SecureActionButton_ShouldUseOnKeyDown(btn)
+    local v = btn:GetAttribute("useOnKeyDown")
+    if v == nil then v = GetCVarBool("ActionButtonUseKeyDown") end
+    return v
+end
 function GetBuildInfo() return "1.60.1", WoW.build, "Sep 22 2026", 16001, "", " " end
 function FlashClientIcon() WoW.flashes = WoW.flashes + 1 end
 function PlaySound(id)

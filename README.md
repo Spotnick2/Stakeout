@@ -96,7 +96,7 @@ Blizzard's Forever client doesn't allow some of what Stakeout did on TBC:
 - Stakeout never moves, shows or hides its frame or its buttons during combat: those changes wait for the fight
   to end. Only your target's outline and a newly seen NPC's portrait update mid-fight.
 - It's designed for your own list, not a built-in rare database.
-- Quest targets are off by default and do not play alerts. Without Questie, they cover only mobs named in
+- Quest targets are off by default and don't alert on their own. Without Questie, they cover only mobs named in
   unfinished kill objectives. With Questie, a mob that drops a quest item gets a button once you see it, and the
   NPC to turn a finished quest in to gets one while you're within about 80 yards of where Questie says they stand.
   Questie has no droppers for many of Forever's own quest items; those get no button.
@@ -104,6 +104,10 @@ Blizzard's Forever client doesn't allow some of what Stakeout did on TBC:
   knows they spawn within about 80 yards of you, nearest first, in the slots mobs you can see leave free. Its tooltip says "Not seen
   yet". Clicking it looks for one by name: if one is in reach it becomes your target. It's your click, not
   detection, so nothing alerts until you find one.
+- **Shift+right-click a quest button** to be told when one of its mobs appears: the same chat line, flash and
+  sound as the watch list, when one gets a nameplate (about 40 yards). A small mark shows on the button while
+  it's on. One that leaves and comes back within a minute doesn't alert twice; when the one you saw last dies,
+  its respawn alerts at once. For a respawn you're waiting for, hunt mode keeps its button there to click.
 - Hover a button to see roughly how far its NPC is (e.g. "25-30 yd"), while a nameplate, your target or your
   mouse shows it. Addons can't read other units' positions, so it's bracketed with range checks, as
   NameplateDistance by Nedyar does (MIT; its notice is

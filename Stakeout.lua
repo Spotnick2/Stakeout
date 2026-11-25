@@ -352,6 +352,9 @@ local STATUS_WORDS  = { "not seen", "turn in", "talk" }
 -- A face not drawn yet: a shadowed generic one, as the Armory does.
 local PLACEHOLDER      = "Interface\\Garrison\\Portraits\\FollowerPortrait_NoPortrait"
 local PLACEHOLDER_OLD  = "Interface\\CharacterFrame\\TempPortrait"
+-- #94: an armed quest alert's mark (a gold dot when this doesn't load).
+local BELL             = "Interface\\Common\\VoiceChat-Speaker"
+local BELL_SIZE        = 12
 
 local function CurrentLayout()
     local l = StakeoutDB.layout
@@ -477,6 +480,15 @@ local function BtnOnEnter(self)
     if distance then GameTooltip:AddLine("Distance: " .. distance, 1, 1, 1) end
     if self.tooltipLines then
         for _, line in ipairs(self.tooltipLines) do GameTooltip:AddLine(line, 0.7, 0.7, 0.7) end
+        -- #94, read now: the state changes in combat too.
+        if self.questButton then
+            local quests = ns.quests
+            if quests and type(quests.AlertOn) == "function" and quests.AlertOn(self.npcName) then
+                GameTooltip:AddLine("Alert on (Shift+right-click to stop)", 1, 0.82, 0)
+            else
+                GameTooltip:AddLine("Shift+right-click: alert when one appears", 0.7, 0.7, 0.7)
+            end
+        end
     else
         if StakeoutDB.enableMarking then
             GameTooltip:AddLine("Left-click: target and mark", 0.7, 0.7, 0.7)
@@ -507,6 +519,55 @@ tooltipRefresh:SetScript("OnUpdate", function(f, elapsed)
         BtnOnEnter(btn)
     end
 end)
+
+-- #94: a quest button's alert mark, from Quests.lua's state. Region
+-- Show/Hide only, so it runs in combat too: after a toggle, and after the
+-- quest side drops an alert (a record two buttons share hides on both).
+local function RefreshAlertMarks()
+    local quests = ns.quests
+    local alertOn = quests and quests.AlertOn
+    for _, btn in ipairs(targetButtons) do
+        local on = btn.questButton and btn:IsShown() and type(alertOn) == "function" and alertOn(btn.npcName)
+        btn.bell:SetShown(on and true or false)
+    end
+end
+
+-- Which edge of a click the secure action runs on: the down edge when the
+-- button's useOnKeyDown attribute, else the ActionButtonUseKeyDown CVar, says
+-- so (SecureActionButton_ShouldUseOnKeyDown, SecureTemplates.lua:792; the
+-- template passes no isSecureAction, so mouse clicks follow it too:
+-- GlassActionBars measured down at 1 and up at 0, session 9, 70938).
+local function ActsOnDown(btn)
+    local fn = rawget(_G, "SecureActionButton_ShouldUseOnKeyDown")
+    if type(fn) == "function" then return fn(btn) and true or false end
+    local cvar = rawget(_G, "GetCVarBool")
+    return type(cvar) == "function" and cvar("ActionButtonUseKeyDown") and true or false
+end
+
+-- #94: Shift+right-click on a quest button toggles its alert. It runs on the
+-- edge the secure action runs on, so a Shift pressed or released between the
+-- edges gives a target (no "shift-" lookup) or a toggle (shift-type2 runs
+-- nothing), never both. Shift alone: with Ctrl or Alt too, the secure lookup
+-- falls through as it always has, and nothing toggles. A Lua flag and region
+-- Show/Hide: allowed in combat. self.npcName is what the button clicks (no
+-- layout is applied in combat).
+local function BtnPostClick(self, button, down)
+    if button ~= "RightButton" or not self.questButton then return end
+    if (down and true or false) ~= ActsOnDown(self) then return end
+    if not IsShiftKeyDown() or IsControlKeyDown() or IsAltKeyDown() then return end
+    local quests = ns.quests
+    if not (quests and type(quests.ToggleAlert) == "function") then return end
+    local name = self.npcName
+    local on = quests.ToggleAlert(name, self.questKeys)
+    if on == true then
+        Print("Alert on: %s. Shift+right-click again to stop.", name)
+    elseif on == false then
+        Print("Alert off: %s.", name)
+    else
+        Print("%s isn't a quest target any more.", name)
+    end
+    RefreshAlertMarks()
+end
 
 -- The watch list shows a button for every detected name.
 local function IsWatchDisplayed(name)
@@ -560,6 +621,9 @@ local function DesiredButtons()
                     macrotext = spec.macrotext, macrotext2 = spec.macrotext2,
                     tooltip = spec.tooltip, friendly = row == "friendly",
                     progress = spec.progress, progressMax = spec.progressMax, hunt = spec.hunt == true,
+                    -- #94: Shift+right-click arms an alert for the button's
+                    -- target, by its members' keys (Quests.lua's ToggleAlert).
+                    quest = true, alertKeys = spec.alertKeys,
                 }
             end
         end
@@ -572,7 +636,7 @@ end
 local function Signature(list)
     local parts = {}
     for i, e in ipairs(list) do
-        parts[i] = table.concat({ e.group, e.name, e.macrotext, e.macrotext2 or "" }, "\31")
+        parts[i] = table.concat({ e.group, e.name, e.macrotext, e.macrotext2 or "", e.quest and "q" or "" }, "\31")
     end
     return table.concat(parts, "\30")
 end
@@ -632,11 +696,20 @@ local function NewButton(i)
         t:Hide()
         btn.ring[#btn.ring + 1] = t
     end
+    -- #94: the mark of an armed quest alert, at the picture's top right, so it
+    -- follows both layouts. Shown and hidden by RefreshAlertMarks.
+    btn.bell = btn:CreateTexture(nil, "OVERLAY", nil, 6)
+    btn.bell:SetSize(BELL_SIZE, BELL_SIZE)
+    btn.bell:SetPoint("CENTER", btn.icon, "TOPRIGHT", -2, -2)
+    if btn.bell:SetTexture(BELL) == false then btn.bell:SetColorTexture(1, 0.82, 0, 1) end
+    btn.bell:Hide()
     -- Only ever made by ApplyAttributes, which runs out of combat.
     Theme.Button(btn)
 
     btn:SetScript("OnEnter", BtnOnEnter)
     btn:SetScript("OnLeave", BtnOnLeave)
+    -- Set here, out of combat: a protected button's scripts can't change in it.
+    btn:SetScript("PostClick", BtnPostClick)
 
     tinsert(targetButtons, btn)
     return btn
@@ -674,6 +747,13 @@ local function ApplyAttributes(list)
             btn:SetAttribute("type2", nil)
             btn:SetAttribute("macrotext2", nil)
         end
+        -- #94: Shift+right-click on a quest button toggles its alert
+        -- (PostClick) and must run nothing secure. With Shift held the
+        -- handler looks up shift-type2, *type2, shift-type*, *type*, then
+        -- type: never type2, so without this it ran the LEFT macro (target
+        -- and mark). "" is ATTRIBUTE_NOOP (SecureTemplates.lua:22). A watch
+        -- button keeps the old fallback.
+        btn:SetAttribute("shift-type2", e.quest and "" or nil)
         btn:Show()
     end
     targetFrame:Show()
@@ -978,7 +1058,12 @@ local function UpdateButtonLooks(list, layout)
         btn.nameText:SetText(e.name)
         if e.hunt then btn.nameText:SetTextColor(0.65, 0.65, 0.65) else btn.nameText:SetTextColor(1, 1, 1) end
         btn.progress:SetText(e.progress or (e.hunt and "not seen") or "")
+        -- #94: what Shift+right-click arms. Out of combat, with the applied
+        -- attributes, so it matches what the button clicks.
+        btn.questButton, btn.questKeys = e.quest == true, e.alertKeys
     end
+    for i = #list + 1, #targetButtons do targetButtons[i].questButton = false end
+    RefreshAlertMarks()
     portraitKeep = nil
     -- Buttons the layout no longer uses give their faces back, so a hidden
     -- button never pins one (Codex on #90).
@@ -1117,13 +1202,22 @@ local seenGUIDs = {}
 
 -- announced[name]: nil = armed; a number = quiet until that time; true = the
 -- alert for the current detection has played.
-local function Alert(name)
-    local quiet = announced[name]
-    if quiet == true or (quiet and GetTime() < quiet) then return end
-    announced[name] = true
+-- The alert itself: the chat line, the flash and the sound, as the settings
+-- say. The watch list's (Alert) and an armed quest target's (Quests.lua, #94).
+local function Announce(name)
     Print("Detected: %s", name)
     if StakeoutDB.flashOnFind then FlashClientIcon() end
     if StakeoutDB.soundOnFind then PlayAlertSound() end
+end
+
+-- Whether it played: the quests skip their own alert for a name this very
+-- sighting announced (#94, one alert per arrival).
+local function Alert(name)
+    local quiet = announced[name]
+    if quiet == true or (quiet and GetTime() < quiet) then return false end
+    announced[name] = true
+    Announce(name)
+    return true
 end
 
 -- A detection ends: quiet for REARM, then the next sighting alerts again.
@@ -1153,18 +1247,21 @@ local function Sighted(name, guid, unit, isPlate)
     -- would also hide the tooltip of a hovered button.
     if isNew then
         RefreshTargetFrame()
-        Alert(name)
+        return Alert(name)
     end
+    return false
 end
 
 local function CheckUnit(unit, isPlate)
     local name, guid = ReadNPC(unit)
+    local announcedNow = false
     if name and IsInNPCList(name) then
-        Sighted(name, guid, unit, isPlate)
+        announcedNow = Sighted(name, guid, unit, isPlate)
     end
     -- Quest targets see every unit, watched or not (Quests.lua, when loaded).
+    -- They're told whether the watch list just alerted for this sighting.
     local quests = ns.quests
-    if quests and quests.OnUnit then quests.OnUnit(unit, isPlate, name, guid) end
+    if quests and quests.OnUnit then quests.OnUnit(unit, isPlate, name, guid, announcedNow) end
 end
 
 -- Everything that counts as presence: the plates, the target, the mouseover.
@@ -2548,6 +2645,7 @@ ns.core = {
     MacroSafeName = MacroSafeName, NAME_MAX = NAME_MAX, IsWatchDisplayed = IsWatchDisplayed,
     IsRefreshPending = function() return pendingRefresh end,
     SetQuestMute = SetQuestMute, PruneQuestMutes = PruneQuestMutes, LINGER = LINGER,
+    Announce = Announce, REARM = REARM, RefreshAlertMarks = RefreshAlertMarks,
     BUTTON_ICONS = BUTTON_ICONS, MARKER_ICONS = MARKER_ICONS, MARKER_NAMES = MARKER_NAMES,
 }
 

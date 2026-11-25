@@ -163,6 +163,20 @@ so act on it then. Bump `MEASURED_ON_BUILD` after re-measuring.
   protected frame's regions (70959): the target outline (`UpdateTargetRing`, on `PLAYER_TARGET_CHANGED`,
   `UNIT_DIED` and the target's `UNIT_NAME_UPDATE`) and a face first seen mid-fight (`CacheFace`, which also
   hides the row's placeholder). `PutPortrait`/`TakePortrait` reparent, so they stay out of combat.
+- **Quest alerts (#94): Shift+right-click.**
+  - **No secure action.** With Shift held, the secure handler looks up `shift-type2`, `*type2`, `shift-type*`,
+    `*type*`, then `type`: never `type2`. So a quest button's Shift+right-click ran the LEFT macro (target and
+    mark). `ApplyAttributes` sets `shift-type2 = ""` (`ATTRIBUTE_NOOP`) on quest buttons and clears it on watch
+    buttons; `quest` is in the `Signature`.
+  - **The toggle** is a `PostClick` set once in `NewButton`. It acts only on the edge the secure action runs on:
+    `down == SecureActionButton_ShouldUseOnKeyDown(self)`. The template passes no `isSecureAction`, so mouse
+    clicks follow `ActionButtonUseKeyDown`: down at 1, up at 0 (measured, GlassActionBars FOREVER-PROBE.md
+    session 9, 70938). It acts on Shift alone, the set the no-op covers. A Shift pressed or released between the
+    edges then gives a target or a toggle, never both.
+  - **In combat** the toggle is a Lua flag plus the bell's region `Show`/`Hide`, so it works there too.
+  - **The trigger and records** are Quests.lua's Alerts section: presence is a nameplate token only; the
+    watch list's `REARM` quiet applies; the death of the GUID whose plate went last re-arms it. A record
+    follows a member through a new spelling and merges with one it comes to overlap.
 
 ## Settings
 
