@@ -522,6 +522,77 @@ check(WoW.chatText():find("isn't a quest target any more", 1, true), "...and say
 WoW.combat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
 
+------------------------------------------------------------
+-- Codex on the code: Unknown, a frozen button, a rescan, a merged "other"
+------------------------------------------------------------
+-- Two armed mobs both "Unknown" for a moment stay two records.
+clean()
+quests({ { 1, { { 801, "Kobold Worker" }, { 802, "Kobold Laborer" } } } })
+shiftRight(button("Kobold Worker")); shiftRight(button("Kobold Laborer"))
+plate("nameplate1", "Unknown", guid(801, "A"))
+plate("nameplate2", "Unknown", guid(802, "A"))
+eq(#QT.alerts, 2, "two armed mobs both \"Unknown\" for a moment: still two records")
+check(not Q.AlertOn("Unknown"), "...and \"Unknown\" is no record's name")
+unplate("nameplate1"); unplate("nameplate2")
+
+-- A hunt button frozen by combat, its mob since seen under another spelling:
+-- arming it takes the name the member has now.
+clean()
+quests({ { 1, { { 701, "Bloodscalp Warrior" } } } })
+bw = button("Bloodscalp Warrior")
+WoW.combat = true
+WoW.fire("PLAYER_REGEN_DISABLED")
+plate("nameplate1", "Bloodscalp Warrior ", guid(701, "A"))
+died("nameplate1", guid(701, "A"))
+WoW.fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+eq(bw.npcName, "Bloodscalp Warrior", "in combat the button keeps its old name")
+shiftRight(bw)
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+for _, m in pairs(QT.members) do m.lastSeen = nil end
+Q.Tick()
+local renamed = button("Bloodscalp Warrior ")
+check(renamed and Q.AlertOn("Bloodscalp Warrior ") and renamed.bell._shown,
+    "after combat the renamed button shows the alert on")
+
+-- A rescan: the watch list announces one name on the target, a plate shows the
+-- record's other spelling. Only the watch list's own sighting is skipped.
+clean()
+quests({ { 1, { { 701, "Bloodscalp Warrior" } } } })
+shiftRight(button("Bloodscalp Warrior"))
+plate("nameplate1", "Bloodscalp Warrior x", guid(701, "A"))
+unplate("nameplate1")
+WoW.advance(REARM + 1)
+SlashCmdList.STAKEOUT("add Bloodscalp Warrior")
+for k in pairs(T.detected) do T.detected[k] = nil end
+for k in pairs(T.announced) do T.announced[k] = nil end
+WoW.SetUnit("nameplate1", { name = "Bloodscalp Warrior x", guid = guid(701, "B"), plate = true, attackable = true })
+WoW.SetUnit("target", { name = "Bloodscalp Warrior", guid = guid(701, "C"), attackable = true })
+WoW.chat = {}
+Q.Rebuild()
+eq(detections("Bloodscalp Warrior x"), 1, "a rescan: the plate's own alert plays although the watch list announced the other name")
+WoW.units = {}
+SlashCmdList.STAKEOUT("remove Bloodscalp Warrior")
+
+-- An "other quest unit" alert merged with a hunt button's keeps its lifetime.
+clean()
+Q.SetOther(true)
+WoW.flushTimers()
+quests({ { 1, { { 901, "Raptor Hatchling" } } } })
+WoW.SetUnit("nameplate1", { name = "Venomtail Raptor", guid = guid(3254), plate = true, related = true, attackable = true })
+WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+shiftRight(button("Venomtail Raptor"))
+shiftRight(button("Raptor Hatchling"))
+unplate("nameplate1")
+plate("nameplate2", "Venomtail Raptor", guid(901, "A"))   -- the hatchling, seen as the raptor
+eq(#QT.alerts, 1, "the hunt mob seen under the other unit's name: one record")
+unplate("nameplate2")
+WoW.questLog[1].rows[1].finished = true
+Q.Rebuild()
+check(Q.AlertOn("Venomtail Raptor"), "...its objective done, the other unit's alert stays")
+Q.SetOther(false)
+WoW.flushTimers()
+
 -- The tooltip says what the click does, and the state.
 clean()
 quests({ { 1, { { 701, "Bloodscalp Warrior" } } } })

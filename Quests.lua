@@ -777,6 +777,11 @@ end
 --         quietUntil, departGuid (the one whose plate went last), other }
 -------------------------------------------------------------------------------
 
+-- The client's name for a unit it hasn't named yet (UNIT_NAME_UPDATE brings the
+-- real one a moment later). It never joins or matches a record: two armed
+-- mobs both "Unknown" for a moment are not one target (Codex on #94's code).
+local UNKNOWN = rawget(_G, "UNKNOWNOBJECT") or "Unknown"
+
 local function IsPlateToken(token)
     return type(token) == "string" and token:find("^nameplate") ~= nil
 end
@@ -784,25 +789,30 @@ end
 local function Covers(rec, m)
     if rec.keys[m.key] then return true end
     local name = NameOf(m)
-    return name ~= nil and rec.names[name] == true
+    return name ~= nil and name ~= UNKNOWN and rec.names[name] == true
 end
 
 -- Whether a plate shows one of the record's members now, the plain GUIDs on
--- those plates, and the name one of them shows (for the chat line).
+-- those plates, the name one of them shows (for the chat line), and every
+-- name on them (whether the watch list just announced this very sighting).
 local function PlatePresence(rec)
-    local any, guids, shown = false, {}, nil
+    local any, guids, shown, names = false, {}, nil, {}
     for _, m in pairs(members) do
         if Covers(rec, m) then
             for token, g in pairs(m.tokens) do
                 if IsPlateToken(token) then
                     any = true
-                    shown = shown or NameOf(m)
+                    -- What this plate shows, read now: a member's NameOf is
+                    -- its last sighting's, which may be another token's.
+                    local name = C.ReadNPC(token) or NameOf(m)
+                    shown = shown or name
+                    if name then names[name] = true end
                     if type(g) == "string" then guids[g] = true end
                 end
             end
         end
     end
-    return any, guids, shown
+    return any, guids, shown, names
 end
 
 local function FindAlert(name)
@@ -833,7 +843,8 @@ local function MergeAlerts()
                 for g in pairs(b.guids) do a.guids[g] = true end
                 a.plated = a.plated or b.plated
                 if b.quietUntil > a.quietUntil then a.quietUntil, a.departGuid = b.quietUntil, b.departGuid end
-                a.other = a.other and b.other
+                -- Either one armed for another quest unit keeps that lifetime.
+                a.other = a.other or b.other
                 table.remove(alerts, j)
             else
                 j = j + 1
@@ -851,7 +862,7 @@ NoteAlertName = function(m, name)
     for _, rec in ipairs(alerts) do
         if Covers(rec, m) then
             rec.keys[m.key] = true
-            if name then rec.names[name] = true end
+            if name and name ~= UNKNOWN then rec.names[name] = true end
             touched = true
         end
     end
@@ -888,12 +899,14 @@ CheckAlerts = function(diedGuid, watchNames)
     end
     local now = GetTime()
     for _, rec in ipairs(alerts) do
-        local plated, guids, shown = PlatePresence(rec)
+        local plated, guids, shown, platedNames = PlatePresence(rec)
         if plated and not rec.plated then
             rec.departGuid = nil
+            -- Skipped only when the watch list announced a name these plates
+            -- show (this sighting), not another of the record's names.
             local announced = false
             for n in pairs(watchNames or {}) do
-                if rec.names[n] then announced = true end
+                if platedNames[n] then announced = true end
             end
             if now >= rec.quietUntil and not announced then C.Announce(shown) end
         elseif not plated and rec.plated then
@@ -948,6 +961,10 @@ local function ToggleAlert(name, keys)
     for _, m in pairs(members) do
         if Covers(rec, m) then
             rec.keys[m.key] = true
+            -- The name it has now, which a frozen button (combat) may not show
+            -- yet: the record and the next layout's button agree.
+            local current = NameOf(m)
+            if current and current ~= UNKNOWN then rec.names[current] = true end
             for _, ref in ipairs(m.refs) do
                 if ref.eligible then hasRef = true end
             end
