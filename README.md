@@ -19,7 +19,7 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
   quest progress ("3/10", "turn in"), in one or two columns (a very long name ends in "...", its tooltip has it
   all). Your current target's button has a gold outline
 - A button keeps its NPC's portrait once you've seen it, even out of sight (Stakeout keeps up to 30 portraits)
-- Chat message, taskbar flash and sound alert (17 sounds, plus 7 more with DBM-Core)
+- Chat message, taskbar flash and sound alert (26 sounds, plus 7 more with DBM-Core)
 - Experimental quest buttons (a checkbox in the config, or `/stakeout quests on`): mobs named in unfinished kill
   objectives, and with Questie installed, the mobs that drop quest items and the NPC to turn a finished quest in to
 - An optional hunt mode for quest mobs (with Questie): a button before you see them, to click until one is in reach
@@ -112,6 +112,21 @@ Blizzard's Forever client doesn't allow some of what Stakeout did on TBC:
   mouse shows it. Addons can't read other units' positions, so it's bracketed with range checks, as
   NameplateDistance by Nedyar does (MIT; its notice is
   in `Range.lua`).
+
+## Sounds
+
+Six of the alert sounds (`Media/*.ogg`, from NodeRadar) are royalty-free sound effects from
+[Pixabay](https://pixabay.com), under the [Pixabay Content License](https://pixabay.com/service/terms/), not MIT.
+They ship inside Stakeout only.
+
+| File | Pixabay | By |
+|---|---|---|
+| `Sonar.ogg` | "sonar ping", #95840 | freesound_community |
+| `RadarBlip.ogg` | "radar ping", #306440 | user 49053354 |
+| `DeepSea.ogg` | "deepsea sonar", #386156 | Dragon Studio |
+| `BellChime.ogg` | "clear bell chime", #487898 | Universfield |
+| `Notification.ogg` | "new notification 016", #350210 | Universfield |
+| `HudPing.ogg` | "sci-fi HUD notification ping", #547867 | vadim_makes_sound |
 
 ## License
 

@@ -12,6 +12,8 @@
   - It stays on while the mob is out of sight, and goes when you no longer need it for a quest.
   - With hunt mode, a mob you're waiting for keeps its button to Shift+right-click.
 - A quest button's tooltip says "Shift+right-click: alert when one appears", or that it's on.
+- Nine more alert sounds, from NodeRadar: Minimap Ping, Sonar Ping, Radar Ping, and six of its own (Sonar, Radar
+  Blip, Deep Sea Sonar, Bell Chime, Notification, HUD Ping).
 
 ### Changed
 

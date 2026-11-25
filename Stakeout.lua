@@ -159,6 +159,7 @@ end
 -- Built-in game-file PATHS are refused by this client and are not offered;
 -- paths into DBM-Core's folder still play.
 -------------------------------------------------------------------------------
+local MEDIA = "Interface\\AddOns\\Stakeout\\Media\\"
 local ALERT_SOUNDS_BASE = {
     { name = "Raid Warning",          id = 8959  },
     { name = "Ready Check",           id = 8960  },
@@ -177,6 +178,20 @@ local ALERT_SOUNDS_BASE = {
     { name = "PvP: Enter Queue",      id = 8458  },
     { name = "PvP: Through Queue",    id = 8459  },
     { name = "Bell: Dwarf/Gnome",     id = 7234  },
+    -- NodeRadar's sounds (the owner, #94's PR): Blizzard's minimap ping, two
+    -- of the client's own files by FileDataID, and six from Pixabay that ship
+    -- in Media/ (LICENSE, "Third-party sounds"). NodeRadar heard each one on
+    -- 70450. `file` plays through PlaySoundFile only, so a FileDataID is never
+    -- tried as a SoundKit ID.
+    { name = "Minimap Ping",          id = 3175 },
+    { name = "Sonar Ping",            file = 569006 },
+    { name = "Radar Ping",            file = 7466154 },
+    { name = "Sonar",                 file = MEDIA .. "Sonar.ogg" },
+    { name = "Radar Blip",            file = MEDIA .. "RadarBlip.ogg" },
+    { name = "Deep Sea Sonar",        file = MEDIA .. "DeepSea.ogg" },
+    { name = "Bell Chime",            file = MEDIA .. "BellChime.ogg" },
+    { name = "Notification",          file = MEDIA .. "Notification.ogg" },
+    { name = "HUD Ping",              file = MEDIA .. "HudPing.ogg" },
 }
 -- Requires DBM-Core; string paths always use PlaySoundFile()
 local ALERT_SOUNDS_DBM_CORE = {
@@ -202,6 +217,7 @@ end
 -- engine refused. The caller falls back to Raid Warning.
 local function SafePlaySound(entry)
     if not entry then return false end
+    if entry.file ~= nil then return PlaySoundFile(entry.file, "Master") and true or false end
     local id = entry.id
     if type(id) == "string" then
         return PlaySoundFile(id, "Master") and true or false
@@ -1204,7 +1220,9 @@ local seenGUIDs = {}
 -- alert for the current detection has played.
 -- The alert itself: the chat line, the flash and the sound, as the settings
 -- say. The watch list's (Alert) and an armed quest target's (Quests.lua, #94).
+local lastAnnounce   -- { name, time }: read by the test seam and StakeoutProbe's `alert`
 local function Announce(name)
+    lastAnnounce = { name = name, time = GetTime() }
     Print("Detected: %s", name)
     if StakeoutDB.flashOnFind then FlashClientIcon() end
     if StakeoutDB.soundOnFind then PlayAlertSound() end
@@ -2673,4 +2691,5 @@ Stakeout._test = {
     ROW_W_MIN = ROW_W_MIN, ROW_W_MAX = ROW_W_MAX, ROW_H = ROW_H, UpdateTargetRing = UpdateTargetRing,
     appliedWidth = function() return appliedWidth end,
     appliedLayout = function() return appliedLayout end,
+    lastAnnounce = function() return lastAnnounce end,
 }

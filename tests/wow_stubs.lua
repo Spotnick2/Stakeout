@@ -211,14 +211,20 @@ function SecureActionButton_ShouldUseOnKeyDown(btn)
 end
 function GetBuildInfo() return "1.60.1", WoW.build, "Sep 22 2026", 16001, "", " " end
 function FlashClientIcon() WoW.flashes = WoW.flashes + 1 end
+-- WoW.soundCalls says which call played each one (a FileDataID must never
+-- go to PlaySound, where it would be read as a SoundKit ID).
 function PlaySound(id)
     if WoW.refuseSound[id] then return nil end
     WoW.sounds[#WoW.sounds + 1] = id
+    WoW.soundCalls = WoW.soundCalls or {}
+    WoW.soundCalls[#WoW.soundCalls + 1] = "PlaySound " .. tostring(id)
     return true, 1
 end
 function PlaySoundFile(id)
     if WoW.refuseSound[id] then return nil end
     WoW.sounds[#WoW.sounds + 1] = id
+    WoW.soundCalls = WoW.soundCalls or {}
+    WoW.soundCalls[#WoW.soundCalls + 1] = "PlaySoundFile " .. tostring(id)
     return true, 1
 end
 function SetPortraitTexture(tex, unit) tex.portrait = unit end
