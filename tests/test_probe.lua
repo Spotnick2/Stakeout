@@ -212,6 +212,37 @@ for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore
     fp("steps stop")
 end
 
+-- #94's alert procedure: the click setting it switches comes back (saved
+-- once, put back on a stop), and each gesture's expected result.
+do
+    local A = ns._test.alert
+    rawset(_G, "SetCVar", function(k, v) if k == "ActionButtonUseKeyDown" then WoW.useKeyDown = v == "1" end end)
+    if type(rawget(_G, "StakeoutProbeDB")) ~= "table" then rawset(_G, "StakeoutProbeDB", {}) end
+    WoW.useKeyDown = true
+    A.setKeyDown(true)()
+    eq(WoW.useKeyDown, false, "the switch flips ActionButtonUseKeyDown")
+    A.setKeyDown(true)()
+    eq(StakeoutProbeDB.alertKeyDown, true, "Back and Run again: the original stays the one saved first")
+    A.restoreOn({ stopped = true })("done")
+    eq(WoW.useKeyDown, false, "leaving a switched step by Next keeps it switched")
+    A.restoreOn({ stopped = true })("stopped")
+    eq(WoW.useKeyDown, true, "Stop puts it back")
+    eq(StakeoutProbeDB.alertKeyDown, nil, "...and forgets it")
+    A.setKeyDown(true)()
+    A.restoreKeyDown()   -- what the first step does after a /reload
+    eq(WoW.useKeyDown, true, "a run left switched is put back by the next one")
+    -- The gestures: Shift added before release targets at 1 and toggles at 0.
+    WoW.SetUnit("target", { name = "Some Mob", guid = "Creature-0-1-2-3-55-A" })
+    WoW.useKeyDown = true
+    check((A.gesture(true)()), "at 1, Shift added late: a target is right")
+    check(not A.gesture(false)(), "at 1, Shift let go early: a target is wrong (it should toggle)")
+    WoW.useKeyDown = false
+    check(not A.gesture(true)(), "at 0, Shift added late: a target is wrong (it should toggle)")
+    check((A.gesture(false)()), "at 0, Shift let go early: a target is right")
+    WoW.units.target, WoW.useKeyDown = nil, true
+    rawset(_G, "SetCVar", nil)
+end
+
 -- The corpse variants set the left-click macro, with the name filled in.
 eq(T.aim("Pygmy Surf Crawler", 3106, "8",
     "/cleartarget\n/targetexact <name>\n/cleartarget [dead]\n/targetexact <name>"), true, "a variant is set")

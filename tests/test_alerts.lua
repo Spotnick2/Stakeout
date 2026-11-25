@@ -574,6 +574,25 @@ eq(detections("Bloodscalp Warrior x"), 1, "a rescan: the plate's own alert plays
 WoW.units = {}
 SlashCmdList.STAKEOUT("remove Bloodscalp Warrior")
 
+-- An armed mob's plate before the client has named it: the chat line has its
+-- real name, never "Unknown"; and a button showing "Unknown" arms nothing.
+clean()
+quests({ { 1, { { 701, "Bloodscalp Warrior" }, { 702, "Kobold Laborer" } } } })
+shiftRight(button("Bloodscalp Warrior"))
+WoW.chat = {}
+plate("nameplate1", "Unknown", guid(701, "A"))
+eq(detections("Unknown"), 0, "an unnamed plate of an armed mob: never \"Detected: Unknown\"")
+eq(detections("Bloodscalp Warrior"), 1, "...its known name instead")
+plate("nameplate2", "Unknown", guid(702, "A"))
+local unknownBtn = button("Unknown")
+check(unknownBtn, "a button showing the placeholder")
+shiftRight(unknownBtn)
+check(not Q.AlertOn("Unknown"), "...arms nothing")
+-- Both mobs show "Unknown" for now, so one button covers both: a click on it
+-- must not reach the armed one's record and turn it off.
+check(Q.AlertOn("Bloodscalp Warrior"), "...and leaves the armed mob's alert on")
+unplate("nameplate1"); unplate("nameplate2")
+
 -- An "other quest unit" alert merged with a hunt button's keeps its lifetime.
 clean()
 Q.SetOther(true)

@@ -68,6 +68,7 @@ local function snapshot()
     end
     local g = targetGuid()
     if not g then error("Target something first (another mob or an NPC, not the quest mob), then Run again.", 0) end
+    restoreKeyDown()   -- a run stopped by a /reload while switched
     before = { guid = g, mark = targetMark() }
     return true, ("target %s (mark %s); quest buttons: %s; ActionButtonUseKeyDown %s"):format(g,
         tostring(before.mark), table.concat(shown, ", "), keyDown() and "1" or "0")
@@ -105,19 +106,38 @@ local function gesture(shiftAddedLate)
     end
 end
 
-local savedKeyDown   -- the owner's setting, put back by the last CVar step
+-- The owner's setting, saved once before the switch, in the module's
+-- SavedVariables so a /reload in between still puts it back: the next run of
+-- this procedure does, at its first step, if it was left switched.
+local function saved()
+    local db = G("StakeoutProbeDB")
+    return type(db) == "table" and db or nil
+end
+local function restoreKeyDown()
+    local db, set = saved(), G("SetCVar")
+    if db and db.alertKeyDown ~= nil and set then
+        set("ActionButtonUseKeyDown", db.alertKeyDown and "1" or "0")
+        db.alertKeyDown = nil
+    end
+end
 local function setKeyDown(flip)
     return function()
-        local set = G("SetCVar")
-        if not set then error("SetCVar isn't available", 0) end
+        local db, set = saved(), G("SetCVar")
+        if not (db and set) then error("SetCVar or StakeoutProbeDB isn't available", 0) end
         if flip then
-            savedKeyDown = keyDown()
-            set("ActionButtonUseKeyDown", savedKeyDown and "0" or "1")
-        elseif savedKeyDown ~= nil then
-            set("ActionButtonUseKeyDown", savedKeyDown and "1" or "0")
-            savedKeyDown = nil
+            -- Back and Run again: the original stays the one saved first.
+            if db.alertKeyDown == nil then db.alertKeyDown = keyDown() end
+            set("ActionButtonUseKeyDown", db.alertKeyDown and "0" or "1")
+        else
+            restoreKeyDown()
         end
         return true, "ActionButtonUseKeyDown is " .. (keyDown() and "1" or "0")
+    end
+end
+-- Leaving a switched step by Stop (or Back to before the switch) puts it back.
+local function restoreOn(outcomes)
+    return function(outcome)
+        if outcomes[outcome] then restoreKeyDown() end
     end
 end
 
@@ -138,9 +158,13 @@ local function alertWait(key)
             w = { from = now, names = names }
             waits[key] = w
         end
-        local last = s and s.lastAnnounce and s.lastAnnounce()
-        if last and last.time >= w.from and w.names[last.name] then
-            return true, ("alert: %s, %.0f s after the step began"):format(tostring(last.name), last.time - w.from)
+        -- Each name's last alert, so another NPC alerting in the same second
+        -- can't hide this one.
+        for n in pairs(w.names) do
+            local t = s and s.announcedAt and s.announcedAt(n)
+            if t and t >= w.from then
+                return true, ("alert: %s, %.0f s after the step began"):format(n, t - w.from)
+            end
         end
         return false, "no alert for it yet"
     end
@@ -150,14 +174,16 @@ local function alertSeen(key)
     return function()
         local w = waits[key]
         local s = seam()
-        local last = s and s.lastAnnounce and s.lastAnnounce()
-        local ok = w ~= nil and last ~= nil and last.time >= w.from and w.names[last.name] == true
-        return ok, ok and ("alert: " .. tostring(last.name)) or "no alert for the armed target"
+        for n in pairs(w and w.names or {}) do
+            local t = s and s.announcedAt and s.announcedAt(n)
+            if t and t >= w.from then return true, "alert: " .. n end
+        end
+        return false, "no alert for the armed target"
     end
 end
 
 Probe:Steps("alert", {
-    rev = 2,
+    rev = 3,
     title = "Stakeout: an alert from a quest button (#94)",
     { text = "Out of combat, stand where Stakeout shows a button for a quest mob, with one of those mobs' nameplates "
           .. "in view. Target something ELSE (another mob or an NPC). Then press Run.", run = snapshot },
@@ -177,9 +203,10 @@ Probe:Steps("alert", {
     { text = "Press Run to switch ActionButtonUseKeyDown the other way for the next two clicks (the probe puts it "
           .. "back after).", run = setKeyDown(true) },
     { text = "Alert off, target cleared. RIGHT mouse button down WITHOUT Shift, press Shift, let go of the mouse. "
-          .. "Then press Run.", run = gesture(true), check = gesture(true) },
+          .. "Then press Run.", run = gesture(true), check = gesture(true),
+      leave = restoreOn({ stopped = true, back = true }) },
     { text = "Alert off, target cleared. Hold Shift, RIGHT mouse button down, let go of Shift, let go of the mouse. "
-          .. "Then press Run.", run = gesture(false), check = gesture(false) },
+          .. "Then press Run.", run = gesture(false), check = gesture(false), leave = restoreOn({ stopped = true }) },
     { text = "Press Run to put ActionButtonUseKeyDown back as it was.", run = setKeyDown(false) },
     { text = "Turn its alert ON (Shift+right-click; clear the target if it got one). Walk away until its "
           .. "nameplates are gone, stay away for over a minute, then walk back. Stakeout should alert on its own "
@@ -199,4 +226,5 @@ Probe:Steps("alert", {
 })
 
 NS._test = NS._test or {}
-NS._test.alert = { questButtons = questButtons, gesture = gesture, targetMark = targetMark }
+NS._test.alert = { questButtons = questButtons, gesture = gesture, targetMark = targetMark,
+    setKeyDown = setKeyDown, restoreOn = restoreOn, restoreKeyDown = restoreKeyDown }

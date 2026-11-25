@@ -805,12 +805,19 @@ local function PlatePresence(rec)
                     -- What this plate shows, read now: a member's NameOf is
                     -- its last sighting's, which may be another token's.
                     local name = C.ReadNPC(token) or NameOf(m)
-                    shown = shown or name
                     if name then names[name] = true end
+                    -- The chat line's name: a real one, never the client's
+                    -- placeholder (the provider's name while it's "Unknown").
+                    for _, n in ipairs({ name, NameOf(m), m.dbName }) do
+                        if not shown and n ~= UNKNOWN then shown = n end
+                    end
                     if type(g) == "string" then guids[g] = true end
                 end
             end
         end
+    end
+    if any and not shown then
+        for n in pairs(rec.names) do shown = n break end
     end
     return any, guids, shown, names
 end
@@ -935,7 +942,9 @@ end
 -- screen in combat). keys: the members of the button's target (its spec's
 -- alertKeys).
 local function ToggleAlert(name, keys)
-    if not Enabled() or type(name) ~= "string" then return nil end
+    -- A button still showing the client's placeholder arms nothing: the name
+    -- would match any unnamed unit.
+    if not Enabled() or type(name) ~= "string" or name == UNKNOWN then return nil end
     local rec = FindAlert(name)
     if not rec and type(keys) == "table" then
         for _, r in ipairs(alerts) do

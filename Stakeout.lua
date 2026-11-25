@@ -1220,9 +1220,9 @@ local seenGUIDs = {}
 -- alert for the current detection has played.
 -- The alert itself: the chat line, the flash and the sound, as the settings
 -- say. The watch list's (Alert) and an armed quest target's (Quests.lua, #94).
-local lastAnnounce   -- { name, time }: read by the test seam and StakeoutProbe's `alert`
+local announceTimes = {}   -- [name] = when it last alerted: the test seam and StakeoutProbe's `alert`
 local function Announce(name)
-    lastAnnounce = { name = name, time = GetTime() }
+    announceTimes[name] = GetTime()
     Print("Detected: %s", name)
     if StakeoutDB.flashOnFind then FlashClientIcon() end
     if StakeoutDB.soundOnFind then PlayAlertSound() end
@@ -2691,5 +2691,5 @@ Stakeout._test = {
     ROW_W_MIN = ROW_W_MIN, ROW_W_MAX = ROW_W_MAX, ROW_H = ROW_H, UpdateTargetRing = UpdateTargetRing,
     appliedWidth = function() return appliedWidth end,
     appliedLayout = function() return appliedLayout end,
-    lastAnnounce = function() return lastAnnounce end,
+    announcedAt = function(name) return announceTimes[name] end,
 }
