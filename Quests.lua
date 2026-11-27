@@ -1377,6 +1377,20 @@ local function Marks(row)
     return out
 end
 
+-- A token that shows a quest button's NPC now, for its distance (#98): any
+-- member of that name, any token it holds, the first that still reads as it
+-- (a stale one is skipped, never returned).
+local function TokenFor(name)
+    if type(name) ~= "string" then return nil end
+    for _, m in pairs(members) do
+        if NameOf(m) == name then
+            for token in pairs(m.tokens) do
+                if C.ReadNPC(token) == name then return token end
+            end
+        end
+    end
+end
+
 local function ButtonSpecs()
     if not Enabled() then
         wipe(lastShown)
@@ -1402,10 +1416,15 @@ local function ButtonSpecs()
         local left = fmt("/cleartarget\n/targetexact %s%s", nt.name,
             (mob and StakeoutDB.skipDead) and "\n/cleartarget [dead]" or "")
         local right
-        local tooltip = {}
+        -- The tooltip's lines: what the quests say (state), and apart from
+        -- them the click hints, each with its own setting (#98).
+        local tooltip, clicks = {}, {}
         for _, ref in ipairs(nt.refs) do tooltip[#tooltip + 1] = Progress(ref) end
         if nt.other then tooltip[#tooltip + 1] = "Related to one of your quests" end
-        if nt.tier == HUNT then tooltip[#tooltip + 1] = "Not seen yet: click to look for one" end
+        if nt.tier == HUNT then
+            tooltip[#tooltip + 1] = "Not seen yet"
+            clicks[#clicks + 1] = "Click to look for one"
+        end
         local mark
         if StakeoutDB.enableMarking then
             local marks = Marks(nt.row)
@@ -1419,10 +1438,10 @@ local function ButtonSpecs()
             -- when the click finds no live one, as on a hunt button.
             right = left
             left = fmt("%s\n/tm [exists,nodead] !%d", left, mark)
-            tooltip[#tooltip + 1] = "Left-click: target and mark"
-            tooltip[#tooltip + 1] = "Right-click: target only"
+            clicks[#clicks + 1] = "Left-click: target and mark"
+            clicks[#clicks + 1] = "Right-click: target only"
         else
-            tooltip[#tooltip + 1] = "Left-click: target"
+            clicks[#clicks + 1] = "Left-click: target"
         end
         -- The members' keys: what Shift+right-click arms (#94).
         local alertKeys = {}
@@ -1431,7 +1450,7 @@ local function ButtonSpecs()
         local progress, progressMax = ShortProgress(nt.refs[1])
         specs[#specs + 1] = {
             row = nt.row, name = nt.name, macrotext = left, macrotext2 = right,
-            unit = nt.unit, icon = QUEST_ICON, tooltip = tooltip,
+            unit = nt.unit, icon = QUEST_ICON, tooltip = tooltip, clicks = clicks,
             hunt = nt.tier == HUNT, progress = progress, progressMax = progressMax,
             alertKeys = alertKeys,
         }
@@ -1516,7 +1535,7 @@ ns.quests = {
     SetEnabled = SetEnabled, Enabled = Enabled, SetOther = SetOther, PrintState = PrintState,
     SetHunt = SetHunt, HuntEnabled = HuntEnabled,
     SetMute = SetMute, QuestMuteKey = QuestMuteKey, TargetMuteKey = TargetMuteKey,
-    ToggleAlert = ToggleAlert, AlertOn = AlertOn,
+    ToggleAlert = ToggleAlert, AlertOn = AlertOn, TokenFor = TokenFor,
     -- The last read of the log, for the quest pane (Phase 4). Read only.
     QuestList = function() return questList end,
 }

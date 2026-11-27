@@ -206,7 +206,7 @@ eq(b._shown, false, "button off hides it")
 --------------------------------------------------------------------------------
 
 for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore", "corpse", "look", "rows", "alert",
-                        "tagged" }) do
+                        "tagged", "customize" }) do
     fp("steps so " .. name)
     local rec = FP.db.steps.records["StakeoutProbe/" .. name]
     eq(rec and rec.status, "active", "procedure " .. name .. " starts")
@@ -794,6 +794,20 @@ do
     eq(b._shown, false, "...hidden")
     rawset(_G, "UnitIsTapDenied", nil)
     WoW.units = {}
+end
+
+-- #98's customize procedure: the distance wait needs two numbers on a button.
+do
+    local Cz = ns._test.customize
+    local fb = CreateFrame("Button", "StakeoutBtn1", UIParent)
+    fb.npcName = "Bristleback Quilboar"
+    fb.dist = fb:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    fb.dist:SetText("30")
+    fb.dist:Show()
+    check(not Cz.distanceChanges(), "one distance read: still waiting")
+    fb.dist:SetText("25")
+    check((Cz.distanceChanges()), "a second, different one: done")
+    fb:Hide()
 end
 
 -- The list layout mockups (#88): plain frames, never secure.

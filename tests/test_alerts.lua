@@ -671,6 +671,19 @@ plate("nameplate2", "Guard", guid(811, "A"))
 eq(detections("Guard"), 1, "...and the Guard still needed alerts at once (no quiet started)")
 unplate("nameplate1"); unplate("nameplate2")
 
+-- #98: the distance's token for a quest button: any token a member of that
+-- name holds that still shows it, a stale one skipped.
+clean()
+quests({ { 1, { { 701, "Bloodscalp Warrior" } } } })
+plate("nameplate1", "Bloodscalp Warrior", guid(701, "A"))
+plate("nameplate2", "Bloodscalp Warrior", guid(701, "B"))
+WoW.SetUnit("nameplate1", { name = "Someone Else", guid = guid(999, "Z"), plate = true })   -- stale, no event yet
+eq(Q.TokenFor("Bloodscalp Warrior"), "nameplate2", "TokenFor skips a stale token for one that still shows it")
+WoW.units.nameplate2 = nil
+eq(Q.TokenFor("Bloodscalp Warrior"), nil, "...and gives none when no token shows it")
+eq(Q.TokenFor("Nobody"), nil, "...nor for a name no member has")
+unplate("nameplate1")
+
 -- The tooltip says what the click does, and the state.
 clean()
 quests({ { 1, { { 701, "Bloodscalp Warrior" } } } })

@@ -111,5 +111,76 @@ Probe:Steps("rows", {
           .. "layout you like in its settings." },
 })
 
+-- #98, the Customize panel: its preview beside the live buttons, a few parts
+-- turned off, the distance on a button as the owner walks. Opens the panel
+-- through Stakeout's own button; the parts are the owner's clicks.
+-- Procedure: /fp steps so customize.
+local function openCustomize()
+    stakeout("config")
+    local cfg = G("StakeoutConfigFrame")
+    if not (cfg and cfg:IsShown()) then stakeout("config") end
+    cfg = G("StakeoutConfigFrame")
+    local btn = cfg and cfg.customizeButton
+    if not btn then error("This Stakeout has no Customize panel: deploy the branch's Stakeout (Tools/deploy.ps1 -Probe), /reload", 0) end
+    local panel = G("StakeoutCustomizeFrame")
+    if not (panel and panel:IsShown()) then btn:GetScript("OnClick")(btn) end
+    panel = G("StakeoutCustomizeFrame")
+    return true, ("panel shown %s, placed %s"):format(tostring(panel and panel:IsShown()), tostring(panel and panel.where))
+end
+
+-- Each shown live button's distance text, until it has read two different
+-- numbers (the owner walking toward a mob).
+local distSeen = {}
+local function distanceChanges()
+    for i = 1, 40 do
+        local btn = G("StakeoutBtn" .. i)
+        if not btn then break end
+        if btn:IsShown() and btn.dist and btn.dist:IsShown() then
+            local t = plain(btn.dist:GetText())
+            if t and t ~= "" then
+                local name = plain(btn.npcName) or ("button " .. i)
+                distSeen[name] = distSeen[name] or {}
+                if not distSeen[name][t] then
+                    distSeen[name][t] = true
+                    say(("customize: %s shows %s"):format(name, t))
+                end
+                local n = 0
+                for _ in pairs(distSeen[name]) do n = n + 1 end
+                if n >= 2 then return true, name .. " changed distance on its button" end
+            end
+        end
+    end
+    return false, "walk toward (or away from) a mob that has a button, with Distance ticked"
+end
+
+local function where()
+    local panel = G("StakeoutCustomizeFrame")
+    if not (panel and panel:IsShown()) then error("Open the Customize panel first (Back one step)", 0) end
+    local sw = G("UIParent") and G("UIParent"):GetWidth()
+    return true, ("placed %s on a %s px wide screen"):format(tostring(panel.where), tostring(sw and math.floor(sw)))
+end
+
+Probe:Steps("customize", {
+    rev = 1,
+    title = "Stakeout: the Customize panel (#98)",
+    { text = "Stand where Stakeout shows a few buttons (quest mobs too if you can), out of combat. Press Run: the "
+          .. "settings open with the Customize panel beside them.", run = openCustomize, screenshot = "customize-icons" },
+    { text = "Press Run: the list layout, in the preview and on the live buttons.", run = function()
+          stakeout("layout list")
+          return true
+      end, screenshot = "customize-list" },
+    { text = "Does the preview look like your real buttons (the faces are your own portrait, standing in)?", ask = true },
+    { text = "In the panel, untick Portraits, Names and Labels under icons. Then press Next.", screenshot = "customize-parts" },
+    { text = "Did the preview and the live buttons both change (no faces, no names)?", ask = true },
+    { text = "Tick Distance. Walk toward a mob that has a button until its number changes (up to 3 minutes).",
+      wait = distanceChanges, timeout = 180 },
+    { text = "Is the number on the button easy to read, and in the right place?", ask = true, screenshot = "customize-distance" },
+    { text = "Where the panel went on your screen (logged).", auto = true, run = where },
+    { text = "Hover a preview button, and a live one: do their tooltips read alike?", ask = true },
+    { text = "Anything else? Type it in the box (or nothing). Then tick back what you want, set the layout you "
+          .. "like, and press Next." },
+})
+
 NS._test = NS._test or {}
 NS._test.rows = { readRows = readRows }
+NS._test.customize = { openCustomize = openCustomize, distanceChanges = distanceChanges, where = where }

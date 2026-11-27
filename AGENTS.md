@@ -39,7 +39,8 @@ and the combat log. See below. Don't reintroduce them.
 ## Repository Layout
 
 - `Stakeout.toc`: manifest (interface, SavedVariables, `OptionalDeps: GlassUI, QuestieDB`, load order): the
-  embedded LibGlass-1.0, then `Theme.lua`, `Range.lua`, `Stakeout.lua`, `Quests.lua`, then `QuestieData.lua`.
+  embedded LibGlass-1.0, then `Theme.lua`, `Range.lua`, `Stakeout.lua`, `Customize.lua`, `Quests.lua`, then
+  `QuestieData.lua`.
 - `Theme.lua`: the windows' look (#28). WoW Forever (the backdrops, the default) or LibGlass's reflective
   glass (`C:/Projects/WoW/References/Docs/LIBGLASS-WINDOW-STYLING.md`), fixed once a session from
   `StakeoutDB.theme`, so a new choice applies after a `/reload`. Every LibGlass call is here. Its helpers
@@ -50,7 +51,21 @@ and the combat log. See below. Don't reintroduce them.
   interaction range checks (addons can't read other units' positions), from NameplateDistance 0.4.2 (MIT,
   its notice kept in the file). In combat a friendly unit gets only spell checks.
 - `Stakeout.lua`: the addon's core, in labelled sections (defaults and settings, target frame,
-  detection, config GUI, events, slash commands).
+  detection, config GUI, events, slash commands). **Its main chunk is at Lua 5.1's 200-local limit**
+  (hit in #99): a new top-level `local` fails to load ("main function has more than 200 local variables").
+  Add new things as fields of an existing table (`ns.looks`, `ns.core`), or in another file.
+  - **`ns.looks` (`L`, #98)** holds how a button looks: the layout constants, `BuildRegions`, `DressButton`,
+    `PlaceButtons(list, layout, geometry, flags, container, buttons)`, `RowGeometry`, `LookButton`, `NoFace`,
+    `FillTooltip`, the distance driver. The target frame's secure buttons and Customize.lua's plain preview
+    buttons draw through the same functions. Group titles belong to their container and text is measured on
+    a plain frame of its own, so nothing the preview does reaches the protected target frame.
+  - **What the buttons show** (`showPortraits`, `showNames`, `showProgress`, `showLabels`, `showDistance`,
+    `tip*`): placement reads the flags applied to the live frame (`L.applied`, written with placement, out
+    of combat), never the saved ones. So a change in combat waits whole: the distance driver keeps updating
+    a number still shown, and `CacheFace` paints no face until the portraits are on the live frame.
+- `Customize.lua`: the Customize panel (#98), beside the settings window: the preview from fixed samples,
+  the Layout, Button icon and Scale rows (built by `L.BuildFrameControls`), the part checkboxes, and where the
+  panel goes (right, left, the window moved, or over its left column on a narrow screen).
 - `Quests.lua`: quest targets (#24), **experimental and off by default** (`StakeoutDB.questTargets`,
   `/stakeout quests on`, or the settings window's "Quest targets" checkbox, #61). Reads the quest log, matches the units the core sees (its `ns.core` hooks) and hands
   the core up to 8 quest buttons (`ns.quests.ButtonSpecs`). Objective NPCs, item droppers and turn-in NPCs
