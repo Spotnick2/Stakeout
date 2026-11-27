@@ -1341,11 +1341,20 @@ do
 
     -- 4: every plate's GUID, four times a second, for two minutes.
     local ticker
+    local stopStability
     local function stability()
         listen()
+        -- Two minutes out of combat: a fight (3b ends in one) restarts them.
+        if inCombat() then
+            if TG.stab then
+                say("tagged: 4 in combat: the two minutes start again once you're out")
+                stopStability()
+            end
+            return false, "leave combat: the two minutes start once you're out"
+        end
         if not TG.stab then
             TG.stab = { from = (G("GetTime") or function() return 0 end)(), guids = {}, silent = 0,
-                        adds = 0, removes = 0 }
+                        adds = 0, removes = 0, compared = 0 }
             TG.watchTokens = true
             -- A REMOVED forgets the token's GUID, so the next mob on it is a
             -- fresh one; only a change with no REMOVED in between counts.
@@ -1362,6 +1371,7 @@ do
                     -- REMOVED between: that's a silent change too. Then what it
                     -- shows is the baseline for the next poll (Codex on #95's code).
                     local was = s.guids[token]
+                    if g and was then s.compared = s.compared + 1 end
                     if g and was and g ~= was then
                         s.silent = s.silent + 1
                         say(("tagged: 4 %s added as %s while it held %s, with no REMOVED"):format(token,
@@ -1387,6 +1397,7 @@ do
                     local token = "nameplate" .. i
                     local g = exists(token) and plainGuid(token) or nil
                     local was = s.guids[token]
+                    if g and was then s.compared = s.compared + 1 end
                     if g and was and g ~= was then
                         s.silent = s.silent + 1
                         say(("tagged: 4 %s changed %s -> %s with no REMOVED"):format(token, shortGuid(was), shortGuid(g)))
@@ -1401,9 +1412,14 @@ do
         if TG.plateOk == false then
             return true, "inconclusive: a plate event couldn't be registered (see the log)"
         end
-        return true, ("adds %d, removes %d, GUID changes with no REMOVED %d"):format(s.adds, s.removes, s.silent)
+        -- Nothing seen twice: nothing to compare, not "no changes".
+        if s.compared == 0 then
+            return true, "inconclusive: no plate was seen long enough to compare"
+        end
+        return true, ("adds %d, removes %d, GUID changes with no REMOVED %d (%d comparisons)"):format(s.adds,
+            s.removes, s.silent, s.compared)
     end
-    local function stopStability()
+    stopStability = function()
         if ticker then ticker:SetScript("OnUpdate", nil) end
         TG.stab, TG.watchTokens = nil, nil
     end

@@ -637,6 +637,19 @@ do
     local dL, wL = A.stability()
     check(dL and tostring(wL):find("inconclusive", 1, true), "a plate event not registered: inconclusive")
     TG.plateOk = true
+    -- In combat the two minutes start again once out of it.
+    WoW.combat = true
+    local dF, wF = A.stability()
+    check(not dF and tostring(wF):find("leave combat", 1, true), "in combat: no result, it waits")
+    eq(TG.stab, nil, "...and the window restarts")
+    WoW.combat = false
+    -- Nothing seen twice: inconclusive, not "no changes".
+    WoW.units.nameplate1, WoW.units.nameplate2, WoW.units.nameplate3 = nil, nil, nil
+    A.stability()
+    TG.stabPoll()
+    TG.stab.from = -1000
+    local dE, wE = A.stability()
+    check(dE and tostring(wE):find("inconclusive", 1, true), "no plate to compare: inconclusive, " .. tostring(wE))
     A.stopStability()
     WoW.units.nameplate3 = nil
 
