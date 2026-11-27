@@ -136,7 +136,10 @@ local function distanceChanges()
         local btn = G("StakeoutBtn" .. i)
         if not btn then break end
         if btn:IsShown() and btn.dist and btn.dist:IsShown() then
+            -- The number only: "30 yd" in a list and "30" on an icon are one
+            -- reading (a layout switch isn't a move; Codex on #98's code).
             local t = plain(btn.dist:GetText())
+            t = t and t:gsub(" yd$", "")
             if t and t ~= "" then
                 local name = plain(btn.npcName) or ("button " .. i)
                 distSeen[name] = distSeen[name] or {}
@@ -156,38 +159,59 @@ end
 -- of its own (Codex on #98's code).
 local function forgetDistances() distSeen = {} return true end
 
--- Where the panel is: its anchor, its edges against the screen's, and the
--- branch Stakeout chose.
-local function where()
-    local panel = G("StakeoutCustomizeFrame")
-    if not (panel and panel:IsShown()) then error("Open the Customize panel first (Back one step)", 0) end
-    local sw = G("UIParent") and G("UIParent"):GetWidth()
-    local point, rel, relPoint, x, y = panel:GetPoint()
-    local relName = rel and rel.GetName and rel:GetName() or tostring(rel)
-    local l, r = panel:GetLeft(), panel:GetRight()
-    local inside = type(l) == "number" and type(r) == "number" and type(sw) == "number" and l >= 0 and r <= sw + 0.5
-    return inside, ("anchored %s to %s %s (%s, %s); left %s, right %s on a %s px wide screen; placed %s"):format(
-        tostring(point), tostring(relName), tostring(relPoint), tostring(x), tostring(y),
-        tostring(l and math.floor(l)), tostring(r and math.floor(r)), tostring(sw and math.floor(sw)),
-        tostring(panel.where))
+-- Where the panel is: visible, on the screen, and anchored as the branch
+-- Stakeout chose says (right: its TOPLEFT on the settings' TOPRIGHT; left:
+-- TOPRIGHT on TOPLEFT; moved: right of the moved window; over: on the
+-- window's TOPLEFT). want: the branch the step expects, or nil for any.
+local ANCHORS = { right = { "TOPLEFT", "TOPRIGHT" }, moved = { "TOPLEFT", "TOPRIGHT" },
+                  left = { "TOPRIGHT", "TOPLEFT" }, over = { "TOPLEFT", "TOPLEFT" } }
+local function where(want)
+    return function()
+        local panel, cfg = G("StakeoutCustomizeFrame"), G("StakeoutConfigFrame")
+        if not (panel and panel:IsVisible()) then error("Open the settings and the Customize panel first (Back)", 0) end
+        local sw = G("UIParent") and G("UIParent"):GetWidth()
+        local point, rel, relPoint, x, y = panel:GetPoint()
+        local relName = rel and rel.GetName and rel:GetName() or tostring(rel)
+        local l, r = panel:GetLeft(), panel:GetRight()
+        local inside = type(l) == "number" and type(r) == "number" and type(sw) == "number" and l >= -0.5
+            and r <= sw + 0.5
+        local a = ANCHORS[panel.where or ""]
+        local anchored = a ~= nil and rel == cfg and point == a[1] and relPoint == a[2]
+        local ok = inside and anchored and (want == nil or panel.where == want)
+        return ok, ("anchored %s to %s %s (%s, %s); left %s, right %s on a %s px wide screen; placed %s%s"):format(
+            tostring(point), tostring(relName), tostring(relPoint), tostring(x), tostring(y),
+            tostring(l and math.floor(l)), tostring(r and math.floor(r)), tostring(sw and math.floor(sw)),
+            tostring(panel.where), want and (" (wanted " .. want .. ")") or "")
+    end
+end
+
+-- Opens the panel, then switches to a layout (read back from the live frame,
+-- as `rows` does) before its screenshot.
+local function openAnd(layout)
+    return function()
+        openCustomize()
+        return switch(layout)()
+    end
 end
 
 Probe:Steps("customize", {
-    rev = 1,
+    rev = 2,
     title = "Stakeout: the Customize panel (#98)",
     { text = "Stand where Stakeout shows a few buttons (quest mobs too if you can), out of combat. Press Run: the "
-          .. "settings open with the Customize panel beside them.", run = openCustomize, screenshot = "customize-icons" },
-    { text = "Press Run: the list layout, in the preview and on the live buttons.", run = function()
-          stakeout("layout list")
-          return true
-      end, screenshot = "customize-list" },
+          .. "settings open with the Customize panel beside them, on Icons.", run = openAnd("icons"),
+      screenshot = "customize-icons" },
+    { text = "Press Run: the list layout, in the preview and on the live buttons.", run = openAnd("list"),
+      screenshot = "customize-list" },
+    { text = "Press Run: two columns.", run = openAnd("list2"), screenshot = "customize-list2" },
     { text = "Does the preview look like your real buttons (the faces are your own portrait, standing in)?", ask = true },
     { text = "In the panel, untick Portraits, Names and Labels under icons. Then press Next.", screenshot = "customize-parts" },
     { text = "Did the preview and the live buttons both change (no faces, no names)?", ask = true },
     { text = "Tick Distance. Walk toward a mob that has a button until its number changes (up to 3 minutes).",
       when = forgetDistances, wait = distanceChanges, timeout = 180 },
     { text = "Is the number on the button easy to read, and in the right place?", ask = true, screenshot = "customize-distance" },
-    { text = "Where the panel went on your screen (logged).", auto = true, run = where, check = where },
+    { text = "Where the panel went on your screen (logged).", auto = true, run = where(), check = where() },
+    { text = "Drag the settings window (by its top) to the right edge of your screen, then press Run: the panel "
+          .. "should move to its left.", run = where("left"), check = where("left"), screenshot = "customize-left" },
     { text = "Hover a preview button, and a live one: do their tooltips read alike?", ask = true },
     { text = "Anything else? Type it in the box (or nothing). Then tick back what you want, set the layout you "
           .. "like, and press Next." },
@@ -196,4 +220,4 @@ Probe:Steps("customize", {
 NS._test = NS._test or {}
 NS._test.rows = { readRows = readRows }
 NS._test.customize = { openCustomize = openCustomize, distanceChanges = distanceChanges, where = where,
-    forgetDistances = forgetDistances }
+    forgetDistances = forgetDistances, openAnd = openAnd }

@@ -811,7 +811,28 @@ do
     -- A second run starts from nothing: one reading isn't enough again.
     Cz.forgetDistances()
     check(not Cz.distanceChanges(), "a new attempt: one reading, still waiting")
+    -- A layout switch ("25" on an icon, "25 yd" in a list) isn't a move.
+    fb.dist:SetText("25 yd")
+    check(not Cz.distanceChanges(), "\"25\" then \"25 yd\": one reading, not a change")
     fb:Hide()
+    -- Where the panel is: visible, inside the screen, anchored as its branch says.
+    local uw, uh = UIParent._width, UIParent._height
+    UIParent:SetSize(1920, 1080)
+    local fcfg = CreateFrame("Frame", "StakeoutConfigFrame", UIParent)
+    local fpan = CreateFrame("Frame", "StakeoutCustomizeFrame", fcfg)
+    fpan:SetPoint("TOPLEFT", fcfg, "TOPRIGHT", 4, 0)
+    fpan.where, fpan._left, fpan._right = "right", 900, 1256
+    check((Cz.where()()), "beside the settings, anchored as placed: a pass")
+    check(not Cz.where("left")(), "...but not when the step wants it on the left")
+    fpan.where = "left"
+    check(not Cz.where("left")(), "a branch its anchor doesn't match: a fail")
+    fpan.where = "right"
+    fpan._right = 2000
+    check(not Cz.where()(), "past the screen's edge: a fail")
+    fpan._right = 1256
+    fcfg:Hide()
+    check(not pcall(Cz.where()), "the settings closed (the panel not visible): it says to open them")
+    UIParent._width, UIParent._height = uw, uh
 end
 
 -- The list layout mockups (#88): plain frames, never secure.

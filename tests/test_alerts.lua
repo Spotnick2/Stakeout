@@ -696,4 +696,19 @@ bw._scripts.OnEnter(bw)
 check(table.concat(GameTooltip._lines or {}, "|"):find("Alert on", 1, true), "...and says when it's on")
 bw._scripts.OnLeave(bw)
 
+-- #98: a real quest button's click hints come from ButtonSpecs' own field,
+-- and Click hints off hides them all.
+bw._scripts.OnEnter(bw)
+local withHints = table.concat(GameTooltip._lines or {}, "|")
+bw._scripts.OnLeave(bw)
+check(withHints:find("Left-click: target and mark", 1, true) and withHints:find("Right-click: target only", 1, true),
+    "a quest button's tooltip has its click hints: " .. withHints)
+StakeoutDB.tipClicks = false
+bw._scripts.OnEnter(bw)
+local noHints = table.concat(GameTooltip._lines or {}, "|")
+bw._scripts.OnLeave(bw)
+check(not noHints:find("click", 1, true) and noHints:find("Alert on", 1, true),
+    "...Click hints off: none, the alert's state kept: " .. noHints)
+StakeoutDB.tipClicks = nil
+
 done("test_alerts")
