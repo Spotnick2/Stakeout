@@ -482,15 +482,16 @@ do
     plate("nameplate1", GA)   -- the same mob back on that plate
     clickOn(true)
     local d4, why4 = A.lostWait()
-    check(not d4 and (tostring(why4):find("came back", 1, true) or tostring(why4):find("lose the plate first", 1, true)),
+    check(not d4 and tostring(why4):find("lose the plate first", 1, true),
         "the same mob back before the click: not scored, a retry (" .. tostring(why4) .. ")")
-    -- Back at the click but gone again before the poll: still the original.
+    -- Back at the click but gone again before the poll: judged at the click.
     lose("nameplate1")
     plate("nameplate1", GA)
     clickOn(true)
     WoW.units.nameplate1 = nil   -- gone again, no event yet
     local d4b, why4b = A.lostWait()
-    check(not d4b and tostring(why4b):find("came back", 1, true), "the original on the plate at the click: a retry")
+    check(not d4b and tostring(why4b):find("lose the plate first", 1, true),
+        "the original on the plate at the click: not scored, a retry")
     fight(false)
     -- Lost before the fight, the plate reused: the first click in the fight
     -- is inconclusive, and a second one isn't scored either (no loss in it).
@@ -542,6 +543,37 @@ do
     local dR, plR = A.lostWait()
     check(dR and plR == "absent", "a loss before the fight, the mob back, a real loss in it: scored")
     fight(false)
+    -- Judged by the click's own edge: a sighting after the click doesn't make
+    -- a pre-lockdown replacement count...
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    plate("nameplate1", GC)             -- replaced before the fight
+    fight(true)
+    target(nil)
+    clickOn(true)
+    plate("nameplate1", GA)             -- A back, then gone, before the poll
+    A.lostWait()
+    lose("nameplate1")
+    eq((A.lostWait()), false, "a sighting after the click doesn't qualify it")
+    fight(false)
+    -- ...and a valid loss stays valid when A comes back before the poll.
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    fight(true)
+    lose("nameplate1")
+    target(nil)
+    clickOn(true)
+    plate("nameplate1", GA)             -- back before the poll
+    local dV, plV = A.lostWait()
+    check(dV and plV == "absent", "a valid loss and click, the mob back before the poll: still scored")
+    fight(false)
+    -- No combat events: 3b can't tell fights apart.
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    TG.combatOk = false
+    local dN, wN = A.lostWait()
+    check(dN and tostring(wN):find("inconclusive", 1, true), "combat events refused: 3b inconclusive")
+    TG.combatOk = true
     -- A plate that can't be read at the click: inconclusive, not "another mob".
     plate("nameplate1", GA)
     A.setOn("P1", nil, "3b")
@@ -580,11 +612,14 @@ do
     WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate3")
     eq(TG.stab.silent, 3, "ADDED showing another mob than the token held: counted")
     -- A refused subscription: the counts mean nothing.
-    TG.listenOk = false
     TG.stab.from = -1000
+    TG.combatOk = false
+    local dC, wC = A.stability()
+    check(dC and not tostring(wC):find("inconclusive", 1, true), "a combat event refused: 4 still counts")
+    TG.combatOk, TG.plateOk = true, false
     local dL, wL = A.stability()
     check(dL and tostring(wL):find("inconclusive", 1, true), "a plate event not registered: inconclusive")
-    TG.listenOk = true
+    TG.plateOk = true
     A.stopStability()
     WoW.units.nameplate3 = nil
 
@@ -628,7 +663,13 @@ do
     local d51, w51 = A.nearestTrial()
     check(not d51 and tostring(w51):find("1 of 4", 1, true), "1 of 4 scored, from the click's own reading")
     eq(TG.near.scored[1], "the nearer", "...the nearer at the click, not at the poll")
+    ranges.nameplate1, ranges.nameplate2 = { 25, 30 }, { 0, 10 }
+    target(nil)
+    clickOn(true)
+    local _, noT = A.nearestTrial()
+    check(tostring(noT):find("no target", 1, true), "a click with no target: said so, not \"a third mob\"")
     ranges.nameplate1, ranges.nameplate2 = { 0, 10 }, { 25, 30 }
+    target(GA)
     clickOn(true)
     local _, same = A.nearestTrial()
     check(tostring(same):find("other one is nearer", 1, true), "the same nearer one again: not scored")

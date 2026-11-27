@@ -1007,9 +1007,10 @@ do
     local function listen()
         if TG.listening then return end
         TG.listening = true
-        -- false when one was refused: what needs it reports inconclusive.
-        TG.listenOk = Probe:RegisterEvents(lockFrame, { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
-                                                        "NAME_PLATE_UNIT_REMOVED", "NAME_PLATE_UNIT_ADDED" }) ~= false
+        -- Each false when one of its events was refused: the measurement that
+        -- needs it (3b the fight's, 4 the plates') reports inconclusive.
+        TG.combatOk = Probe:RegisterEvents(lockFrame, { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) ~= false
+        TG.plateOk = Probe:RegisterEvents(lockFrame, { "NAME_PLATE_UNIT_REMOVED", "NAME_PLATE_UNIT_ADDED" }) ~= false
     end
     -- 3b: the aimed mob seen on its plate in this lockdown (the evidence a
     -- later loss happened in the fight, not before it). Only with lockdown
@@ -1023,6 +1024,21 @@ do
                 set.lost = nil
             end
             if inCombat() then set.seenLock = TG.lock end
+        end
+    end
+    -- 3b's evidence, brought up to date: the sighting, then a change of the
+    -- plate's mob. Run by each poll and on the click's own edge, so the click
+    -- is judged by what was true when it happened (Codex on #95's code).
+    local function track3b()
+        local set = TG.set
+        if not (set and set.purpose == "3b") then return end
+        seeOriginal()
+        local g = plainGuid(set.token)
+        if not set.lost and presence(set.token) and g and g ~= set.guid then
+            set.lost = { lock = TG.lock, combat = inCombat(), afterSeen = inCombat() and set.seenLock == TG.lock,
+                         how = "now " .. shortGuid(g) }
+            say(("tagged: %s now shows %s (lockdown %d, in combat %s)"):format(set.token, shortGuid(g), TG.lock,
+                tostring(inCombat())))
         end
     end
     lockFrame:SetScript("OnEvent", function(_, event, token)
@@ -1054,10 +1070,13 @@ do
         if (down and true or false) ~= actsOnDown(btn) then return end
         local set = TG.set
         TG.clicks = TG.clicks + 1
+        track3b()
+        -- A copy: a later poll may retire or replace the set's loss.
+        local lostNow = set.lost and { lock = set.lost.lock, combat = set.lost.combat, afterSeen = set.lost.afterSeen }
         -- A false read stays false: no `x and false or y` here. "none" and
         -- "absent" are confirmed; anything that can't be read is "unreadable".
         local c = { n = TG.clicks, set = set, lock = TG.lock, combat = inCombat(), target = "unreadable",
-                    token = "unreadable", dead = "unreadable", tap = "unreadable" }
+                    token = "unreadable", dead = "unreadable", tap = "unreadable", lost = lostNow }
         local hasTarget = presence("target")
         if hasTarget == false then
             c.target = "none"
@@ -1256,24 +1275,23 @@ do
     local function lostWait()
         local set = setFor("3b")
         if not set then return false, "press Back and Set first" end
-        -- A loss counts only if the aimed mob was seen on its plate in this
-        -- same lockdown first (at the fight's start, or a poll in it): a change
-        -- seen before the fight is recorded with its own lockdown, and never
-        -- becomes an in-fight loss (Codex on #95's code).
-        seeOriginal()
-        local g = plainGuid(set.token)
-        if not set.lost and presence(set.token) and g and g ~= set.guid then
-            set.lost = { lock = TG.lock, combat = inCombat(), afterSeen = inCombat() and set.seenLock == TG.lock,
-                         how = "now " .. shortGuid(g) }
-            say(("tagged: %s now shows %s (lockdown %d, in combat %s)"):format(set.token, shortGuid(g), TG.lock,
-                tostring(inCombat())))
+        -- Without the fight's events the lockdowns can't be told apart.
+        if TG.combatOk == false then
+            say("tagged: 3b inconclusive, the combat events couldn't be registered")
+            return true, "inconclusive: the combat events couldn't be registered (see the log)"
         end
+        -- A loss counts only if the aimed mob was seen on its plate in this
+        -- same lockdown first (a poll or a plate event in it): a change seen
+        -- before the fight keeps its own lockdown and never becomes an
+        -- in-fight loss. The click is judged by the evidence on its own edge
+        -- (c.lost), not by the plate's state at this poll (Codex on #95's code).
+        track3b()
         local c = newClick()
         if not c then
             if set.lost then return false, "the plate is gone: left-click the probe button, still in combat" end
             return false, "pull something; in combat, move until the aimed mob's plate goes"
         end
-        local lost = set.lost
+        local lost = c.lost
         if not lost then
             say("tagged: 3b unchanged, inconclusive")
             return false, "unchanged, inconclusive: lose the plate first, then click"
@@ -1283,12 +1301,8 @@ do
             set.lost = nil
             return false, "inconclusive (not one fight): get the aimed mob's plate back, then try again"
         end
-        if c.token == set.guid then
-            say("tagged: 3b original mob returned; waiting for it to go again")
-            set.lost = nil
-            if c.combat then set.seenLock = c.lock end
-            return false, "the same mob came back on that plate: lose it again, then click"
-        end
+        -- (The aimed mob back on its plate at the click retired the loss on
+        -- the click's edge, so such a click is "unchanged" above.)
         if c.token == "unreadable" or c.target == "unreadable" then
             say("tagged: 3b inconclusive, the plate or the target can't be read")
             return false, "inconclusive (can't be read): click again"
@@ -1359,7 +1373,7 @@ do
         local s = TG.stab
         local left = 120 - ((G("GetTime") or function() return 0 end)() - s.from)
         if left > 0 then return false, ("%d s left; stay near several mobs"):format(left) end
-        if TG.listenOk == false then
+        if TG.plateOk == false then
             return true, "inconclusive: a plate event couldn't be registered (see the log)"
         end
         return true, ("adds %d, removes %d, GUID changes with no REMOVED %d"):format(s.adds, s.removes, s.silent)
@@ -1449,8 +1463,10 @@ do
             or ((c.target == now[1].guid or c.target == now[2].guid) and "the farther")
             or "another (inconclusive)"
         if picked:find("inconclusive") then
-            say("tagged: 5 picked a third mob, inconclusive")
-            return false, "it targeted a third one: click again"
+            local what = c.target == "none" and "no target" or (c.target == "unreadable" and "a target that can't be read")
+                or ("a third mob, " .. shortGuid(c.target))
+            say("tagged: 5 not scored, the click gave " .. what)
+            return false, "not scored (" .. what .. "): click again"
         end
         N.scored[#N.scored + 1] = picked
         N.last = near.guid
