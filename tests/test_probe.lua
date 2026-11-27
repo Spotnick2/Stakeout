@@ -552,9 +552,26 @@ do
     target(nil)
     clickOn(true)
     plate("nameplate1", GA)             -- A back, then gone, before the poll
-    A.lostWait()
+    WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
     lose("nameplate1")
-    eq((A.lostWait()), false, "a sighting after the click doesn't qualify it")
+    local dO, wO = A.lostWait()
+    check(not dO and tostring(wO):find("not one fight", 1, true), "a sighting after the click doesn't qualify it")
+    -- ...and rejecting that click keeps the newer loss: a click now counts.
+    clickOn(true)
+    local dO2, pO2 = A.lostWait()
+    check(dO2 and pO2 == "absent", "the newer loss stands: the next click is scored")
+    fight(false)
+    -- Seen in the fight, then gone with no REMOVED: the click's own read is
+    -- enough to establish the loss.
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    fight(true)
+    A.lostWait()                        -- seen, in lockdown
+    WoW.units.nameplate1 = nil          -- gone, no event
+    target(nil)
+    clickOn(true)
+    local dA, pA = A.lostWait()
+    check(dA and pA == "absent", "gone with no REMOVED after a sighting in the fight: scored")
     fight(false)
     -- ...and a valid loss stays valid when A comes back before the poll.
     plate("nameplate1", GA)
@@ -684,6 +701,7 @@ do
     ranges.nameplate1, ranges.nameplate2 = { 25, 30 }, { 0, 10 }
     target(GB)
     clickOn(true)
+    WoW.units.nameplate2 = nil          -- a plate goes before the poll: the click still counts
     local d6, picks = A.nearestTrial()
     check(d6 and picks == "the nearer, the nearer, the nearer, the nearer", "four alternating clicks: " .. tostring(picks))
     lose("nameplate2")

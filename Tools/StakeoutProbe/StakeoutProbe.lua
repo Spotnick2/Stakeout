@@ -1034,11 +1034,19 @@ do
         if not (set and set.purpose == "3b") then return end
         seeOriginal()
         local g = plainGuid(set.token)
-        if not set.lost and presence(set.token) and g and g ~= set.guid then
-            set.lost = { lock = TG.lock, combat = inCombat(), afterSeen = inCombat() and set.seenLock == TG.lock,
-                         how = "now " .. shortGuid(g) }
+        local here = presence(set.token)
+        if not set.lost and here and g and g ~= set.guid then
+            TG.lossN = (TG.lossN or 0) + 1
+            set.lost = { id = TG.lossN, lock = TG.lock, combat = inCombat(),
+                         afterSeen = inCombat() and set.seenLock == TG.lock, how = "now " .. shortGuid(g) }
             say(("tagged: %s now shows %s (lockdown %d, in combat %s)"):format(set.token, shortGuid(g), TG.lock,
                 tostring(inCombat())))
+        elseif not set.lost and here == false and inCombat() and set.seenLock == TG.lock then
+            -- Seen in this fight, now confirmed gone: a loss even if its
+            -- REMOVED never came (Codex on #95's code).
+            TG.lossN = (TG.lossN or 0) + 1
+            set.lost = { id = TG.lossN, lock = TG.lock, combat = true, afterSeen = true, how = "absent" }
+            say(("tagged: %s is gone (lockdown %d)"):format(set.token, TG.lock))
         end
     end
     lockFrame:SetScript("OnEvent", function(_, event, token)
@@ -1052,7 +1060,9 @@ do
                 event == "NAME_PLATE_UNIT_ADDED" and "added" or "removed", gs and "unreadable" or shortGuid(g),
                 tostring(flag("UnitIsTapDenied", token)), TG.lock, tostring(inCombat())))
             if event == "NAME_PLATE_UNIT_REMOVED" and not set.lost then
-                set.lost = { lock = TG.lock, combat = inCombat(), afterSeen = set.seenLock == TG.lock, how = "removed" }
+                TG.lossN = (TG.lossN or 0) + 1
+                set.lost = { id = TG.lossN, lock = TG.lock, combat = inCombat(), afterSeen = set.seenLock == TG.lock,
+                             how = "removed" }
             elseif event == "NAME_PLATE_UNIT_ADDED" then
                 seeOriginal()
             end
@@ -1072,7 +1082,8 @@ do
         TG.clicks = TG.clicks + 1
         track3b()
         -- A copy: a later poll may retire or replace the set's loss.
-        local lostNow = set.lost and { lock = set.lost.lock, combat = set.lost.combat, afterSeen = set.lost.afterSeen }
+        local lostNow = set.lost and { id = set.lost.id, lock = set.lost.lock, combat = set.lost.combat,
+                                       afterSeen = set.lost.afterSeen }
         -- A false read stays false: no `x and false or y` here. "none" and
         -- "absent" are confirmed; anything that can't be read is "unreadable".
         local c = { n = TG.clicks, set = set, lock = TG.lock, combat = inCombat(), target = "unreadable",
@@ -1298,7 +1309,8 @@ do
         end
         if not (lost.combat and lost.afterSeen and c.combat and lost.lock == c.lock) then
             say("tagged: 3b inconclusive: the loss and the click weren't in one fight with the mob seen in it first")
-            set.lost = nil
+            -- Only that loss goes: a newer one seen since the click stays.
+            if set.lost and set.lost.id == lost.id then set.lost = nil end
             return false, "inconclusive (not one fight): get the aimed mob's plate back, then try again"
         end
         -- (The aimed mob back on its plate at the click retired the loss on
@@ -1409,13 +1421,22 @@ do
             TG.near = N
             TG.seen = TG.clicks
         end
+        -- A pending click first, against the pair it was made on: losing the
+        -- pair after it must not throw it away (Codex on #95's code).
+        local c = newClick()
+        if c and N.pair and c.pairId == N.pairId then
+            local done, msg = TG.scoreNear(N, c)
+            if done then return true, msg end
+            c = nil
+            N.pendingMsg = msg
+        end
         -- The pair: chosen, or lost and chosen again. Each keeps its plate:
         -- a mob moved to another token isn't the same observation.
         if N.pair then
             for _, m in ipairs(N.pair) do
                 if not (presence(m.token) and plainGuid(m.token) == m.guid) then
                     say("tagged: 5 lost the pair; choosing again")
-                    N.pair, N.scored, N.last = nil, {}, nil
+                    N.pair, N.scored, N.last, N.pendingMsg = nil, {}, nil, nil
                     break
                 end
             end
@@ -1438,17 +1459,22 @@ do
             N.pairId = N.pairId + 1
             say(("tagged: 5 pair %d: %s and %s"):format(N.pairId, shortGuid(N.pair[1].guid), shortGuid(N.pair[2].guid)))
         end
-        local c = newClick()
-        if not c then
-            return false, ("%d of 4 scored: left-click the probe button%s"):format(#N.scored,
-                N.last and (" once " .. shortGuid(N.last) .. " is the farther one") or "")
-        end
-        -- At the click, as its edge read them: both on their plates, alive, apart.
-        local now = c.near
-        if not now or c.pairId ~= N.pairId then
+        if c then
             say("tagged: 5 click not scored (it came before this pair was chosen)")
             return false, "not scored: click again"
         end
+        if N.pendingMsg then
+            local msg = N.pendingMsg
+            N.pendingMsg = nil
+            return false, msg
+        end
+        return false, ("%d of 4 scored: left-click the probe button%s"):format(#N.scored,
+            N.last and (" once " .. shortGuid(N.last) .. " is the farther one") or "")
+    end
+    -- One click against its own pair, as its edge read them: both on their
+    -- plates, alive, apart. Returns done, and what to show.
+    TG.scoreNear = function(N, c)
+        local now = c.near
         local near = (now[1].dead == false and now[2].dead == false) and disjoint(now[1], now[2]) or nil
         if not near then
             say("tagged: 5 click not scored (a mob dead, gone or the distances overlap)")
