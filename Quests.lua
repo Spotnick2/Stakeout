@@ -233,6 +233,12 @@ local dirty    = false
 local loggedIn, logReady = false, false   -- PLAYER_LOGIN, then a QUEST_LOG_UPDATE after it
 local rebuildPending = false
 local lastShown = {}  -- [name] = its place in the last ButtonSpecs: incumbents keep their slot
+-- #94: armed alerts (the Alerts section below); Hold reaches them first.
+local alerts = {}     -- { rec, ... }
+local NoteAlertName   -- Hold's hook, defined with the alerts
+local CheckAlerts, ReconcileAlerts   -- Rebuild's, defined with them too
+local suspendAlerts = false   -- while Rebuild rescans: one check at its end
+local suspendedWatch = {}     -- what the watch list announced meanwhile
 
 -- Experimental, and off until the player turns it on (/stakeout quests on).
 local function Enabled()
@@ -309,6 +315,9 @@ local function Hold(m, token, guid, name)
     holders[token] = holders[token] or {}
     holders[token][m] = true
     if guid then m.guids[guid] = true end
+    -- An armed alert follows the member through a new spelling: checked by
+    -- the name it had until now (#94).
+    NoteAlertName(m, name)
     m.observed = name
     m.unit = token
     m.lastSeen = GetTime()
@@ -591,6 +600,12 @@ local function ClearMembers()
     wipe(byName)
     wipe(nameRows)
     wipe(questList)
+    -- Quest targets off: no armed alert survives, and its marks go now, in
+    -- combat too (region Show/Hide).
+    if #alerts > 0 then
+        wipe(alerts)
+        C.RefreshAlertMarks()
+    end
 end
 
 function Rebuild()
@@ -719,9 +734,19 @@ function Rebuild()
     UpdateAllNear()
     for _, m in pairs(members) do m.tier = Tier(m, GetTime()) end
 
+    -- Armed alerts take the members they now cover, or go (#94).
+    ReconcileAlerts()
+
     -- Units already on screen match the new set now, not at their next event.
     -- The core's watch state is untouched, so a watched unit doesn't alert again.
+    -- The alerts are checked once, after the whole rescan: a member forgotten
+    -- above and held again by it never reads as a departure.
+    suspendAlerts = true
     C.Rescan()
+    suspendAlerts = false
+    local watched = suspendedWatch
+    suspendedWatch = {}
+    CheckAlerts(nil, watched, true)
     dirty = true
     Flush()
 end
@@ -730,6 +755,284 @@ local function ScheduleRebuild()
     if rebuildPending then return end
     rebuildPending = true
     C_Timer.After(REBUILD_DELAY, Rebuild)
+end
+
+-------------------------------------------------------------------------------
+-- Alerts (#94). Shift+right-click on a quest button arms an alert for its
+-- target. It plays (the core's Announce: chat, flash, sound) when one appears
+-- on a NAMEPLATE: about 40 yd, a live unit (ReadNPC reads no dead one), one the
+-- button's /targetexact finds. Target and mouseover alone don't count: you're
+-- already looking at it. As the watch list does, a unit leaving plate range
+-- keeps it quiet for REARM seconds, so a plate flickering at the edge alerts
+-- once; the death of the one that left last re-arms it at once, for the
+-- respawn.
+--
+-- A record covers its target's members by key and by their current name. A
+-- hunt button's provider name can turn into the observed spelling on the
+-- first plate; Hold carries the member over before it renames it. Designed
+-- with Codex over six rounds (#94's plan).
+--
+-- rec = { keys = { [memberKey] = true }, names = { [name] = true },
+--         plated, guids (the plain GUIDs on its plates at the last check),
+--         quietUntil, departGuid (the one whose plate went last), other }
+-------------------------------------------------------------------------------
+
+-- The client's name for a unit it hasn't named yet (UNIT_NAME_UPDATE brings the
+-- real one a moment later). It never joins or matches a record: two armed
+-- mobs both "Unknown" for a moment are not one target (Codex on #94's code).
+local UNKNOWN = rawget(_G, "UNKNOWNOBJECT") or "Unknown"
+
+local function IsPlateToken(token)
+    return type(token) == "string" and token:find("^nameplate") ~= nil
+end
+
+local function Covers(rec, m)
+    if rec.keys[m.key] then return true end
+    local name = NameOf(m)
+    return name ~= nil and name ~= UNKNOWN and rec.names[name] == true
+end
+
+-- Whether the quests still want this member itself: an eligible ref, or
+-- another quest unit (no ref). A record can outlive one of its members'
+-- objectives while another keeps it wanted (Codex on #99).
+local function MemberWanted(m)
+    if m.other then return true end
+    for _, ref in ipairs(m.refs) do
+        if ref.eligible then return true end
+    end
+    return false
+end
+
+-- Whether a plate shows one of the record's members now, the plain GUIDs on
+-- those plates, the name one of them shows (for the chat line), and every
+-- name on them (whether the watch list just announced this very sighting).
+-- Only members still wanted count: a finished objective's NPC sharing the
+-- button neither alerts nor hides the arrival of the one still needed.
+local function PlatePresence(rec)
+    local any, guids, shown, names = false, {}, nil, {}
+    for _, m in pairs(members) do
+        if Covers(rec, m) and MemberWanted(m) then
+            for token, g in pairs(m.tokens) do
+                if IsPlateToken(token) then
+                    any = true
+                    -- What this plate shows, read now: a member's NameOf is
+                    -- its last sighting's, which may be another token's.
+                    local name = C.ReadNPC(token) or NameOf(m)
+                    if name then names[name] = true end
+                    -- The chat line's name: a real one, never the client's
+                    -- placeholder (the provider's name while it's "Unknown").
+                    for _, n in ipairs({ name, NameOf(m), m.dbName }) do
+                        if not shown and n ~= UNKNOWN then shown = n end
+                    end
+                    if type(g) == "string" then guids[g] = true end
+                end
+            end
+        end
+    end
+    if any and not shown then
+        for n in pairs(rec.names) do shown = n break end
+    end
+    return any, guids, shown, names
+end
+
+local function FindAlert(name)
+    for _, rec in ipairs(alerts) do
+        if rec.names[name] then return rec end
+    end
+end
+
+-- Records that came to share a name or a key become one (two armed hunt
+-- buttons whose first plates show one spelling): one alert, one toggle.
+local function MergeAlerts()
+    local i = 1
+    while i <= #alerts do
+        local a, j = alerts[i], i + 1
+        while j <= #alerts do
+            local b, shared = alerts[j], false
+            for k in pairs(b.keys) do
+                if a.keys[k] then shared = true break end
+            end
+            if not shared then
+                for n in pairs(b.names) do
+                    if a.names[n] then shared = true break end
+                end
+            end
+            if shared then
+                for k in pairs(b.keys) do a.keys[k] = true end
+                for n in pairs(b.names) do a.names[n] = true end
+                for g in pairs(b.guids) do a.guids[g] = true end
+                a.plated = a.plated or b.plated
+                if b.quietUntil > a.quietUntil then a.quietUntil, a.departGuid = b.quietUntil, b.departGuid end
+                -- Either one armed for another quest unit keeps that lifetime.
+                a.other = a.other or b.other
+                table.remove(alerts, j)
+            else
+                j = j + 1
+            end
+        end
+        i = i + 1
+    end
+end
+
+-- Hold's hook, before it renames the member: a covered member's key and the
+-- name it shows now join the record.
+NoteAlertName = function(m, name)
+    if #alerts == 0 then return end
+    local touched = false
+    for _, rec in ipairs(alerts) do
+        if Covers(rec, m) then
+            rec.keys[m.key] = true
+            if name and name ~= UNKNOWN then rec.names[name] = true end
+            touched = true
+        end
+    end
+    if touched then MergeAlerts() end
+end
+
+-- Whether the quests still want the record's target: a member it covers with
+-- an eligible ref, or a quest row naming one of its names (an "n:" member,
+-- which a rebuild may have forgotten). Another quest unit ("o:", no ref, no
+-- owning quest) is kept until it's toggled off or quest targets go off.
+local function Wanted(rec)
+    if rec.other then return true end
+    for _, m in pairs(members) do
+        if Covers(rec, m) then
+            for _, ref in ipairs(m.refs) do
+                if ref.eligible then return true end
+            end
+        end
+    end
+    for n in pairs(rec.names) do
+        if #NameRefs(n) > 0 then return true end
+    end
+    return false
+end
+
+-- After every event that can change a plate: arrivals and departures.
+-- diedGuid: the unit UNIT_DIED named. watchNames: the names the watch list
+-- just announced for this sighting, which don't announce twice. rebuilt:
+-- Rebuild's check, where a presence lost is the quests changing (an
+-- objective done while its NPC is in view, a quest dropped), not one walking
+-- out of range: no quiet starts (Codex on #99).
+CheckAlerts = function(diedGuid, watchNames, rebuilt)
+    if #alerts == 0 then return end
+    if suspendAlerts then
+        for n in pairs(watchNames or {}) do suspendedWatch[n] = true end
+        return
+    end
+    local now = GetTime()
+    for _, rec in ipairs(alerts) do
+        local plated, guids, shown, platedNames = PlatePresence(rec)
+        if plated and not rec.plated then
+            rec.departGuid = nil
+            -- Skipped only when the watch list announced a name these plates
+            -- show (this sighting), not another of the record's names; or
+            -- when its current detection alerted for a unit on these plates
+            -- (targeted first, then gaining a plate: one NPC, one alert).
+            local announced = false
+            for n in pairs(watchNames or {}) do
+                if platedNames[n] then announced = true end
+            end
+            for g in pairs(guids) do
+                if C.WatchAlerted(g) then announced = true end
+            end
+            if now >= rec.quietUntil and not announced then C.Announce(shown) end
+        elseif not plated and rec.plated and rebuilt then
+            rec.departGuid = nil
+        elseif not plated and rec.plated then
+            -- Which unit's plate went last: only knowable when one went.
+            -- Several at once (a tick finding two gone) keeps the quiet.
+            local only
+            for g in pairs(rec.guids) do
+                if only == nil then only = g else only = false break end
+            end
+            if only and diedGuid == only then
+                rec.quietUntil, rec.departGuid = 0, nil
+            else
+                rec.quietUntil, rec.departGuid = now + C.REARM, only or nil
+            end
+        elseif not plated and diedGuid ~= nil and diedGuid == rec.departGuid then
+            -- The one that left last died: its respawn alerts at once.
+            rec.quietUntil, rec.departGuid = 0, nil
+        end
+        rec.plated, rec.guids = plated, guids
+    end
+end
+
+-- Shift+right-click on a quest button (the core's PostClick): true when it
+-- armed an alert, false when it turned one off, "unnamed" for a button still
+-- showing the client's placeholder, nil when the button is stale (quest
+-- targets off, or the target no longer wanted; it can still be on screen in
+-- combat). keys: the members of the button's target (its spec's alertKeys).
+local function ToggleAlert(name, keys)
+    -- A button still showing the client's placeholder arms nothing: the name
+    -- would match any unnamed unit.
+    if not Enabled() or type(name) ~= "string" then return nil end
+    if name == UNKNOWN then return "unnamed" end
+    local rec = FindAlert(name)
+    if not rec and type(keys) == "table" then
+        for _, r in ipairs(alerts) do
+            for _, k in ipairs(keys) do
+                if r.keys[k] then rec = r end
+            end
+        end
+    end
+    if rec then
+        for i, r in ipairs(alerts) do
+            if r == rec then
+                table.remove(alerts, i)
+                break
+            end
+        end
+        return false
+    end
+    rec = { keys = {}, names = { [name] = true }, plated = false, guids = {}, quietUntil = 0 }
+    for _, k in ipairs(type(keys) == "table" and keys or {}) do
+        if type(k) == "string" then rec.keys[k] = true end
+    end
+    local hasRef, other = false, false
+    for _, m in pairs(members) do
+        if Covers(rec, m) then
+            rec.keys[m.key] = true
+            -- The name it has now, which a frozen button (combat) may not show
+            -- yet: the record and the next layout's button agree.
+            local current = NameOf(m)
+            if current and current ~= UNKNOWN then rec.names[current] = true end
+            for _, ref in ipairs(m.refs) do
+                if ref.eligible then hasRef = true end
+            end
+            if m.other then other = true end
+        end
+    end
+    rec.other = other and not hasRef
+    if not Wanted(rec) then return nil end
+    -- One in view now doesn't alert: it has to leave and come back.
+    rec.plated, rec.guids = PlatePresence(rec)
+    alerts[#alerts + 1] = rec
+    MergeAlerts()
+    return true
+end
+
+local function AlertOn(name)
+    return type(name) == "string" and FindAlert(name) ~= nil
+end
+
+-- Rebuild, before its rescan: each record takes the members it now covers,
+-- and goes when the quests no longer want its target.
+ReconcileAlerts = function()
+    local dropped = false
+    for i = #alerts, 1, -1 do
+        local rec = alerts[i]
+        for _, m in pairs(members) do
+            if Covers(rec, m) then rec.keys[m.key] = true end
+        end
+        if not Wanted(rec) then
+            table.remove(alerts, i)
+            dropped = true
+        end
+    end
+    MergeAlerts()
+    if dropped then C.RefreshAlertMarks() end
 end
 
 -------------------------------------------------------------------------------
@@ -774,7 +1077,7 @@ local function Match(unit, name, guid)
     return found
 end
 
-local function OnUnit(unit, isPlate, name, guid)
+local function OnUnit(unit, isPlate, name, guid, watchAnnounced)
     if not Enabled() or type(unit) ~= "string" then return end
     if C.IsSecret(name) or type(name) ~= "string" then name = nil end
     if C.IsSecret(guid) or type(guid) ~= "string" then guid = nil end
@@ -786,12 +1089,14 @@ local function OnUnit(unit, isPlate, name, guid)
         end
     end
     for m in pairs(found) do Hold(m, unit, guid, name) end
+    CheckAlerts(nil, watchAnnounced and name and { [name] = true } or nil)
     Flush()
 end
 
 local function OnPlateRemoved(token)
     if not Enabled() or type(token) ~= "string" or not holders[token] then return end
     for m in pairs(holders[token]) do Release(m, token) end
+    CheckAlerts()
     Flush()
 end
 
@@ -826,6 +1131,7 @@ local function OnUnitDied(guid)
             end
         end
     end
+    CheckAlerts(guid)
     Flush()
 end
 
@@ -837,9 +1143,20 @@ local function Tick()
     local now = GetTime()
     UpdateAllNear()
     for _, m in pairs(members) do
-        for token in pairs(m.tokens) do
+        for token, held in pairs(m.tokens) do
             local name, guid = C.ReadNPC(token)
-            if not Shows(m, name, guid) then Release(m, token) end
+            if not Shows(m, name, guid) then
+                Release(m, token)
+            elseif type(guid) == "string" and not C.IsSecret(guid) and guid ~= held then
+                -- The token shows another spawn of the member now (a plate
+                -- reused without a removal): it holds the new GUID. Stored
+                -- first, then the old one departs, as in Hold: Depart keeps a
+                -- GUID any token still holds (#94, Codex). A late death of
+                -- the old one then can't take this live plate away.
+                m.tokens[token] = guid
+                m.guids[guid] = true
+                Depart(m, held)
+            end
         end
         ExpireGuids(m, now)
         if next(m.tokens) then
@@ -849,6 +1166,7 @@ local function Tick()
         end
         if members[m.key] == m then Touch(m) end
     end
+    CheckAlerts()
     Flush()
 end
 
@@ -1105,12 +1423,16 @@ local function ButtonSpecs()
         else
             tooltip[#tooltip + 1] = "Left-click: target"
         end
+        -- The members' keys: what Shift+right-click arms (#94).
+        local alertKeys = {}
+        for _, m in ipairs(nt.members) do alertKeys[#alertKeys + 1] = m.key end
         -- The refs are ranked: the first one is what the row's right side says.
         local progress, progressMax = ShortProgress(nt.refs[1])
         specs[#specs + 1] = {
             row = nt.row, name = nt.name, macrotext = left, macrotext2 = right,
             unit = nt.unit, icon = QUEST_ICON, tooltip = tooltip,
             hunt = nt.tier == HUNT, progress = progress, progressMax = progressMax,
+            alertKeys = alertKeys,
         }
     end
     lastShown = shown
@@ -1193,6 +1515,7 @@ ns.quests = {
     SetEnabled = SetEnabled, Enabled = Enabled, SetOther = SetOther, PrintState = PrintState,
     SetHunt = SetHunt, HuntEnabled = HuntEnabled,
     SetMute = SetMute, QuestMuteKey = QuestMuteKey, TargetMuteKey = TargetMuteKey,
+    ToggleAlert = ToggleAlert, AlertOn = AlertOn,
     -- The last read of the log, for the quest pane (Phase 4). Read only.
     QuestList = function() return questList end,
 }
@@ -1204,4 +1527,5 @@ ns.quests._test = {
     initialized = function() return loggedIn and logReady end,
     nameRows = function() return nameRows end,
     lastShown = function() return lastShown end,
+    alerts = alerts,
 }

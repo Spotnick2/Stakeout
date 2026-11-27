@@ -118,6 +118,10 @@ function Deploy-Addon {
     & pwsh -NoProfile -File (Join-Path $LibGlass "Tools\deploy.ps1") -Addon Stakeout -AddOnsPath $AddOnsPath
     if ($LASTEXITCODE -ne 0) { Write-Error "LibGlass deploy refused; Stakeout was not touched"; exit 1 }
     Deploy-Folder "Stakeout" $RepoRoot (Get-TocFiles $RepoRoot)
+    # The alert sounds (#94's PR): Media\*.ogg, which the code plays by path.
+    $media = Join-Path $RepoRoot "Media"
+    Deploy-Folder "Stakeout\Media" $media @(Get-ChildItem -LiteralPath $media -File -Filter *.ogg |
+        Select-Object -ExpandProperty Name)
 }
 
 function Deploy-Probe {

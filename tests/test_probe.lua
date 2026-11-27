@@ -105,6 +105,7 @@ local ns = {}
 assert(loadfile("Tools/StakeoutProbe/StakeoutProbe.lua"))("StakeoutProbe", ns)
 assert(loadfile("Tools/StakeoutProbe/Hud.lua"))("StakeoutProbe", ns)   -- the TOC's order
 assert(loadfile("Tools/StakeoutProbe/Layout.lua"))("StakeoutProbe", ns)
+assert(loadfile("Tools/StakeoutProbe/Alert.lua"))("StakeoutProbe", ns)
 WoW.fire("ADDON_LOADED", "StakeoutProbe")
 WoW.fire("PLAYER_LOGIN")
 local T = ns._test
@@ -204,11 +205,46 @@ eq(b._shown, false, "button off hides it")
 -- Procedures
 --------------------------------------------------------------------------------
 
-for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore", "corpse", "look", "rows" }) do
+for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore", "corpse", "look", "rows", "alert" }) do
     fp("steps so " .. name)
     local rec = FP.db.steps.records["StakeoutProbe/" .. name]
     eq(rec and rec.status, "active", "procedure " .. name .. " starts")
     fp("steps stop")
+end
+
+-- #94's alert procedure: the click setting it switches comes back (saved
+-- once, put back on a stop), and each gesture's expected result.
+do
+    local A = ns._test.alert
+    rawset(_G, "SetCVar", function(k, v) if k == "ActionButtonUseKeyDown" then WoW.useKeyDown = v == "1" end end)
+    if type(rawget(_G, "StakeoutProbeDB")) ~= "table" then rawset(_G, "StakeoutProbeDB", {}) end
+    WoW.useKeyDown = true
+    A.setKeyDown(true)()
+    eq(WoW.useKeyDown, false, "the switch flips ActionButtonUseKeyDown")
+    A.setKeyDown(true)()
+    eq(StakeoutProbeDB.alertKeyDown, true, "Back and Run again: the original stays the one saved first")
+    A.restoreOn({ stopped = true })("done")
+    eq(WoW.useKeyDown, false, "leaving a switched step by Next keeps it switched")
+    A.restoreOn({ stopped = true })("stopped")
+    eq(WoW.useKeyDown, true, "Stop puts it back")
+    eq(StakeoutProbeDB.alertKeyDown, nil, "...and forgets it")
+    A.setKeyDown(true)()
+    local ok, err = pcall(A.snapshot)   -- the first step, after a /reload
+    eq(WoW.useKeyDown, true, "a run left switched is put back by the next one's first step")
+    check(not ok and tostring(err):find("Stakeout", 1, true), "...which then says what it needs: " .. tostring(err))
+    A.setKeyDown(true)()
+    A.restoreOn({ stopped = true, skipped = true })("skipped")
+    eq(WoW.useKeyDown, true, "Skip at the restore step puts it back")
+    -- The gestures: Shift added before release targets at 1 and toggles at 0.
+    WoW.SetUnit("target", { name = "Some Mob", guid = "Creature-0-1-2-3-55-A" })
+    WoW.useKeyDown = true
+    check((A.gesture(true)()), "at 1, Shift added late: a target is right")
+    check(not A.gesture(false)(), "at 1, Shift let go early: a target is wrong (it should toggle)")
+    WoW.useKeyDown = false
+    check(not A.gesture(true)(), "at 0, Shift added late: a target is wrong (it should toggle)")
+    check((A.gesture(false)()), "at 0, Shift let go early: a target is right")
+    WoW.units.target, WoW.useKeyDown = nil, true
+    rawset(_G, "SetCVar", nil)
 end
 
 -- The corpse variants set the left-click macro, with the name filled in.

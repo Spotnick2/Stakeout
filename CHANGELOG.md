@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **An alert for a quest mob**, for respawn waits: Shift+right-click a quest button to have Stakeout tell you
+  (chat, flash and your sound, as for the watch list) when one appears on a nameplate, about 40 yards. A small
+  mark shows on the button while it's on; Shift+right-click again turns it off. It works in combat too.
+  - Like the watch list, one that walks out of range and back within a minute doesn't alert again. When the one
+    you saw last dies, its respawn alerts at once.
+  - It stays on while the mob is out of sight, and goes when you no longer need it for a quest.
+  - With hunt mode, a mob you're waiting for keeps its button to Shift+right-click.
+- A quest button's tooltip says "Shift+right-click: alert when one appears", or that it's on.
+- Nine more alert sounds, from NodeRadar: Minimap Ping, Sonar Ping, Radar Ping, and six of its own (Sonar, Radar
+  Blip, Deep Sea Sonar, Bell Chime, Notification, HUD Ping).
+
+### Changed
+
+- Shift+right-click on a quest button no longer targets and marks the mob (it ran the left-click's macro).
+  Right-click and left-click are unchanged.
+
 ## v2.7.0 - 2026-11-25
 
 ### Added

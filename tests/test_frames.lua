@@ -47,14 +47,47 @@ check(ran > 40, "handlers were actually executed (" .. ran .. ")")
 local dd = StakeoutSoundDropdown
 WoW.dropdownItems = {}
 dd.initFn()
-eq(#WoW.dropdownItems, 17, "17 built-in sounds without DBM-Core (the 9 path sounds are gone)")
+eq(#WoW.dropdownItems, 26, "26 sounds without DBM-Core: 17 built-in, 9 from NodeRadar")
 for _, info in ipairs(WoW.dropdownItems) do
     check(pcall(info.func), "dropdown item " .. tostring(info.text))
 end
 WoW.addonsLoaded["DBM-Core"] = true
 WoW.dropdownItems = {}
 dd.initFn()
-eq(#WoW.dropdownItems, 24, "plus 7 with DBM-Core")
+eq(#WoW.dropdownItems, 33, "plus 7 with DBM-Core")
+
+-- NodeRadar's nine: each through the call that plays it (a FileDataID or a
+-- path through PlaySoundFile only; the minimap ping is a SoundKit), and each
+-- preview says it's set, not the Raid Warning fallback.
+local MEDIA = "Interface\\AddOns\\Stakeout\\Media\\"
+local nodeRadar = {
+    ["Minimap Ping"] = "PlaySound 3175",
+    ["Sonar Ping"] = "PlaySoundFile 569006",
+    ["Radar Ping"] = "PlaySoundFile 7466154",
+    ["Sonar"] = "PlaySoundFile " .. MEDIA .. "Sonar.ogg",
+    ["Radar Blip"] = "PlaySoundFile " .. MEDIA .. "RadarBlip.ogg",
+    ["Deep Sea Sonar"] = "PlaySoundFile " .. MEDIA .. "DeepSea.ogg",
+    ["Bell Chime"] = "PlaySoundFile " .. MEDIA .. "BellChime.ogg",
+    ["Notification"] = "PlaySoundFile " .. MEDIA .. "Notification.ogg",
+    ["HUD Ping"] = "PlaySoundFile " .. MEDIA .. "HudPing.ogg",
+}
+local found = 0
+for _, info in ipairs(WoW.dropdownItems) do
+    local want = nodeRadar[info.text]
+    if want then
+        found = found + 1
+        WoW.soundCalls, WoW.chat = {}, {}
+        info.func()
+        eq(table.concat(WoW.soundCalls, ", "), want, info.text .. ": plays through " .. want:match("^%S+"))
+        check(WoW.chatText():find("Alert sound set to: " .. info.text, 1, true), "...and its preview says it's set")
+    end
+end
+eq(found, 9, "all nine are offered")
+for _, f in ipairs({ "Sonar", "RadarBlip", "DeepSea", "BellChime", "Notification", "HudPing" }) do
+    local h = io.open("Media/" .. f .. ".ogg", "rb")
+    check(h ~= nil, "Media/" .. f .. ".ogg is in the repo")
+    if h then h:close() end
+end
 
 -- A refused sound falls back to Raid Warning.
 WoW.sounds = {}
