@@ -698,10 +698,12 @@ do
     target(GA)
     clickOn(true)
     A.nearestTrial()
+    clickOn(true)                       -- the same nearer one again: not scored...
     ranges.nameplate1, ranges.nameplate2 = { 25, 30 }, { 0, 10 }
     target(GB)
-    clickOn(true)
-    WoW.units.nameplate2 = nil          -- a plate goes before the poll: the click still counts
+    clickOn(true)                       -- ...then the valid fourth, both before one poll
+    WoW.units.nameplate2 = nil          -- a plate goes before the poll: the clicks still count
+    clickOn(true)                       -- ...and a click after it doesn't hide them
     local d6, picks = A.nearestTrial()
     check(d6 and picks == "the nearer, the nearer, the nearer, the nearer", "four alternating clicks: " .. tostring(picks))
     lose("nameplate2")
@@ -715,7 +717,34 @@ do
     plate("nameplate3", GB)
     A.nearestTrial()
     check(TG.near.pair == nil or TG.near.pair[2].token ~= "nameplate2", "a mob moved to another plate: the pair is chosen again")
+    -- A pair member dead on its plate is let go for a live one.
+    WoW.units.nameplate3 = nil
+    plate("nameplate2", GB)
+    TG.near = nil
+    A.nearestTrial()
+    plate("nameplate2", GB, { dead = true })
+    plate("nameplate3", GC)
+    ranges.nameplate1, ranges.nameplate3 = { 0, 10 }, { 50, 60 }
+    A.nearestTrial()
+    check(TG.near.pair and TG.near.pair[2].guid == GC, "a dead pair member: the pair is chosen again with a live one")
+    WoW.units.nameplate3, ranges.nameplate3 = nil, nil
     rawset(_G, "Stakeout", nil)
+    -- Stopped mid-trial: the aim goes, and nothing more is logged for it.
+    plate("nameplate1", GA)
+    plate("nameplate2", GB)
+    target(nil)
+    A.setOn("P1", false)
+    A.keepPass("P1")("stopped")
+    eq(TG.set, nil, "a stopped trial drops its aim")
+    local n0 = #db.log
+    lose("nameplate1")
+    local quiet = true
+    for i = n0 + 1, #db.log do if db.log[i]:find("tagged:", 1, true) then quiet = false end end
+    check(quiet, "...so a later event on that plate isn't logged for it")
+    A.setOn("P1", false)
+    A.stopAim("stopped")
+    eq(TG.set, nil, "the other aimed waits drop it on Stop too")
+    plate("nameplate1", GA)
 
     -- The first step starts a fresh run; with no target it stays (a throw).
     WoW.units.target = nil

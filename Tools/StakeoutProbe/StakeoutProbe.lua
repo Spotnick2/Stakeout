@@ -1118,6 +1118,11 @@ do
             end
         end
         TG.click = c
+        -- Every click is kept, in order: two before a poll are both judged
+        -- (Codex on #95's code). The last few only.
+        TG.queue = TG.queue or {}
+        TG.queue[#TG.queue + 1] = c
+        if #TG.queue > 20 then table.remove(TG.queue, 1) end
         say(("tagged click %d [%s]: target %s (tapped %s), %s now %s (dead %s, tapped %s), lockdown %d, in combat %s")
             :format(c.n, set.variant, shortGuid(c.target), tostring(c.targetTap), set.token, shortGuid(c.token),
             tostring(c.dead), tostring(c.tap), c.lock, tostring(c.combat)))
@@ -1187,10 +1192,13 @@ do
 
     -- A new click since the last Set (setOn resets TG.seen), or nil: a click
     -- of an older Set is never a new one.
+    -- The oldest click not judged yet.
     local function newClick()
-        if TG.click and TG.click.n > (TG.seen or 0) then
-            TG.seen = TG.click.n
-            return TG.click
+        for _, c in ipairs(TG.queue or {}) do
+            if c.n > (TG.seen or 0) then
+                TG.seen = c.n
+                return c
+            end
         end
     end
 
@@ -1230,10 +1238,15 @@ do
     -- by hand (after a Back) replaces the saved result without a click, so
     -- the earlier pass goes too (Codex on #95's code).
     local function keepPass(variant)
-        return function()
+        return function(outcome)
             if TG.scored ~= variant and TG.passed then TG.passed[variant] = nil end
             TG.scored = nil
+            -- Stopped: no aim stays live to log a reused token afterwards.
+            if outcome == "stopped" then TG.set = nil end
         end
+    end
+    local function stopAim(outcome)
+        if outcome == "stopped" then TG.set = nil end
     end
     local function chosen()
         return TG.passed and (TG.passed.P1 and "P1" or TG.passed.P2 and "P2") or nil
@@ -1424,17 +1437,18 @@ do
         -- A pending click first, against the pair it was made on: losing the
         -- pair after it must not throw it away (Codex on #95's code).
         local c = newClick()
-        if c and N.pair and c.pairId == N.pairId then
+        while c and N.pair and c.pairId == N.pairId do
             local done, msg = TG.scoreNear(N, c)
             if done then return true, msg end
-            c = nil
             N.pendingMsg = msg
+            c = newClick()
         end
         -- The pair: chosen, or lost and chosen again. Each keeps its plate:
         -- a mob moved to another token isn't the same observation.
         if N.pair then
             for _, m in ipairs(N.pair) do
-                if not (presence(m.token) and plainGuid(m.token) == m.guid) then
+                -- Gone from its plate, or dead on it: no use for the trial.
+                if not (presence(m.token) and plainGuid(m.token) == m.guid) or flag("UnitIsDead", m.token) == true then
                     say("tagged: 5 lost the pair; choosing again")
                     N.pair, N.scored, N.last, N.pendingMsg = nil, {}, nil, nil
                     break
@@ -1579,13 +1593,14 @@ do
     -- stands, so a Done by hand there can't reuse it (Codex on #95's code).
     local function forgetTag(outcome)
         if outcome == "back" then TG.tagSeen = false end
+        stopAim(outcome)
     end
 
     TG.api = { setOn = setOn, onTagClick = onTagClick, plateTrial = plateTrial, tagWait = tagWait,
                tagClick = tagClick, lostWait = lostWait, nearestTrial = nearestTrial, stability = stability,
                stopStability = stopStability, chosen = chosen, readTap = readTap, cleanup = cleanup,
                setStep = setStep, readMob = readMob, setNearest = setNearest, dropSet = dropSet,
-               resetRun = resetRun, forgetTag = forgetTag, keepPass = keepPass }
+               resetRun = resetRun, forgetTag = forgetTag, keepPass = keepPass, stopAim = stopAim }
 
     Probe:Steps("tagged", {
         rev = 1,
@@ -1614,13 +1629,13 @@ do
               .. "other account, to hit the mob the probe picks. Press Set (it picks an untagged one), or Skip this "
               .. "part and the next two.", false),
         { text = "Have the other player hit the aimed mob now (the probe names its plate). Wait here.",
-          wait = tagWait, timeout = 600 },
+          wait = tagWait, timeout = 600, leave = stopAim },
         { text = "Left-click the probe button once, while the mob is alive.", wait = tagClick, timeout = 600,
           leave = forgetTag },
         -- 3b
         setStep("chosen", "3b", "Next: the aimed mob's plate lost in a fight. Out of combat, press Set."),
         { text = "Pull a different mob. During the fight, move until the aimed mob's plate goes away, then "
-              .. "left-click the probe button, still in combat.", wait = lostWait, timeout = 900 },
+              .. "left-click the probe button, still in combat.", wait = lostWait, timeout = 900, leave = stopAim },
         -- 4
         { text = "Out of combat, stay near several mobs (walking around is fine) for two minutes.",
           wait = stability, timeout = 240, leave = stopStability },
@@ -1629,7 +1644,7 @@ do
           run = setNearest, leave = dropSet },
         { text = "Stand so that two live ones are at clearly different distances (one near, one far). Click the "
               .. "probe button; then move until the other one is the nearer and click again; four times in all.",
-          wait = nearestTrial, timeout = 1200 },
+          wait = nearestTrial, timeout = 1200, leave = stopAim },
         { text = "Removing the probe button (out of combat).", button = "Remove", run = cleanup },
     })
 end
