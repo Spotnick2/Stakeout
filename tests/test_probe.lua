@@ -632,7 +632,8 @@ do
     TG.stab.from = -1000
     TG.combatOk = false
     local dC, wC = A.stability()
-    check(dC and not tostring(wC):find("inconclusive", 1, true), "a combat event refused: 4 still counts")
+    check(dC and tostring(wC):find("combat events", 1, true),
+        "a combat event refused: 4 can't know it was out of combat, inconclusive")
     TG.combatOk, TG.plateOk = true, false
     local dL, wL = A.stability()
     check(dL and tostring(wL):find("inconclusive", 1, true), "a plate event not registered: inconclusive")

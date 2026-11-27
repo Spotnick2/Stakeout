@@ -1417,6 +1417,11 @@ do
         if TG.plateOk == false then
             return true, "inconclusive: a plate event couldn't be registered (see the log)"
         end
+        -- Without the fight's events a fight between polls can't restart the
+        -- window, so "out of combat" isn't known (Codex on #95's code).
+        if TG.combatOk == false then
+            return true, "inconclusive: the combat events couldn't be registered (see the log)"
+        end
         -- Nothing seen twice: nothing to compare, not "no changes".
         if s.compared == 0 then
             return true, "inconclusive: no plate was seen long enough to compare"
