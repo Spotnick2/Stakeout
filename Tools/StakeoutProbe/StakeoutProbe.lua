@@ -1052,7 +1052,12 @@ do
     lockFrame:SetScript("OnEvent", function(_, event, token)
         if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
             TG.lock = TG.lock + 1   -- a fight's start and its end each begin a new one
-            if event == "PLAYER_REGEN_DISABLED" then seeOriginal() end
+            if event == "PLAYER_REGEN_DISABLED" then
+                seeOriginal()
+                -- 4's window is out of combat only: a fight, even one between
+                -- two polls, starts it again (Codex on #95's code).
+                if TG.stab and TG.onFight then TG.onFight() end
+            end
         elseif TG.set and token == TG.set.token then
             local set = TG.set
             local g, gs = plainGuid(token)
@@ -1423,6 +1428,10 @@ do
         if ticker then ticker:SetScript("OnUpdate", nil) end
         TG.stab, TG.watchTokens = nil, nil
     end
+    TG.onFight = function()
+        say("tagged: 4 a fight began: the two minutes start again once you're out")
+        stopStability()
+    end
 
     -- 5: two live mobs at clearly different distances; each scored click
     -- needs the other one nearer than at the last one.
@@ -1654,7 +1663,8 @@ do
               .. "left-click the probe button, still in combat.", wait = lostWait, timeout = 900, leave = stopAim },
         -- 4
         { text = "Out of combat, stay near several mobs (walking around is fine) for two minutes.",
-          wait = stability, timeout = 240, leave = stopStability },
+          -- No timeout: a fight restarts the window, which a fixed one would cut short.
+          wait = stability, leave = stopStability },
         -- 5
         { text = "Out of combat, press Set: the probe button gets the plain /targetexact macro.", button = "Set",
           run = setNearest, leave = dropSet },

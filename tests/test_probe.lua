@@ -643,6 +643,13 @@ do
     check(not dF and tostring(wF):find("leave combat", 1, true), "in combat: no result, it waits")
     eq(TG.stab, nil, "...and the window restarts")
     WoW.combat = false
+    -- A whole fight between two polls restarts it too.
+    plate("nameplate1", GA)
+    A.stability()
+    check(TG.stab ~= nil, "a window running")
+    fight(true)
+    fight(false)
+    eq(TG.stab, nil, "a fight between polls restarts the window")
     -- Nothing seen twice: inconclusive, not "no changes".
     WoW.units.nameplate1, WoW.units.nameplate2, WoW.units.nameplate3 = nil, nil, nil
     A.stability()
