@@ -340,12 +340,24 @@ do
     target(GA)
     clickOn(true)
     A.plateTrial("P1")()
-    -- Anything re-aiming the button (/fp so button) ends the trial.
+    -- The wait's leave: a pass stands only if that visit scored it.
+    A.keepPass("P1")()
+    eq(A.chosen(), "P1", "left after a scored click: the pass stands")
+    A.keepPass("P1")()
+    eq(A.chosen(), nil, "left again by Done by hand (after a Back): the pass goes")
+    A.setOn("P1", false)
+    target(GA)
+    clickOn(true)
+    A.plateTrial("P1")()
+    -- Anything re-aiming the button (/fp so button) ends the trial, and its
+    -- clicks aren't logged under it.
     target(nil)
     A.setOn("P1", false)
     T.aim("Bristleback Quilboar", 3258, "8")
     target(GA)
+    local before = TG.clicks
     clickOn(true)
+    eq(TG.clicks, before, "a click of another macro isn't recorded for the trial")
     check(not (A.plateTrial("P1")()), "the button re-aimed by something else: P1's wait scores nothing")
     -- With only tagged mobs about, the general trial still runs ("prefer").
     plate("nameplate1", GA, { tapped = true })
@@ -470,7 +482,15 @@ do
     plate("nameplate1", GA)   -- the same mob back on that plate
     clickOn(true)
     local d4, why4 = A.lostWait()
-    check(not d4 and tostring(why4):find("came back", 1, true), "the same mob back before the click: a retry")
+    check(not d4 and (tostring(why4):find("came back", 1, true) or tostring(why4):find("lose the plate first", 1, true)),
+        "the same mob back before the click: not scored, a retry (" .. tostring(why4) .. ")")
+    -- Back at the click but gone again before the poll: still the original.
+    lose("nameplate1")
+    plate("nameplate1", GA)
+    clickOn(true)
+    WoW.units.nameplate1 = nil   -- gone again, no event yet
+    local d4b, why4b = A.lostWait()
+    check(not d4b and tostring(why4b):find("came back", 1, true), "the original on the plate at the click: a retry")
     fight(false)
     -- Lost before the fight, the plate reused: the first click in the fight
     -- is inconclusive, and a second one isn't scored either (no loss in it).
@@ -497,6 +517,30 @@ do
     eq((A.lostWait()), false, "a change seen before the fight: the click in it is inconclusive")
     clickOn(true)
     eq((A.lostWait()), false, "...and stays so: the aimed mob was never seen in this fight")
+    fight(false)
+    -- PLAYER_REGEN_DISABLED before lockdown reads on: no sighting then, so a
+    -- change before lockdown isn't an in-fight loss.
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    WoW.fire("PLAYER_REGEN_DISABLED")   -- lockdown not on yet
+    plate("nameplate1", GC)             -- changed before lockdown, no poll in between
+    WoW.combat = true
+    target(nil)
+    clickOn(true)
+    eq((A.lostWait()), false, "a change before lockdown read on: not scored")
+    fight(false)
+    -- An earlier loss retired when the mob is seen back, so a real one counts.
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    lose("nameplate1")                  -- before the fight
+    plate("nameplate1", GA)
+    fight(true)
+    A.lostWait()                        -- seen back, in lockdown
+    lose("nameplate1")
+    target(nil)
+    clickOn(true)
+    local dR, plR = A.lostWait()
+    check(dR and plR == "absent", "a loss before the fight, the mob back, a real loss in it: scored")
     fight(false)
     -- A plate that can't be read at the click: inconclusive, not "another mob".
     plate("nameplate1", GA)
@@ -531,6 +575,16 @@ do
     plate("nameplate3", GB)
     TG.stabPoll()
     eq(TG.stab.silent, 2, "a change right after ADDED, before any poll: counted")
+    -- An ADDED on a token still holding another mob, no REMOVED between.
+    plate("nameplate3", GC)
+    WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate3")
+    eq(TG.stab.silent, 3, "ADDED showing another mob than the token held: counted")
+    -- A refused subscription: the counts mean nothing.
+    TG.listenOk = false
+    TG.stab.from = -1000
+    local dL, wL = A.stability()
+    check(dL and tostring(wL):find("inconclusive", 1, true), "a plate event not registered: inconclusive")
+    TG.listenOk = true
     A.stopStability()
     WoW.units.nameplate3 = nil
 

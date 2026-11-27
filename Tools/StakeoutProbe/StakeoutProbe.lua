@@ -1007,15 +1007,22 @@ do
     local function listen()
         if TG.listening then return end
         TG.listening = true
-        Probe:RegisterEvents(lockFrame, { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "NAME_PLATE_UNIT_REMOVED",
-                                          "NAME_PLATE_UNIT_ADDED" })
+        -- false when one was refused: what needs it reports inconclusive.
+        TG.listenOk = Probe:RegisterEvents(lockFrame, { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+                                                        "NAME_PLATE_UNIT_REMOVED", "NAME_PLATE_UNIT_ADDED" }) ~= false
     end
     -- 3b: the aimed mob seen on its plate in this lockdown (the evidence a
-    -- later loss happened in the fight, not before it).
+    -- later loss happened in the fight, not before it). Only with lockdown
+    -- read on: PLAYER_REGEN_DISABLED can come before it (porting guide).
+    -- Seeing it back also retires an earlier loss.
     local function seeOriginal()
         local set = TG.set
         if set and set.purpose == "3b" and presence(set.token) and plainGuid(set.token) == set.guid then
-            set.seenLock = TG.lock
+            if set.lost then
+                say("tagged: 3b the aimed mob is back on " .. set.token .. "; the earlier loss no longer stands")
+                set.lost = nil
+            end
+            if inCombat() then set.seenLock = TG.lock end
         end
     end
     lockFrame:SetScript("OnEvent", function(_, event, token)
@@ -1030,6 +1037,8 @@ do
                 tostring(flag("UnitIsTapDenied", token)), TG.lock, tostring(inCombat())))
             if event == "NAME_PLATE_UNIT_REMOVED" and not set.lost then
                 set.lost = { lock = TG.lock, combat = inCombat(), afterSeen = set.seenLock == TG.lock, how = "removed" }
+            elseif event == "NAME_PLATE_UNIT_ADDED" then
+                seeOriginal()
             end
         end
         if TG.watchTokens and (event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED") then
@@ -1039,7 +1048,9 @@ do
 
     -- The click, on the action's edge only (left button).
     local function onTagClick(btn, which, down)
-        if not TG.set or which ~= "LeftButton" then return end
+        -- Only a click of the macro the trial set (anything else re-aimed the
+        -- button since): never logged under a trial it isn't.
+        if not TG.set or TG.set.gen ~= state.aimGen or which ~= "LeftButton" then return end
         if (down and true or false) ~= actsOnDown(btn) then return end
         local set = TG.set
         TG.clicks = TG.clicks + 1
@@ -1177,11 +1188,21 @@ do
             local control = set.tap == false and c.tap == false
             TG.passed = TG.passed or {}
             TG.passed[variant] = (hit and control) or nil   -- this result replaces any earlier one
+            TG.scored = variant   -- this visit of the wait ended on a click (keepPass)
             local result = hit and "targeted the plate's mob" or (c.target == "none" and "no target")
                 or ("targeted another (" .. shortGuid(c.target) .. ")")
             say(("tagged: %s scored: %s%s"):format(variant, result,
                 (hit and not control) and " (the mob was tagged: not carried forward)" or ""))
             return true, variant, result
+        end
+    end
+    -- The 2 wait's leave: a result stands only if this visit scored it. Done
+    -- by hand (after a Back) replaces the saved result without a click, so
+    -- the earlier pass goes too (Codex on #95's code).
+    local function keepPass(variant)
+        return function()
+            if TG.scored ~= variant and TG.passed then TG.passed[variant] = nil end
+            TG.scored = nil
         end
     end
     local function chosen()
@@ -1239,7 +1260,7 @@ do
         -- same lockdown first (at the fight's start, or a poll in it): a change
         -- seen before the fight is recorded with its own lockdown, and never
         -- becomes an in-fight loss (Codex on #95's code).
-        if inCombat() then seeOriginal() end
+        seeOriginal()
         local g = plainGuid(set.token)
         if not set.lost and presence(set.token) and g and g ~= set.guid then
             set.lost = { lock = TG.lock, combat = inCombat(), afterSeen = inCombat() and set.seenLock == TG.lock,
@@ -1298,8 +1319,15 @@ do
                     s.guids[token] = nil
                 else
                     s.adds = s.adds + 1
-                    -- What it showed when added: the baseline a silent change
-                    -- right after is measured from (Codex on #95's code).
+                    -- An ADDED on a token still holding another mob, with no
+                    -- REMOVED between: that's a silent change too. Then what it
+                    -- shows is the baseline for the next poll (Codex on #95's code).
+                    local was = s.guids[token]
+                    if g and was and g ~= was then
+                        s.silent = s.silent + 1
+                        say(("tagged: 4 %s added as %s while it held %s, with no REMOVED"):format(token,
+                            shortGuid(g), shortGuid(was)))
+                    end
                     if g then s.guids[token] = g end
                 end
                 say(("tagged: 4 %s %s %s tapped %s"):format(token, event == "NAME_PLATE_UNIT_ADDED" and "added" or "removed",
@@ -1331,6 +1359,9 @@ do
         local s = TG.stab
         local left = 120 - ((G("GetTime") or function() return 0 end)() - s.from)
         if left > 0 then return false, ("%d s left; stay near several mobs"):format(left) end
+        if TG.listenOk == false then
+            return true, "inconclusive: a plate event couldn't be registered (see the log)"
+        end
         return true, ("adds %d, removes %d, GUID changes with no REMOVED %d"):format(s.adds, s.removes, s.silent)
     end
     local function stopStability()
@@ -1512,7 +1543,7 @@ do
                tagClick = tagClick, lostWait = lostWait, nearestTrial = nearestTrial, stability = stability,
                stopStability = stopStability, chosen = chosen, readTap = readTap, cleanup = cleanup,
                setStep = setStep, readMob = readMob, setNearest = setNearest, dropSet = dropSet,
-               resetRun = resetRun, forgetTag = forgetTag }
+               resetRun = resetRun, forgetTag = forgetTag, keepPass = keepPass }
 
     Probe:Steps("tagged", {
         rev = 1,
@@ -1531,11 +1562,11 @@ do
         setStep("P1", "2", "Out of combat, target something else (or nothing). Press Set: the probe button targets "
               .. "one plate of that name, an untagged mob if there is one (/target nameplateN).", "prefer"),
         { text = "Left-click the probe button once. (If the probe says to, click again.)", wait = plateTrial("P1"),
-          timeout = 600 },
+          timeout = 600, leave = keepPass("P1") },
         setStep("P2", "2", "Out of combat again, target something else. Press Set: the same, as /target "
               .. "[@nameplateN,exists,nodead].", "prefer"),
         { text = "Left-click the probe button once. (If the probe says to, click again.)", wait = plateTrial("P2"),
-          timeout = 600 },
+          timeout = 600, leave = keepPass("P2") },
         -- 3a
         setStep("chosen", "3a", "Next: an aimed mob tagged by someone else. You need another player, or your "
               .. "other account, to hit the mob the probe picks. Press Set (it picks an untagged one), or Skip this "
