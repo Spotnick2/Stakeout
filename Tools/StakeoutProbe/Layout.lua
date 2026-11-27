@@ -152,12 +152,24 @@ local function distanceChanges()
     end
     return false, "walk toward (or away from) a mob that has a button, with Distance ticked"
 end
+-- Each attempt starts with nothing seen: a later run must see two numbers
+-- of its own (Codex on #98's code).
+local function forgetDistances() distSeen = {} return true end
 
+-- Where the panel is: its anchor, its edges against the screen's, and the
+-- branch Stakeout chose.
 local function where()
     local panel = G("StakeoutCustomizeFrame")
     if not (panel and panel:IsShown()) then error("Open the Customize panel first (Back one step)", 0) end
     local sw = G("UIParent") and G("UIParent"):GetWidth()
-    return true, ("placed %s on a %s px wide screen"):format(tostring(panel.where), tostring(sw and math.floor(sw)))
+    local point, rel, relPoint, x, y = panel:GetPoint()
+    local relName = rel and rel.GetName and rel:GetName() or tostring(rel)
+    local l, r = panel:GetLeft(), panel:GetRight()
+    local inside = type(l) == "number" and type(r) == "number" and type(sw) == "number" and l >= 0 and r <= sw + 0.5
+    return inside, ("anchored %s to %s %s (%s, %s); left %s, right %s on a %s px wide screen; placed %s"):format(
+        tostring(point), tostring(relName), tostring(relPoint), tostring(x), tostring(y),
+        tostring(l and math.floor(l)), tostring(r and math.floor(r)), tostring(sw and math.floor(sw)),
+        tostring(panel.where))
 end
 
 Probe:Steps("customize", {
@@ -173,9 +185,9 @@ Probe:Steps("customize", {
     { text = "In the panel, untick Portraits, Names and Labels under icons. Then press Next.", screenshot = "customize-parts" },
     { text = "Did the preview and the live buttons both change (no faces, no names)?", ask = true },
     { text = "Tick Distance. Walk toward a mob that has a button until its number changes (up to 3 minutes).",
-      wait = distanceChanges, timeout = 180 },
+      when = forgetDistances, wait = distanceChanges, timeout = 180 },
     { text = "Is the number on the button easy to read, and in the right place?", ask = true, screenshot = "customize-distance" },
-    { text = "Where the panel went on your screen (logged).", auto = true, run = where },
+    { text = "Where the panel went on your screen (logged).", auto = true, run = where, check = where },
     { text = "Hover a preview button, and a live one: do their tooltips read alike?", ask = true },
     { text = "Anything else? Type it in the box (or nothing). Then tick back what you want, set the layout you "
           .. "like, and press Next." },
@@ -183,4 +195,5 @@ Probe:Steps("customize", {
 
 NS._test = NS._test or {}
 NS._test.rows = { readRows = readRows }
-NS._test.customize = { openCustomize = openCustomize, distanceChanges = distanceChanges, where = where }
+NS._test.customize = { openCustomize = openCustomize, distanceChanges = distanceChanges, where = where,
+    forgetDistances = forgetDistances }

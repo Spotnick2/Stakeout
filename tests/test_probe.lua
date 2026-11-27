@@ -804,9 +804,13 @@ do
     fb.dist = fb:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     fb.dist:SetText("30")
     fb.dist:Show()
+    Cz.forgetDistances()
     check(not Cz.distanceChanges(), "one distance read: still waiting")
     fb.dist:SetText("25")
     check((Cz.distanceChanges()), "a second, different one: done")
+    -- A second run starts from nothing: one reading isn't enough again.
+    Cz.forgetDistances()
+    check(not Cz.distanceChanges(), "a new attempt: one reading, still waiting")
     fb:Hide()
 end
 

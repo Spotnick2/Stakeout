@@ -107,6 +107,13 @@ local tip = table.concat(GameTooltip._lines or {}, "|")
 pv[3]._scripts.OnLeave(pv[3])
 check(tip:find("Distance: 25-30 yd", 1, true) and tip:find("Alert on (Shift+right-click to stop)", 1, true),
     "a sample's tooltip by the live rules: " .. tip)
+-- Its click hints follow the marking setting, as the live ones do.
+StakeoutDB.enableMarking = false
+pv[1]._scripts.OnEnter(pv[1])
+tip = table.concat(GameTooltip._lines or {}, "|")
+pv[1]._scripts.OnLeave(pv[1])
+check(tip:find("Left-click: target", 1, true) and not tip:find("mark", 1, true), "marking off: no mark promised: " .. tip)
+StakeoutDB.enableMarking = true
 SlashCmdList.STAKEOUT("layout icons")
 
 -- In combat: the preview redraws, the target frame isn't touched.
@@ -150,6 +157,16 @@ check(kl._width < wide, ("...and the row narrows (%d < %d)"):format(kl._width, w
 StakeoutDB.showProgress = false
 T.RefreshTargetFrame()
 check(not kl.progress._shown, "Progress off: no status")
+-- Names on, Progress and Distance off: the name reaches the row's edge (a
+-- hidden status can't take its room).
+StakeoutDB.showNames = nil
+T.RefreshTargetFrame()
+local np = kl.nameText._points
+local right
+for _, p in ipairs(np) do if p[1] == "RIGHT" then right = p end end
+check(right and right[2] == kl, "names on, progress and distance off: the name anchors to the row itself")
+StakeoutDB.showNames = false
+T.RefreshTargetFrame()
 -- The compact list keeps its titles inside (Codex on the plan).
 local f = T.frame()
 local widest = 0
@@ -194,7 +211,8 @@ check(t:find("Not seen yet", 1, true) and t:find("Alert on", 1, true) and not t:
     and not t:find("Shift", 1, true), "an armed hunt button, clicks hidden: \"Alert on\", \"Not seen yet\", no instruction: " .. t)
 StakeoutDB.tipProgress = false
 t = tipOf(buttonOf("Kobold Laborer"))
-check(t:find("Not seen yet", 1, true), "...and \"Not seen yet\" stays with progress hidden too")
+check(t:find("Alert on", 1, true) and not t:find("Not seen yet", 1, true) and not t:find("Shift", 1, true),
+    "progress and clicks hidden: \"Not seen yet\" is a quest line and goes, \"Alert on\" stays: " .. t)
 StakeoutDB.tipClicks, StakeoutDB.tipProgress = nil, nil
 ns.quests.AlertOn = function() return false end
 
@@ -261,6 +279,25 @@ WoW.combat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
 check(not lab.dist._shown, "the fight over: hidden")
 ns.range.Get = function() return 25, 30 end
+-- A button reused for another NPC shows that one's distance at once, even
+-- while the old one is still in sight.
+clean()
+local byUnit = { nameplate1 = { 0, 8 }, nameplate2 = { 25, 30 } }
+ns.range.Get = function(u) local r = byUnit[u] if r then return r[1], r[2] end end
+StakeoutDB.showDistance = true
+WoW.SetUnit("nameplate1", { name = "Aaa Mob", guid = "Creature-0-1-2-3-11-A", plate = true })
+WoW.SetUnit("nameplate2", { name = "Bbb Mob", guid = "Creature-0-1-2-3-12-A", plate = true })
+tokens["Aaa Mob"], tokens["Bbb Mob"] = "nameplate1", "nameplate2"
+specs = { spec("Aaa Mob", "enemy"), spec("Bbb Mob", "enemy") }
+T.RefreshTargetFrame()
+eq(T.buttons[1].npcName, "Aaa Mob", "button 1: the first name")
+eq(T.buttons[1].dist._text, "8", "...its distance")
+specs = { spec("Bbb Mob", "enemy") }
+T.RefreshTargetFrame()
+eq(T.buttons[1].npcName, "Bbb Mob", "button 1 now shows the other NPC")
+eq(T.buttons[1].dist._text, "30", "...with its distance at once, never the old one's")
+ns.range.Get = function() return 25, 30 end
+StakeoutDB.showDistance = false
 -- Range.Short at the brackets' edges.
 local R = ns.range
 eq(R.ShortOf(0, 8), "8", "within 8 yd: 8")
@@ -285,14 +322,14 @@ WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate2")
 check(rare.portrait == nil, "...a repeat sighting adds none")
 WoW.combat = true
 WoW.fire("PLAYER_REGEN_DISABLED")
-local iconTex = rare.icon._texture
+rare.icon.portrait = nil   -- the stub's SetPortraitTexture writes the unit here
 WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate2")
-eq(rare.icon._texture, iconTex, "...nor in combat (no face painted on the icon)")
+eq(rare.icon.portrait, nil, "...nor in combat (no face painted on the icon)")
 -- Turned on in combat: nothing until the fight ends, then the cached face.
 StakeoutDB.showPortraits = true
 T.RefreshTargetFrame()
 WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate2")
-eq(rare.icon._texture, iconTex, "turned on in combat: no face yet (the live frame still has them off)")
+eq(rare.icon.portrait, nil, "turned on in combat: no face yet (the live frame still has them off)")
 WoW.units = {}
 WoW.combat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
@@ -322,6 +359,13 @@ eq(panel.where, "moved", "neither: the settings move so both fit")
 UIParent:SetSize(1024, 768)
 C.Place()
 eq(panel.where, "over", "a 1024-wide screen: over the settings' left column")
+local over = panel:GetFrameLevel()
+check(over > cfg:GetFrameLevel() + 1, "...above the window's own controls")
+-- Closed with the settings and opened again: placed again, still above.
+cfg:Hide()
+cfg:Show()
+panel._scripts.OnShow(panel)
+eq(panel:GetFrameLevel(), over, "reopened with the settings: still above them")
 -- After the settings are dragged (their OnMouseUp), it's placed again.
 UIParent:SetSize(1920, 1080)
 cfg._left, cfg._right = 600, 600 + cw

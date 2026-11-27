@@ -538,8 +538,8 @@ L.DistanceText = DistanceText
 
 -- A button's tooltip, the live one's and the preview's (#98): s = { name,
 -- friendly, distance, lines, clicks, quest, alertOn }, in the order it always
--- had, each part as the settings say. "Alert on" and "Not seen yet" are
--- state and always show; the hints with them are click hints.
+-- had, each part as the settings say. "Not seen yet" is one of the quest
+-- lines; "Alert on" is state and always shows, its hint a click hint.
 function L.FillTooltip(tt, s)
     if s.friendly then tt:AddLine(s.name, 0.2, 1, 0.2) else tt:AddLine(s.name, 1, 0.2, 0.2) end
     local clicks = StakeoutDB.tipClicks ~= false
@@ -547,9 +547,6 @@ function L.FillTooltip(tt, s)
     if StakeoutDB.tipProgress ~= false then
         for _, line in ipairs(s.lines or {}) do tt:AddLine(line, 0.7, 0.7, 0.7) end
     end
-    -- What the button shows as state stays even with progress off: a hunt
-    -- button's "not seen" (the click line comes with the hints).
-    if s.hunt and StakeoutDB.tipProgress == false then tt:AddLine("Not seen yet", 0.7, 0.7, 0.7) end
     if clicks then
         for _, line in ipairs(s.clicks or {}) do tt:AddLine(line, 0.7, 0.7, 0.7) end
     end
@@ -936,7 +933,15 @@ local function DressButton(btn, layout, status, dist, f)
         btn.dist:SetFontHeight(10)
         btn.nameText:ClearAllPoints()
         btn.nameText:SetPoint("LEFT", btn.icon, "RIGHT", 6, 0)
-        btn.nameText:SetPoint("RIGHT", dist > 0 and btn.dist or btn.progress, "LEFT", -8, 0)
+        -- Right to the first column shown; with neither, to the row's edge:
+        -- a hidden status can still hold text and take the name's room.
+        if dist > 0 then
+            btn.nameText:SetPoint("RIGHT", btn.dist, "LEFT", -8, 0)
+        elseif status > 0 then
+            btn.nameText:SetPoint("RIGHT", btn.progress, "LEFT", -8, 0)
+        else
+            btn.nameText:SetPoint("RIGHT", btn, "RIGHT", -6, 0)
+        end
     else
         btn.icon:SetPoint("TOPLEFT", btn, "TOPLEFT", inset, -inset)
         btn.icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -inset, inset)
@@ -1269,8 +1274,10 @@ local function RenderTargetFrame()
         L.applied, L.appliedKey = flags, key
         FitScale()
     end
-    if L.applied and L.applied.distance then L.UpdateDistances(targetButtons, layout ~= "icons") end
     UpdateButtonLooks(list, layout)
+    -- After the looks: a reused button has its new NPC's name by now, so it
+    -- never shows the old one's distance (Codex on #98's code).
+    if L.applied and L.applied.distance then L.UpdateDistances(targetButtons, layout ~= "icons") end
     UpdateTargetRing()
 end
 
@@ -2752,6 +2759,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "UI_SCALE_CHANGED" or event == "DISPLAY_SIZE_CHANGED" then
         -- A smaller screen may no longer hold the frame (in combat, its end does).
         FitScale()
+        -- ...nor the Customize panel where it was (#98; a plain frame).
+        if ns.customize then ns.customize.Place() end
 
     elseif event == "UPDATE_MOUSEOVER_UNIT" then
         CheckUnit("mouseover", false)

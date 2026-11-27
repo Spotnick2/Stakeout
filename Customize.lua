@@ -24,16 +24,16 @@ local GAP = 4              -- between the settings window and the panel
 
 -- The samples: one of each kind, fixed. A face is the player's own portrait,
 -- standing in for an NPC's (a preview can't draw one it hasn't seen).
-local CLICKS = { "Left-click: target and mark", "Right-click: target only" }
+-- Their click hints follow the marking setting (Customize.Clicks).
 local SAMPLES = {
-    { group = 1, name = "Mor'Ladim", face = true, clicks = CLICKS },
+    { group = 1, name = "Mor'Ladim", face = true },
     { group = 2, name = "Cook Torka", friendly = true, quest = true, icon = QUEST_ICON,
-      progress = "turn in", progressMax = "turn in", tooltip = { "Lazy Peons: ready to turn in" }, clicks = CLICKS },
+      progress = "turn in", progressMax = "turn in", tooltip = { "Lazy Peons: ready to turn in" } },
     { group = 3, name = "Bloodscalp Warrior", quest = true, icon = QUEST_ICON, face = true,
       progress = "3/10", progressMax = "10/10", alertOn = true, targeted = true, low = 25, high = 30,
-      tooltip = { "Bloodscalp Ears: 3/10 Bloodscalp Warrior slain" }, clicks = CLICKS },
+      tooltip = { "Bloodscalp Ears: 3/10 Bloodscalp Warrior slain" } },
     { group = 3, name = "Kobold Laborer", quest = true, icon = QUEST_ICON, hunt = true,
-      tooltip = { "Not seen yet" }, clicks = { "Click to look for one", CLICKS[1], CLICKS[2] } },
+      tooltip = { "Not seen yet" } },
 }
 Customize.SAMPLES = SAMPLES
 
@@ -47,7 +47,7 @@ local function SampleOnEnter(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
     local R = ns.range
     L.FillTooltip(GameTooltip, { name = e.name, friendly = e.friendly, distance = R and R.TextOf(e.low, e.high),
-        lines = e.tooltip, clicks = e.clicks, quest = e.quest, alertOn = e.alertOn, hunt = e.hunt })
+        lines = e.tooltip, clicks = Customize.Clicks(e), quest = e.quest, alertOn = e.alertOn, hunt = e.hunt })
     GameTooltip:Show()
 end
 local function SampleOnLeave() GameTooltip:Hide() end
@@ -116,7 +116,7 @@ end
 -- on its right, else its left, else the window moves so both fit, else over
 -- its left column (the watch list, back when the panel closes).
 function Customize.Place()
-    if not (panel and panel:IsShown() and cfg) then return end
+    if not (panel and panel:IsVisible() and cfg) then return end
     local sw = UIParent:GetWidth() or 0
     local left, right, top = cfg:GetLeft(), cfg:GetRight(), cfg:GetTop()
     local pw, cw = panel:GetWidth(), cfg:GetWidth()
@@ -157,6 +157,20 @@ function Customize.Toggle()
         Customize.Place()
     end
 end
+
+-- The click hints, as the live buttons' are: the marking setting decides.
+local function Clicks(e)
+    local c = {}
+    if e.hunt then c[#c + 1] = "Click to look for one" end
+    if StakeoutDB.enableMarking then
+        c[#c + 1] = "Left-click: target and mark"
+        c[#c + 1] = "Right-click: target only"
+    else
+        c[#c + 1] = "Left-click: target"
+    end
+    return c
+end
+Customize.Clicks = Clicks
 
 -- A part's checkbox: saved, the preview redrawn, the target frame told (it
 -- applies the change at its next render, out of combat).
@@ -237,13 +251,10 @@ function Customize.Build(config, H)
     y = y - #parts * 30 - 10
     panel:SetHeight(math.max(-y, config:GetHeight() or 0))
 
-    -- The panel follows the screen too.
-    panel:RegisterEvent("DISPLAY_SIZE_CHANGED")
-    panel:RegisterEvent("UI_SCALE_CHANGED")
-    panel:SetScript("OnEvent", function() Customize.Place() end)
-    panel:SetScript("OnHide", function(self)
-        if self.where == "over" then self:SetFrameLevel(cfg:GetFrameLevel() or 1) end
-    end)
+    -- The screen's changes come through the core's own event handler (its
+    -- registration reports a refusal). Shown again with the settings, it's
+    -- placed again: its level over the window too (Codex on #98's code).
+    panel:SetScript("OnShow", function() Customize.Place() end)
 
     L.OnLooksChanged = Customize.Redraw
     Customize.Redraw()
