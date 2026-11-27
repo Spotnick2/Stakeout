@@ -170,7 +170,9 @@ local function where(want)
         local panel, cfg = G("StakeoutCustomizeFrame"), G("StakeoutConfigFrame")
         if not (panel and panel:IsVisible()) then error("Open the settings and the Customize panel first (Back)", 0) end
         local sw = G("UIParent") and G("UIParent"):GetWidth()
-        if type(want) == "function" then want = want(sw, cfg:GetWidth(), panel:GetWidth()) end
+        -- Worked out each time (the screen can change between two runs).
+        local expected = want
+        if type(want) == "function" then expected = want(sw, cfg:GetWidth(), panel:GetWidth()) end
         local point, rel, relPoint, x, y = panel:GetPoint()
         local relName = rel and rel.GetName and rel:GetName() or tostring(rel)
         local l, r = panel:GetLeft(), panel:GetRight()
@@ -178,11 +180,11 @@ local function where(want)
             and r <= sw + 0.5
         local a = ANCHORS[panel.where or ""]
         local anchored = a ~= nil and rel == cfg and point == a[1] and relPoint == a[2]
-        local ok = inside and anchored and (want == nil or panel.where == want)
+        local ok = inside and anchored and (expected == nil or panel.where == expected)
         return ok, ("anchored %s to %s %s (%s, %s); left %s, right %s on a %s px wide screen; placed %s%s"):format(
             tostring(point), tostring(relName), tostring(relPoint), tostring(x), tostring(y),
             tostring(l and math.floor(l)), tostring(r and math.floor(r)), tostring(sw and math.floor(sw)),
-            tostring(panel.where), want and (" (wanted " .. want .. ")") or "")
+            tostring(panel.where), expected and (" (wanted " .. expected .. ")") or "")
     end
 end
 

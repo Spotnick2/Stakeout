@@ -838,10 +838,15 @@ do
     fpan:ClearAllPoints()
     fpan:SetPoint("TOPLEFT", fcfg, "TOPLEFT", 0, 0)
     fpan.where, fpan._left, fpan._right = "over", 0, 356
+    -- One callback, as the registered step has, run at both widths in turn.
+    local dragCheck = Cz.where(Cz.leftOrOver)
     UIParent:SetSize(1024, 768)
-    check((Cz.where(Cz.leftOrOver)()), "the drag step on a narrow screen: over is a pass")
+    check((dragCheck()), "the drag step on a narrow screen: over is a pass")
     UIParent:SetSize(1920, 1080)
-    check(not Cz.where(Cz.leftOrOver)(), "...and on a wide one, over is a fail (it should be left)")
+    check(not dragCheck(), "...the same step on a wide one: over is a fail (it should be left)")
+    UIParent:SetSize(1024, 768)
+    check((dragCheck()), "...and narrow again: a pass again (worked out each run)")
+    UIParent:SetSize(1920, 1080)
     fcfg:Hide()
     check(not pcall(Cz.where()), "the settings closed (the panel not visible): it says to open them")
     UIParent._width, UIParent._height = uw, uh
