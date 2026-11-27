@@ -117,9 +117,13 @@ so act on it then. Bump `MEASURED_ON_BUILD` after re-measuring.
 - **No addon-placed raid marks.** `SetRaidTarget` from addon code is forbidden. Marking happens through the
   player's click on a secure button: the left-click macro ends with `/tm [exists,nodead] !<index>` (`!` keeps the mark on a
   second click; plain `/tm N` toggles it off, §12 `range`), and the right-click macro only targets (#70). Keep the
-  `[exists,nodead]`: without it `/tm` calls `SetRaidTarget` on no target whenever the click finds no live unit (only
-  corpses, which `/cleartarget [dead]` drops, or none in reach), and spam-clicking showed "You can't do that right
-  now" where RestedXP, which stays on the corpse, didn't.
+  `[exists,nodead]`: without it `/tm` calls `SetRaidTarget` on a corpse or on no target whenever the click finds no
+  live unit, and spam-clicking showed "You can't do that right now" where RestedXP, which stays on the corpse,
+  didn't.
+- **Corpses (#95):** a mob button's macro has `/cleartarget [dead]` only with **Skip dead mobs** (`skipDead`, off by
+  default). By default a click with only corpses in reach targets one, unmarked, so the player sees they're in the
+  right place; with a live one in reach `/targetexact` takes that one anyway (FOREVER-PROBE.md `corpse`). NPC
+  buttons never have the line.
 - **No combat log.** Registering `COMBAT_LOG_EVENT_UNFILTERED` is forbidden (returns `false` and raises a
   forbidden action), and there is no reader. Deaths come from the **`UNIT_DIED`** event (payload: GUID).
 - **SavedVariables are written but never read back**, per-character included. Every session starts from

@@ -1396,10 +1396,11 @@ local function ButtonSpecs()
     for i, nt in ipairs(chosen) do
         shown[nt.name] = i
         local mob = nt.row == "enemy"
-        -- /cleartarget [dead]: a mob button never ends on a corpse (the
-        -- `corpse` probe). An NPC button doesn't need it.
-        local left = mob and fmt("/cleartarget\n/targetexact %s\n/cleartarget [dead]", nt.name)
-            or fmt("/cleartarget\n/targetexact %s", nt.name)
+        -- A mob button keeps a corpse by default, so the player sees they're
+        -- in the right place; Skip dead mobs adds /cleartarget [dead] (#95,
+        -- the `corpse` probe). An NPC button never has it.
+        local left = fmt("/cleartarget\n/targetexact %s%s", nt.name,
+            (mob and StakeoutDB.skipDead) and "\n/cleartarget [dead]" or "")
         local right
         local tooltip = {}
         for _, ref in ipairs(nt.refs) do tooltip[#tooltip + 1] = Progress(ref) end

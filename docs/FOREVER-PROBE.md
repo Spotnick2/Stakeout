@@ -196,6 +196,7 @@ What the quest buttons rely on, measured by `/fp so` (`Tools/StakeoutProbe`), Qu
 | `/fp steps so core` | Stakeout's own left-click, right-click mark and `UNIT_DIED` clearing on this build (P8) | anywhere with a mob to kill |
 | `/fp steps so corpse` | which unit `/targetexact` picks with a corpse and live mobs of one name around, and whether `/cleartarget [dead]`, a second `/targetexact`, `/target` or a repeat click reaches a live one | by a quest mob you can kill |
 | `/fp steps so mulgore` | QuestieDB spawns vs where two NPCs stand, in a zone QuestieDB's Era-to-Forever helper re-projects (P3) | Mulgore |
+| `/fp steps so tagged` | #95: `UnitIsTapDenied` (plain or secret) on a mob someone else tagged, an untagged one and one you tagged; whether `/target nameplateN` or `/target [@nameplateN,exists,nodead]` targets that plate's mob; whether an aimed button stays right when the mob is tagged after the aim, or its plate is lost in a fight; plate token stability for 2 minutes; whether `/targetexact` picks the nearer of two live mobs | where several mobs of one quest name are about, ideally with other players (or your other account) |
 
 **Still open:**
 - Whether `/targetexact` reaches a live hostile with no nameplate (not needed for v1).
@@ -333,6 +334,8 @@ E again  (same)                                                         -> live 
 - `/target` (D) picks like `/targetexact` here.
 - The `plate` flag at the down edge can read false for a unit that has a plate (E: false on down, true on up), so
   don't trust it in the same frame as the targeting.
+- **Since #95 (2026-11-27) the default keeps the corpse:** the owner wants to see they're in the right place, so the
+  `/cleartarget [dead]` line is there only with Skip dead mobs. The decision below is that option's behaviour.
 - **Decision for mob buttons:** `/cleartarget`, `/targetexact <name>`, `/cleartarget [dead]`. With only corpses in reach,
   the click leaves no target instead of a corpse. With a live one in reach it targets the live one, as A does. The
   right-click adds `/tm !N`, which does nothing without a target. NPC buttons keep A.
