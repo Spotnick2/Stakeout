@@ -942,9 +942,10 @@ do
     local TG = { lock = 0, clicks = 0 }
     state.tagged = TG
 
+    -- The secret check first: comparing a secret, even to nil, throws.
     local function plainGuid(unit)
         local ok, g = call(G("UnitGUID"), unit)
-        if not ok or g == nil then return nil, false end
+        if not ok then return nil, false end
         if secret(g) then return nil, true end
         return type(g) == "string" and g or nil, false
     end
@@ -956,6 +957,12 @@ do
         return v == true
     end
     local function exists(unit) return flag("UnitExists", unit) == true end
+    -- Whether a unit is there: true, false, or nil when that can't be read
+    -- (an unreadable read is never a confirmed absence; Codex on #95's code).
+    local function presence(unit)
+        local f = flag("UnitExists", unit)
+        if f == true or f == false then return f end
+    end
     local function shortGuid(g) return g and (g:match("%-(%x+)$") or g) or "-" end
 
     -- The plates showing a live mob of the name: { token, guid, tap }.
@@ -974,12 +981,6 @@ do
         end
         return out
     end
-    local function tokenOf(guid)
-        for i = 1, 40 do
-            local token = "nameplate" .. i
-            if exists(token) and plainGuid(token) == guid then return token end
-        end
-    end
     -- Range.lua's bracket, through Stakeout's test seam (Stakeout is optional).
     local function bracket(unit)
         local S = G("Stakeout")
@@ -996,20 +997,23 @@ do
         return cvar ~= nil and cvar("ActionButtonUseKeyDown") and true or false
     end
 
-    -- A lockdown counter: the plate lost and the click must share one.
+    -- A lockdown counter: the plate lost and the click must share one. Every
+    -- event on the aimed plate is logged with what the addon could read then.
     local lockFrame = CreateFrame("Frame")
-    lockFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-    lockFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-    lockFrame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
-    lockFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+    Probe:RegisterEvents(lockFrame, { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "NAME_PLATE_UNIT_REMOVED",
+                                      "NAME_PLATE_UNIT_ADDED" })
     lockFrame:SetScript("OnEvent", function(_, event, token)
-        if event == "PLAYER_REGEN_DISABLED" then
-            TG.lock = TG.lock + 1
-        elseif event == "PLAYER_REGEN_ENABLED" then
-            TG.lock = TG.lock + 1   -- the end of a fight ends that lockdown too
-        elseif TG.set and token == TG.set.token and event == "NAME_PLATE_UNIT_REMOVED" and not TG.set.lost then
-            TG.set.lost = { lock = TG.lock, combat = inCombat(), how = "removed" }
-            say(("tagged: %s removed (lockdown %d, in combat %s)"):format(token, TG.lock, tostring(inCombat())))
+        if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+            TG.lock = TG.lock + 1   -- a fight's start and its end each begin a new one
+        elseif TG.set and token == TG.set.token then
+            local set = TG.set
+            local g, gs = plainGuid(token)
+            say(("tagged: %s %s, now %s, tapped %s (lockdown %d, in combat %s)"):format(token,
+                event == "NAME_PLATE_UNIT_ADDED" and "added" or "removed", gs and "unreadable" or shortGuid(g),
+                tostring(flag("UnitIsTapDenied", token)), TG.lock, tostring(inCombat())))
+            if event == "NAME_PLATE_UNIT_REMOVED" and not set.lost and not set.needOriginal then
+                set.lost = { lock = TG.lock, combat = inCombat(), how = "removed" }
+            end
         end
         if TG.watchTokens and (event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED") then
             TG.onPlateEvent(event, token)
@@ -1021,22 +1025,43 @@ do
         if not TG.set or which ~= "LeftButton" then return end
         if (down and true or false) ~= actsOnDown(btn) then return end
         local set = TG.set
-        local tg, tgSecret = plainGuid("target")
-        local tok, tokSecret = plainGuid(set.token)
         TG.clicks = TG.clicks + 1
-        -- A false read stays false: no `x and false or y` here.
-        local here = exists(set.token)
-        local c = { n = TG.clicks, lock = TG.lock, combat = inCombat(), target = "none", token = "absent",
-                    dead = "absent", tap = "absent" }
-        if exists("target") then c.target = tg or "unreadable" end
-        if here then
-            c.token = tok or "unreadable"
+        -- A false read stays false: no `x and false or y` here. "none" and
+        -- "absent" are confirmed; anything that can't be read is "unreadable".
+        local c = { n = TG.clicks, set = set, lock = TG.lock, combat = inCombat(), target = "unreadable",
+                    token = "unreadable", dead = "unreadable", tap = "unreadable" }
+        local hasTarget = presence("target")
+        if hasTarget == false then
+            c.target = "none"
+        elseif hasTarget then
+            c.target = plainGuid("target") or "unreadable"
+            c.targetTap = flag("UnitIsTapDenied", "target")
+        end
+        local here = presence(set.token)
+        if here == false then
+            c.token, c.dead, c.tap = "absent", "absent", "absent"
+        elseif here then
+            c.token = plainGuid(set.token) or "unreadable"
             c.dead = flag("UnitIsDead", set.token)
             c.tap = flag("UnitIsTapDenied", set.token)
         end
+        -- 5: both mobs of the pair as they are at this click, read on its edge
+        -- (a poll a second later could see them moved; Codex on #95's code).
+        local N = TG.near
+        if N and N.pair then
+            c.near = {}
+            for k, m in ipairs(N.pair) do
+                local s = { guid = m.guid, token = m.token, dead = "absent" }
+                if presence(m.token) and plainGuid(m.token) == m.guid then
+                    s.dead = flag("UnitIsDead", m.token)
+                    s.low, s.high = bracket(m.token)
+                end
+                c.near[k] = s
+            end
+        end
         TG.click = c
-        say(("tagged click %d [%s]: target %s, %s now %s (dead %s, tapped %s), lockdown %d, in combat %s"):format(
-            c.n, set.variant, shortGuid(c.target ~= "none" and c.target or nil), set.token, shortGuid(c.token),
+        say(("tagged click %d [%s]: target %s (tapped %s), %s now %s (dead %s, tapped %s), lockdown %d, in combat %s")
+            :format(c.n, set.variant, shortGuid(c.target), tostring(c.targetTap), set.token, shortGuid(c.token),
             tostring(c.dead), tostring(c.tap), c.lock, tostring(c.combat)))
     end
     local function hook()
@@ -1051,11 +1076,13 @@ do
     }
     -- Aims the button at a plate of the name: a live mob, not the target, its
     -- GUID known. Out of combat. Throws, so a Set that failed stays (Retry).
-    local function setOn(variant, wantTap)
+    -- purpose: the measurement this Set is for ("2", "3a", "3b"); each wait
+    -- scores only a click of its own Set (Codex on #95's code).
+    local function setOn(variant, wantTap, purpose)
         local name = state.tagMob and state.tagMob.name
         if not name then error("no mob read yet: go Back to the first step", 0) end
         if inCombat() then error("in combat: Set again once out of it", 0) end
-        local tgt = plainGuid("target")
+        local tgt, tgtSecret = plainGuid("target")
         local pick
         for _, p in ipairs(platesOf(name)) do
             if p.guid and p.guid ~= tgt and p.dead == false and (wantTap == nil or p.tap == wantTap) then
@@ -1070,15 +1097,22 @@ do
         local ok, why = aim(name, state.tagMob.id, "8", VARIANTS[variant]:format(pick.token))
         if not ok then error(tostring(why), 0) end
         hook()
-        TG.set = { variant = variant, token = pick.token, guid = pick.guid, tap = pick.tap, lock = TG.lock,
-                   combat = inCombat() }
+        TG.set = { variant = variant, purpose = purpose or "2", token = pick.token, guid = pick.guid, tap = pick.tap,
+                   lock = TG.lock, combat = inCombat() }
         TG.tagSeen, TG.seen = false, TG.clicks
-        say(("tagged: %s aimed at %s = %s (tapped %s)"):format(variant, pick.token, shortGuid(pick.guid),
-            tostring(pick.tap)))
+        say(("tagged: %s for %s aimed at %s = %s (tapped %s); the target before: %s"):format(variant,
+            TG.set.purpose, pick.token, shortGuid(pick.guid), tostring(pick.tap),
+            tgtSecret and "unreadable" or (tgt and shortGuid(tgt) or "none")))
         return true, variant, pick.token, shortGuid(pick.guid)
     end
+    -- The wait's own Set, or nil.
+    local function setFor(purpose, variant)
+        local set = TG.set
+        if set and set.purpose == purpose and (variant == nil or set.variant == variant) then return set end
+    end
 
-    -- A new click since the step began, or nil.
+    -- A new click since the last Set (setOn resets TG.seen), or nil: a click
+    -- of an older Set is never a new one.
     local function newClick()
         if TG.click and TG.click.n > (TG.seen or 0) then
             TG.seen = TG.click.n
@@ -1090,13 +1124,14 @@ do
     -- the mob is alive; else the button is aimed again and it waits.
     local function plateTrial(variant)
         return function()
+            local set = setFor("2", variant)
+            if not set then return false, "press Back and Set " .. variant .. " first" end
             local c = newClick()
             if not c then return false, "left-click the probe button" end
-            local set = TG.set
             if c.token ~= set.guid or c.dead ~= false then
                 local why = c.token ~= set.guid and ("the plate now shows " .. shortGuid(c.token)) or "the mob is dead"
                 say("tagged: " .. variant .. " inconclusive, " .. why .. "; aiming again")
-                local ok, err = pcall(setOn, variant)
+                local ok, err = pcall(setOn, variant, false, "2")
                 return false, ok and ("inconclusive (" .. why .. "): click again") or tostring(err)
             end
             if c.target == "unreadable" then
@@ -1104,11 +1139,15 @@ do
                 return false, "inconclusive (the target's GUID can't be read): click again"
             end
             local hit = c.target == set.guid
+            -- Carried forward to 3 only from a live, untagged mob at Set and at
+            -- the click: a tagged one says nothing about the control.
+            local control = set.tap == false and c.tap == false
             TG.passed = TG.passed or {}
-            if hit then TG.passed[variant] = true end
+            if hit and control then TG.passed[variant] = true end
             local result = hit and "targeted the plate's mob" or (c.target == "none" and "no target")
                 or ("targeted another (" .. shortGuid(c.target) .. ")")
-            say(("tagged: %s scored: %s"):format(variant, result))
+            say(("tagged: %s scored: %s%s"):format(variant, result,
+                (hit and not control) and " (the mob was tagged: not carried forward)" or ""))
             return true, variant, result
         end
     end
@@ -1118,8 +1157,8 @@ do
 
     -- 3(a): the change seen on the Set-time mob itself, false -> true.
     local function tagWait()
-        local set = TG.set
-        if not set then return false, "Set first" end
+        local set = setFor("3a")
+        if not set then return false, "press Back and Set first" end
         if TG.tagSeen then return true, "tag seen" end
         local g = plainGuid(set.token)
         local tap = flag("UnitIsTapDenied", set.token)
@@ -1133,9 +1172,13 @@ do
         return false, ("waiting for %s (%s) to be tagged by someone else"):format(set.token, shortGuid(set.guid))
     end
     local function tagClick()
+        local set = setFor("3a")
+        if not set then
+            say("tagged: 3a no Set for it, inconclusive")
+            return true, "no Set for it, inconclusive"
+        end
         local c = newClick()
         if not c then return false, "left-click the probe button" end
-        local set = TG.set
         if not TG.tagSeen then
             say("tagged: 3a no observed tag, inconclusive")
             return true, "no observed tag, inconclusive"
@@ -1145,26 +1188,35 @@ do
                 tostring(c.dead), tostring(c.tap)))
             return true, "not scored: the mob changed, died or isn't tapped any more"
         end
+        if c.target == "unreadable" then
+            say("tagged: 3a inconclusive, the target can't be read")
+            return true, "inconclusive: the target can't be read"
+        end
         local result = c.target == set.guid and "targeted the tagged mob" or (c.target == "none" and "no target")
-            or (c.target == "unreadable" and "a target, GUID unreadable") or ("targeted " .. shortGuid(c.target))
+            or ("targeted " .. shortGuid(c.target))
         say("tagged: 3a scored: " .. result)
         return true, "scored", result
     end
 
     -- 3(b): the plate lost and the click in one uninterrupted lockdown.
     local function lostWait()
-        local set = TG.set
-        if not set then return false, "Set first" end
-        if not set.lost and inCombat() then
-            local g = plainGuid(set.token)
-            if exists(set.token) and g and g ~= set.guid then
-                set.lost = { lock = TG.lock, combat = true, how = "now " .. shortGuid(g) }
-                say(("tagged: %s now shows %s (lockdown %d)"):format(set.token, shortGuid(g), TG.lock))
-            end
+        local set = setFor("3b")
+        if not set then return false, "press Back and Set first" end
+        local g = plainGuid(set.token)
+        -- After a lockdown that didn't count, a loss counts again only once
+        -- the original mob has been seen back on the plate (Codex on #95's code).
+        if set.needOriginal and presence(set.token) and g == set.guid then
+            set.needOriginal = nil
+            say("tagged: 3b the original mob is back on " .. set.token)
+        end
+        if not set.lost and not set.needOriginal and inCombat() and presence(set.token) and g and g ~= set.guid then
+            set.lost = { lock = TG.lock, combat = true, how = "now " .. shortGuid(g) }
+            say(("tagged: %s now shows %s (lockdown %d)"):format(set.token, shortGuid(g), TG.lock))
         end
         local c = newClick()
         if not c then
             if set.lost then return false, "the plate is gone: left-click the probe button, still in combat" end
+            if set.needOriginal then return false, "go back until the aimed mob's plate shows again, then lose it in a fight" end
             return false, "pull something; in combat, move until the aimed mob's plate goes"
         end
         local lost = set.lost
@@ -1173,17 +1225,21 @@ do
             return false, "unchanged, inconclusive: lose the plate first, then click"
         end
         if not (lost.combat and c.combat and lost.lock == c.lock) then
-            say("tagged: 3b inconclusive, combat ended between the loss and the click")
-            set.lost = nil
-            return false, "inconclusive (combat ended in between): Set again, or Skip"
+            say("tagged: 3b inconclusive, combat ended between the loss and the click (or the loss came first)")
+            set.lost, set.needOriginal = nil, true
+            return false, "inconclusive (not one fight): get the aimed mob's plate back, then try again"
         end
         if c.token == set.guid then
             say("tagged: 3b original mob returned; waiting for it to go again")
             set.lost = nil
             return false, "the same mob came back on that plate: lose it again, then click"
         end
+        if c.token == "unreadable" or c.target == "unreadable" then
+            say("tagged: 3b inconclusive, the plate or the target can't be read")
+            return false, "inconclusive (can't be read): click again"
+        end
         local plate = c.token == "absent" and "absent" or ("another mob, " .. shortGuid(c.token))
-        local result = c.target == "none" and "no target" or (c.target == "unreadable" and "a target, GUID unreadable")
+        local result = c.target == "none" and "no target"
             or (c.target == set.guid and "the aimed mob") or ("a target, " .. shortGuid(c.target))
         say(("tagged: 3b scored: token %s, click gave %s"):format(plate, result))
         return true, plate, result
@@ -1193,18 +1249,23 @@ do
     local ticker
     local function stability()
         if not TG.stab then
-            TG.stab = { from = (G("GetTime") or function() return 0 end)(), guids = {}, removed = {}, silent = 0,
+            TG.stab = { from = (G("GetTime") or function() return 0 end)(), guids = {}, silent = 0,
                         adds = 0, removes = 0 }
             TG.watchTokens = true
+            -- A REMOVED forgets the token's GUID, so the next mob on it is a
+            -- fresh one; only a change with no REMOVED in between counts.
             TG.onPlateEvent = function(event, token)
                 local s = TG.stab
                 if not s then return end
+                local g, gs = plainGuid(token)
                 if event == "NAME_PLATE_UNIT_REMOVED" then
                     s.removes = s.removes + 1
-                    s.removed[token] = true
+                    s.guids[token] = nil
                 else
                     s.adds = s.adds + 1
                 end
+                say(("tagged: 4 %s %s %s tapped %s"):format(token, event == "NAME_PLATE_UNIT_ADDED" and "added" or "removed",
+                    gs and "unreadable" or shortGuid(g), tostring(flag("UnitIsTapDenied", token))))
             end
             ticker = ticker or CreateFrame("Frame")
             ticker.t = 0
@@ -1212,20 +1273,22 @@ do
                 f.t = f.t + (e or 0)
                 if f.t < 0.25 then return end
                 f.t = 0
+                TG.stabPoll()
+            end)
+            TG.stabPoll = function()
                 local s = TG.stab
                 if not s then return end
                 for i = 1, 40 do
                     local token = "nameplate" .. i
                     local g = exists(token) and plainGuid(token) or nil
                     local was = s.guids[token]
-                    if g and was and g ~= was and not s.removed[token] then
+                    if g and was and g ~= was then
                         s.silent = s.silent + 1
-                        say(("tagged: %s changed %s -> %s with no REMOVED"):format(token, shortGuid(was), shortGuid(g)))
+                        say(("tagged: 4 %s changed %s -> %s with no REMOVED"):format(token, shortGuid(was), shortGuid(g)))
                     end
                     if g then s.guids[token] = g end
-                    if g or not exists(token) then s.removed[token] = nil end
                 end
-            end)
+            end
         end
         local s = TG.stab
         local left = 120 - ((G("GetTime") or function() return 0 end)() - s.from)
@@ -1252,10 +1315,11 @@ do
             TG.near = N
             TG.seen = TG.clicks
         end
-        -- The pair: chosen, or lost and chosen again.
+        -- The pair: chosen, or lost and chosen again. Each keeps its plate:
+        -- a mob moved to another token isn't the same observation.
         if N.pair then
             for _, m in ipairs(N.pair) do
-                if not tokenOf(m.guid) then
+                if not (presence(m.token) and plainGuid(m.token) == m.guid) then
                     say("tagged: 5 lost the pair; choosing again")
                     N.pair, N.scored, N.last = nil, {}, nil
                     break
@@ -1266,8 +1330,13 @@ do
             local live = {}
             for _, p in ipairs(platesOf(name)) do
                 if p.guid and p.dead == false then
-                    local low, high = bracket(p.token)
-                    if low then live[#live + 1] = { guid = p.guid, low = low, high = high } end
+                    local low, high, why = bracket(p.token)
+                    if why == "range unavailable" then
+                        -- Moving can't help: say so and end it (Codex on #95's code).
+                        say("tagged: 5 inconclusive, Range.lua isn't reachable (Stakeout not loaded)")
+                        return true, "range unavailable (is Stakeout loaded?): inconclusive"
+                    end
+                    if low then live[#live + 1] = { guid = p.guid, token = p.token, low = low, high = high } end
                 end
             end
             for i = 1, #live do
@@ -1283,21 +1352,18 @@ do
             return false, ("%d of 4 scored: left-click the probe button%s"):format(#N.scored,
                 N.last and (" once " .. shortGuid(N.last) .. " is the farther one") or "")
         end
-        -- At the click: both on their plates, alive, apart.
-        local now = {}
-        for k, m in ipairs(N.pair) do
-            local token = tokenOf(m.guid)
-            now[k] = { guid = m.guid, dead = "absent" }
-            if token then
-                now[k].low, now[k].high = bracket(token)
-                now[k].dead = flag("UnitIsDead", token)
-            end
+        -- At the click, as its edge read them: both on their plates, alive, apart.
+        local now = c.near
+        if not now or now[1].guid ~= N.pair[1].guid or now[2].guid ~= N.pair[2].guid then
+            say("tagged: 5 click not scored (it came before this pair was chosen)")
+            return false, "not scored: click again"
         end
         local near = (now[1].dead == false and now[2].dead == false) and disjoint(now[1], now[2]) or nil
         if not near then
             say("tagged: 5 click not scored (a mob dead, gone or the distances overlap)")
             return false, "not scored: both alive and clearly apart, then click again"
         end
+        local far = near == now[1] and now[2] or now[1]
         if N.last and near.guid == N.last then
             say("tagged: 5 click not scored: the same one is still the nearer")
             return false, "not scored: move until the other one is nearer, then click"
@@ -1311,8 +1377,9 @@ do
         end
         N.scored[#N.scored + 1] = picked
         N.last = near.guid
-        say(("tagged: 5 scored %d: picked %s (nearer %s, %s-%s vs farther)"):format(#N.scored, picked,
-            shortGuid(near.guid), tostring(near.low), tostring(near.high)))
+        say(("tagged: 5 scored %d: picked %s (nearer %s at %s-%s yd, farther %s at %s-%s yd)"):format(#N.scored,
+            picked, shortGuid(near.guid), tostring(near.low), tostring(near.high), shortGuid(far.guid),
+            tostring(far.low), tostring(far.high)))
         if #N.scored < 4 then return false, ("%d of 4 scored: now move until the other one is nearer"):format(#N.scored) end
         return true, table.concat(N.scored, ", ")
     end
@@ -1332,14 +1399,18 @@ do
         end
     end
 
-    local function setStep(variant, text, wantTap)
+    -- A Set step for one measurement. Skipping it (or going Back past it)
+    -- drops the aim, so its wait never scores a click of an older Set.
+    local function setStep(variant, purpose, text, wantTap)
         return { text = text, button = "Set", run = function()
             if variant == "chosen" then
                 local v = chosen()
-                if not v then error("neither macro targeted its plate in step 2: Skip this part", 0) end
-                return setOn(v, wantTap)
+                if not v then error("no macro targeted a live, untagged plate's mob in step 2: Skip this part", 0) end
+                return setOn(v, wantTap, purpose)
             end
-            return setOn(variant, wantTap)
+            return setOn(variant, wantTap, purpose)
+        end, leave = function(outcome)
+            if outcome == "skipped" or outcome == "back" or outcome == "stopped" then TG.set = nil end
         end }
     end
 
@@ -1352,22 +1423,26 @@ do
         return true
     end
 
+    -- The first step: a fresh run, then the mob. A failed read throws, so the
+    -- step stays (Retry) and no earlier run's mob carries on (Codex on #95's code).
+    local function readMob()
+        state.tagMob, TG.passed, TG.near, TG.set = nil, nil, nil, nil
+        local ok, name, id = readTarget("mob")
+        if not ok then error("no mob read: target one of them, then Read target again", 0) end
+        state.tagMob = { name = name, id = id }
+        return true, name, id
+    end
+
     TG.api = { setOn = setOn, onTagClick = onTagClick, plateTrial = plateTrial, tagWait = tagWait,
                tagClick = tagClick, lostWait = lostWait, nearestTrial = nearestTrial, stability = stability,
-               stopStability = stopStability, chosen = chosen, readTap = readTap, cleanup = cleanup }
+               stopStability = stopStability, chosen = chosen, readTap = readTap, cleanup = cleanup,
+               setStep = setStep, readMob = readMob }
 
     Probe:Steps("tagged", {
         rev = 1,
         title = "Stakeout: tagged mobs and aiming at one nameplate (#95)",
         { text = "Go where several mobs of one quest name are about, with other players around if you can. Out of "
-              .. "combat, target one of those mobs, then press Read target.", button = "Read target",
-          run = function()
-              local ok, name, id = readTarget("mob")
-              if not ok then return false, "no name" end
-              state.tagMob = { name = name, id = id }
-              TG.passed, TG.near, TG.set = nil, nil, nil
-              return true, name, id
-          end },
+              .. "combat, target one of those mobs, then press Read target.", button = "Read target", run = readMob },
         -- 1
         { text = "Target one of them that ANOTHER player has tagged (its name or health bar is grey), then press "
               .. "Read. None about? Skip.", button = "Read", run = readTap("a mob someone else tagged") },
@@ -1375,23 +1450,23 @@ do
         { text = "Hit one yourself (tag it) and, while it's alive and targeted, press Read. Then finish it and leave "
               .. "combat.", button = "Read", run = readTap("a mob you tagged") },
         -- 2
-        setStep("P1", "Out of combat, target something else (or nothing). Press Set: the probe button targets one "
-              .. "plate of that name (/target nameplateN)."),
+        setStep("P1", "2", "Out of combat, target something else (or nothing). Press Set: the probe button targets "
+              .. "one plate of that name, an untagged mob (/target nameplateN).", false),
         { text = "Left-click the probe button once. (If the probe says to, click again.)", wait = plateTrial("P1"),
           timeout = 600 },
-        setStep("P2", "Out of combat again, target something else. Press Set: the same, as /target [@nameplateN,"
-              .. "exists,nodead]."),
+        setStep("P2", "2", "Out of combat again, target something else. Press Set: the same, as /target "
+              .. "[@nameplateN,exists,nodead].", false),
         { text = "Left-click the probe button once. (If the probe says to, click again.)", wait = plateTrial("P2"),
           timeout = 600 },
         -- 3a
-        setStep("chosen", "Next: an aimed mob tagged by someone else. You need another player, or your other "
-              .. "account, to hit the mob the probe picks. Press Set (it picks an untagged one), or Skip this "
+        setStep("chosen", "3a", "Next: an aimed mob tagged by someone else. You need another player, or your "
+              .. "other account, to hit the mob the probe picks. Press Set (it picks an untagged one), or Skip this "
               .. "part and the next two.", false),
         { text = "Have the other player hit the aimed mob now (the probe names its plate). Wait here.",
           wait = tagWait, timeout = 600 },
         { text = "Left-click the probe button once, while the mob is alive.", wait = tagClick, timeout = 600 },
         -- 3b
-        setStep("chosen", "Next: the aimed mob's plate lost in a fight. Out of combat, press Set."),
+        setStep("chosen", "3b", "Next: the aimed mob's plate lost in a fight. Out of combat, press Set."),
         { text = "Pull a different mob. During the fight, move until the aimed mob's plate goes away, then "
               .. "left-click the probe button, still in combat.", wait = lostWait, timeout = 900 },
         -- 4
@@ -1406,7 +1481,7 @@ do
               local ok, why = aim(m.name, m.id, "8", "/cleartarget\n/targetexact <name>")
               if not ok then error(tostring(why), 0) end
               hook()
-              TG.set = { variant = "targetexact", token = "target" }
+              TG.set = { variant = "targetexact", purpose = "5", token = "target" }
               TG.near = nil
               return true
           end },
