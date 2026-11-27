@@ -613,6 +613,46 @@ check(Q.AlertOn("Venomtail Raptor"), "...its objective done, the other unit's al
 Q.SetOther(false)
 WoW.flushTimers()
 
+------------------------------------------------------------
+-- Codex on #99: one NPC targeted then plated; a finished objective's NPC
+------------------------------------------------------------
+-- Watched and armed, targeted just outside plate range: the watch list
+-- alerts. The same NPC then gains a plate, still targeted: no second alert.
+clean()
+quests({ { 1, { { 701, "Bloodscalp Warrior" } } } })
+shiftRight(button("Bloodscalp Warrior"))
+SlashCmdList.STAKEOUT("add Bloodscalp Warrior")
+WoW.chat = {}
+WoW.SetUnit("target", { name = "Bloodscalp Warrior", guid = guid(701, "A"), attackable = true })
+WoW.fire("PLAYER_TARGET_CHANGED")
+eq(detections("Bloodscalp Warrior"), 1, "watched and armed, targeted first: the watch list's alert")
+plate("nameplate1", "Bloodscalp Warrior", guid(701, "A"))
+eq(detections("Bloodscalp Warrior"), 1, "...the same NPC gaining a plate: no second alert")
+check(QT.alerts[1].plated, "...though the quests see it plated")
+WoW.units.target = nil
+WoW.fire("PLAYER_TARGET_CHANGED")
+unplate("nameplate1")
+SlashCmdList.STAKEOUT("remove Bloodscalp Warrior")
+
+-- Two objectives share the "Guard" hunt button; one is done while both
+-- quests stay in the log. Its NPC, seen as "Sentry", neither alerts nor
+-- hides the arrival of the Guard still needed.
+clean()
+quests({ { 1, { { 811, "Guard" } } }, { 2, { { 812, "Guard" } } } })
+shiftRight(button("Guard"))
+check(Q.AlertOn("Guard"), "one Guard button for two objectives: armed")
+local done2 = WoW.questLog[2].rows[1]
+done2.finished, done2.numFulfilled, done2.text = true, 5, "5/5 Guard slain"
+Q.Rebuild()
+WoW.flushTimers()
+check(Q.AlertOn("Guard"), "...one objective done: still armed for the other")
+WoW.chat = {}
+plate("nameplate1", "Sentry", guid(812, "A"))
+eq(detections("Sentry"), 0, "...the done objective's NPC on a plate: no alert")
+plate("nameplate2", "Guard", guid(811, "A"))
+eq(detections("Guard"), 1, "...and the needed one arriving beside it still alerts")
+unplate("nameplate1"); unplate("nameplate2")
+
 -- The tooltip says what the click does, and the state.
 clean()
 quests({ { 1, { { 701, "Bloodscalp Warrior" } } } })

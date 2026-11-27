@@ -792,13 +792,26 @@ local function Covers(rec, m)
     return name ~= nil and name ~= UNKNOWN and rec.names[name] == true
 end
 
+-- Whether the quests still want this member itself: an eligible ref, or
+-- another quest unit (no ref). A record can outlive one of its members'
+-- objectives while another keeps it wanted (Codex on #99).
+local function MemberWanted(m)
+    if m.other then return true end
+    for _, ref in ipairs(m.refs) do
+        if ref.eligible then return true end
+    end
+    return false
+end
+
 -- Whether a plate shows one of the record's members now, the plain GUIDs on
 -- those plates, the name one of them shows (for the chat line), and every
 -- name on them (whether the watch list just announced this very sighting).
+-- Only members still wanted count: a finished objective's NPC sharing the
+-- button neither alerts nor hides the arrival of the one still needed.
 local function PlatePresence(rec)
     local any, guids, shown, names = false, {}, nil, {}
     for _, m in pairs(members) do
-        if Covers(rec, m) then
+        if Covers(rec, m) and MemberWanted(m) then
             for token, g in pairs(m.tokens) do
                 if IsPlateToken(token) then
                     any = true
@@ -910,10 +923,15 @@ CheckAlerts = function(diedGuid, watchNames)
         if plated and not rec.plated then
             rec.departGuid = nil
             -- Skipped only when the watch list announced a name these plates
-            -- show (this sighting), not another of the record's names.
+            -- show (this sighting), not another of the record's names; or
+            -- when its current detection alerted for a unit on these plates
+            -- (targeted first, then gaining a plate: one NPC, one alert).
             local announced = false
             for n in pairs(watchNames or {}) do
                 if platedNames[n] then announced = true end
+            end
+            for g in pairs(guids) do
+                if C.WatchAlerted(g) then announced = true end
             end
             if now >= rec.quietUntil and not announced then C.Announce(shown) end
         elseif not plated and rec.plated then

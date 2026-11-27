@@ -1267,7 +1267,11 @@ local function Sighted(name, guid, unit, isPlate)
     -- would also hide the tooltip of a hovered button.
     if isNew then
         RefreshTargetFrame()
-        return Alert(name)
+        local played = Alert(name)
+        -- The unit it played for: the quests don't alert for it again when
+        -- the same NPC gains a plate later in this detection (Codex on #99).
+        if played and guid then entry.alertedGuids = { [guid] = true } end
+        return played
     end
     return false
 end
@@ -2666,6 +2670,13 @@ ns.core = {
     IsRefreshPending = function() return pendingRefresh end,
     SetQuestMute = SetQuestMute, PruneQuestMutes = PruneQuestMutes, LINGER = LINGER,
     Announce = Announce, REARM = REARM, RefreshAlertMarks = RefreshAlertMarks,
+    -- Whether the watch list's current detection already alerted for this
+    -- unit (Sighted's alertedGuids): one NPC targeted, then plated, alerts once.
+    WatchAlerted = function(guid)
+        local name = guid and seenGUIDs[guid]
+        local entry = name and detected[name]
+        return entry ~= nil and entry.alertedGuids ~= nil and entry.alertedGuids[guid] == true
+    end,
     BUTTON_ICONS = BUTTON_ICONS, MARKER_ICONS = MARKER_ICONS, MARKER_NAMES = MARKER_NAMES,
 }
 
