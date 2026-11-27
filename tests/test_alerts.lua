@@ -653,6 +653,24 @@ plate("nameplate2", "Guard", guid(811, "A"))
 eq(detections("Guard"), 1, "...and the needed one arriving beside it still alerts")
 unplate("nameplate1"); unplate("nameplate2")
 
+-- The same, the objective finished while its NPC is in view: that isn't a
+-- departure, so no quiet starts, and the needed one alerts at once.
+clean()
+quests({ { 1, { { 811, "Guard" } } }, { 2, { { 812, "Guard" } } } })
+shiftRight(button("Guard"))
+plate("nameplate1", "Sentry", guid(812, "A"))
+eq(detections("Sentry"), 1, "the shared alert: the still-needed Sentry's plate alerts")
+done2 = WoW.questLog[2].rows[1]
+done2.finished, done2.numFulfilled, done2.text = true, 5, "5/5 Guard slain"
+Q.Rebuild()
+WoW.flushTimers()
+check(not QT.alerts[1].plated, "...its objective done in view: no longer counted as present")
+WoW.chat = {}
+WoW.advance(5)
+plate("nameplate2", "Guard", guid(811, "A"))
+eq(detections("Guard"), 1, "...and the Guard still needed alerts at once (no quiet started)")
+unplate("nameplate1"); unplate("nameplate2")
+
 -- The tooltip says what the click does, and the state.
 clean()
 quests({ { 1, { { 701, "Bloodscalp Warrior" } } } })

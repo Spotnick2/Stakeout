@@ -746,7 +746,7 @@ function Rebuild()
     suspendAlerts = false
     local watched = suspendedWatch
     suspendedWatch = {}
-    CheckAlerts(nil, watched)
+    CheckAlerts(nil, watched, true)
     dirty = true
     Flush()
 end
@@ -910,8 +910,11 @@ end
 
 -- After every event that can change a plate: arrivals and departures.
 -- diedGuid: the unit UNIT_DIED named. watchNames: the names the watch list
--- just announced for this sighting, which don't announce twice.
-CheckAlerts = function(diedGuid, watchNames)
+-- just announced for this sighting, which don't announce twice. rebuilt:
+-- Rebuild's check, where a presence lost is the quests changing (an
+-- objective done while its NPC is in view, a quest dropped), not one walking
+-- out of range: no quiet starts (Codex on #99).
+CheckAlerts = function(diedGuid, watchNames, rebuilt)
     if #alerts == 0 then return end
     if suspendAlerts then
         for n in pairs(watchNames or {}) do suspendedWatch[n] = true end
@@ -934,6 +937,8 @@ CheckAlerts = function(diedGuid, watchNames)
                 if C.WatchAlerted(g) then announced = true end
             end
             if now >= rec.quietUntil and not announced then C.Announce(shown) end
+        elseif not plated and rec.plated and rebuilt then
+            rec.departGuid = nil
         elseif not plated and rec.plated then
             -- Which unit's plate went last: only knowable when one went.
             -- Several at once (a tick finding two gone) keeps the quiet.
