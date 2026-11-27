@@ -830,6 +830,18 @@ do
     fpan._right = 2000
     check(not Cz.where()(), "past the screen's edge: a fail")
     fpan._right = 1256
+    -- The drag step's expectation: left where the pair fits, over where not.
+    eq(Cz.leftOrOver(1920, 712, 356), "left", "a wide screen: on the left")
+    eq(Cz.leftOrOver(1024, 712, 356), "over", "a 1024-wide screen: over the left column")
+    fcfg:SetSize(712, 600)
+    fpan:SetSize(356, 600)
+    fpan:ClearAllPoints()
+    fpan:SetPoint("TOPLEFT", fcfg, "TOPLEFT", 0, 0)
+    fpan.where, fpan._left, fpan._right = "over", 0, 356
+    UIParent:SetSize(1024, 768)
+    check((Cz.where(Cz.leftOrOver)()), "the drag step on a narrow screen: over is a pass")
+    UIParent:SetSize(1920, 1080)
+    check(not Cz.where(Cz.leftOrOver)(), "...and on a wide one, over is a fail (it should be left)")
     fcfg:Hide()
     check(not pcall(Cz.where()), "the settings closed (the panel not visible): it says to open them")
     UIParent._width, UIParent._height = uw, uh

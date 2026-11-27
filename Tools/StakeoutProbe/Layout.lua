@@ -170,6 +170,7 @@ local function where(want)
         local panel, cfg = G("StakeoutCustomizeFrame"), G("StakeoutConfigFrame")
         if not (panel and panel:IsVisible()) then error("Open the settings and the Customize panel first (Back)", 0) end
         local sw = G("UIParent") and G("UIParent"):GetWidth()
+        if type(want) == "function" then want = want(sw, cfg:GetWidth(), panel:GetWidth()) end
         local point, rel, relPoint, x, y = panel:GetPoint()
         local relName = rel and rel.GetName and rel:GetName() or tostring(rel)
         local l, r = panel:GetLeft(), panel:GetRight()
@@ -183,6 +184,16 @@ local function where(want)
             tostring(l and math.floor(l)), tostring(r and math.floor(r)), tostring(sw and math.floor(sw)),
             tostring(panel.where), want and (" (wanted " .. want .. ")") or "")
     end
+end
+
+-- With the settings at the screen's right edge: on their left when the pair
+-- fits the screen, else over their left column (Customize.Place; Codex on
+-- #98's code: a 1024-wide screen doesn't hold the 1072 units the pair needs).
+local function leftOrOver(sw, cw, pw)
+    if type(sw) == "number" and type(cw) == "number" and type(pw) == "number" and sw >= cw + 4 + pw then
+        return "left"
+    end
+    return "over"
 end
 
 -- Opens the panel, then switches to a layout (read back from the live frame,
@@ -211,7 +222,8 @@ Probe:Steps("customize", {
     { text = "Is the number on the button easy to read, and in the right place?", ask = true, screenshot = "customize-distance" },
     { text = "Where the panel went on your screen (logged).", auto = true, run = where(), check = where() },
     { text = "Drag the settings window (by its top) to the right edge of your screen, then press Run: the panel "
-          .. "should move to its left.", run = where("left"), check = where("left"), screenshot = "customize-left" },
+          .. "should move to its left (on a narrow screen, over its left column).", run = where(leftOrOver),
+      check = where(leftOrOver), screenshot = "customize-left" },
     { text = "Hover a preview button, and a live one: do their tooltips read alike?", ask = true },
     { text = "Anything else? Type it in the box (or nothing). Then tick back what you want, set the layout you "
           .. "like, and press Next." },
@@ -220,4 +232,4 @@ Probe:Steps("customize", {
 NS._test = NS._test or {}
 NS._test.rows = { readRows = readRows }
 NS._test.customize = { openCustomize = openCustomize, distanceChanges = distanceChanges, where = where,
-    forgetDistances = forgetDistances, openAnd = openAnd }
+    forgetDistances = forgetDistances, openAnd = openAnd, leftOrOver = leftOrOver }
