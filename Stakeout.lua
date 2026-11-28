@@ -55,7 +55,8 @@ local defaults = {
     soundChoice      = "Raid Warning",  -- alert sound name (see GetAlertSounds)
     frameScale       = 1.0,
     lockFrame        = false,
-    layout           = "icons",    -- the target frame: "icons", "list" or "list2" (two columns; #88)
+    skipDead         = false,   -- mob buttons drop a corpse (/cleartarget [dead]); off: a corpse is targeted, unmarked (#95)
+    layout           = "icons",   -- the target frame: "icons", "list" or "list2" (two columns; #88)
     theme            = "forever",  -- the windows' look, "forever" or "glass" (Theme.lua; after a /reload)
     followGlassUI    = true,    -- with Glass UI loaded, wear its look (Theme.lua; after a /reload)
     questTargets     = false,   -- experimental: buttons for what the quest log wants (Quests.lua)
@@ -602,12 +603,13 @@ local function DesiredButtons()
     for name in pairs(detected) do tinsert(names, name) end
     table.sort(names)
     for _, name in ipairs(names) do
-        -- /targetexact can pick a corpse of the name when no live one is in
-        -- reach; /cleartarget [dead] then leaves no target instead (the
-        -- `corpse` probe, FOREVER-PROBE.md; with a live one in reach it
-        -- targets that one). The mark that follows needs a target, so a
-        -- corpse is never marked either.
-        local target = fmt("/cleartarget\n/targetexact %s\n/cleartarget [dead]", name)
+        -- /targetexact picks a corpse of the name only when no live one is in
+        -- reach (the `corpse` probe, FOREVER-PROBE.md). By default the click
+        -- keeps it, so the player sees they're in the right place (#95);
+        -- Skip dead mobs adds /cleartarget [dead], which leaves no target
+        -- instead. The mark's [exists,nodead] never marks a corpse either way.
+        local target = fmt("/cleartarget\n/targetexact %s%s", name,
+            StakeoutDB.skipDead and "\n/cleartarget [dead]" or "")
         local entry = { group = 1, name = name, unit = detected[name].unitId, macrotext = target }
         -- SetRaidTarget is forbidden to addon code here, so the mark is the
         -- player's click: left-click targets and marks in one press, as
@@ -1860,7 +1862,10 @@ end
 
 -- The config window (#34): the watch list on the left, the settings on the
 -- right. Each column is laid out down a y cursor, in px from the window's top.
-local CFG_W, CFG_H = 712, 574    -- 574: the Layout row (#88) took 34 px
+-- 574: the Layout row (#88) took 34 px; 586: Skip dead mobs (#95) took 30, the
+-- Button icon label moving onto its picker's row gave back 18. With Glass UI
+-- and the quests it is 766: a 768-high UIParent has 2 px to spare.
+local CFG_W, CFG_H = 712, 586
 local QUEST_H = 136               -- the quest targets section, with Quests.lua loaded (two checkboxes)
 local COL_W = 324
 local LEFT, RIGHT = 16, 372   -- the columns' left edges
@@ -2219,8 +2224,23 @@ local function CreateConfigFrame()
     y = y - 26
     MakeCheckbox(f, x, y, "Lock frame position", "lockFrame", nil, "Alt + drag overrides the lock.")
 
-    -- Layout (#88): the same switch as /stakeout layout.
+    -- #95: off by default, so a click with only corpses in reach targets one
+    -- (unmarked) and the player sees they're in the right place. The macros
+    -- change, so the buttons are rewritten out of combat (after it, in one).
+    -- No grey line under it (the window has no room left): its tooltip says.
     y = y - 44
+    local skipDead = MakeCheckbox(f, x, y, "Skip dead mobs", "skipDead", function() RefreshTargetFrame() end)
+    skipDead:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Skip dead mobs", 1, 1, 1)
+        GameTooltip:AddLine("Skip corpses when no live mob is in reach.", 0.7, 0.7, 0.7)
+        GameTooltip:Show()
+    end)
+    skipDead:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    f.skipDeadCheck = skipDead
+
+    -- Layout (#88): the same switch as /stakeout layout.
+    y = y - 30
     RowLabel(f, x + 4, y - 14, "Layout")
     local layoutDropdown = CreateFrame("Frame", "StakeoutLayoutDropdown", f, "UIDropDownMenuTemplate")
     layoutDropdown:SetPoint("LEFT", f, "TOPLEFT", x + 52, y - 14)
@@ -2238,12 +2258,11 @@ local function CreateConfigFrame()
     f.layoutDropdown = layoutDropdown
     ShowLayoutChoice()
 
+    -- The label on the picker's row, as "Marker" is (#95 needed the 18 px);
+    -- the picker starts past it.
     y = y - 34
-    local iconLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    iconLabel:SetPoint("TOPLEFT", f, "TOPLEFT", x + 4, y)
-    iconLabel:SetText("Button icon")
-    y = y - 18
-    MakePicker(f, x + 60, y, BUTTON_ICONS, StakeoutDB.buttonIcon or 1, function(idx, entry)
+    f.iconLabel = RowLabel(f, x + 4, y - 13, "Button icon")
+    f.iconPicker = MakePicker(f, x + 80, y, BUTTON_ICONS, StakeoutDB.buttonIcon or 1, function(idx, entry)
         SetConfig("buttonIcon", idx)
         RefreshTargetFrame()
         Print("Button icon set to: %s", entry.name)
@@ -2705,4 +2724,6 @@ Stakeout._test = {
     appliedWidth = function() return appliedWidth end,
     appliedLayout = function() return appliedLayout end,
     announcedAt = function(name) return announceTimes[name] end,
+    -- Range.lua's brackets, for StakeoutProbe's `tagged` (#95): read-only.
+    range = ns.range,
 }

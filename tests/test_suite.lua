@@ -141,8 +141,20 @@ do
     check(StakeoutConfigFrame.followCheck and StakeoutConfigFrame.followCheck:GetChecked(),
         "the settings show the switch, on")
     local w, h = StakeoutConfigFrame:GetSize()
-    eq(h, 754, "and the window makes room for it (and for quest targets, two checkboxes, and the layout row)")
+    eq(h, 766, "and the window makes room for it (and for quest targets, two checkboxes, the layout row and Skip dead mobs)")
     check(huntInside(h), "the Hunt control, the last one, still inside the window")
+    -- The whole window on a 768-high UIParent (its height with UI scale off,
+    -- whatever the resolution), not only its controls inside its own height
+    -- (Codex on #95's plan). The kit's UIParent has no size, so the number.
+    check(h <= 768, ("the full window fits a 768-high screen (%s)"):format(h))
+    -- The Button icon label sits on its picker's row (#95): clear of the first icon.
+    local f = StakeoutConfigFrame
+    local lp, ip = f.iconLabel._points[#f.iconLabel._points], f.iconPicker[1]._points[#f.iconPicker[1]._points]
+    check(lp[4] + f.iconLabel:GetStringWidth() + 2 <= ip[4] - 2,
+        ("the Button icon label (%d + %d) ends before the first icon's highlight (%d)"):format(lp[4],
+            f.iconLabel:GetStringWidth(), ip[4] - 2))
+    check(f.iconPicker[#f.iconPicker]._points[1][4] + 26 + 2 <= 372 + 324,
+        "and the last icon's highlight stays in the column")
     local inside, which = descsInside()
     check(inside, "every grey line under a checkbox stays inside the window: " .. which)
 
@@ -258,7 +270,7 @@ do
     SlashCmdList.STAKEOUT("config")
     eq(StakeoutConfigFrame.followCheck, nil, "and no switch in the settings")
     local _, h = StakeoutConfigFrame:GetSize()
-    eq(h, 710, "nor room for one (quest targets and the layout row only)")
+    eq(h, 722, "nor room for one (quest targets, the layout row and Skip dead mobs only)")
     check(huntInside(h), "the Hunt control, the last one, still inside the window")
 end
 

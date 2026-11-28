@@ -313,7 +313,7 @@ do
         "on: every dropper with a spawn within reach (5, 65 yd); none 995 yd off, none from another map")
     local b = T.buttons[1]
     check(not b.friendly, "...in the mob row")
-    eq(b:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Makrura Clacker\n/cleartarget [dead]",
+    eq(b:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Makrura Clacker",
         "...with the mob's macro, so a click looks for it")
     check(tip("Makrura Clacker"):find("Not seen yet", 1, true), "...and a tooltip that says it isn't a sighting")
     check(tip("Makrura Clacker"):find("1/4 Intact Makrura Eye", 1, true), "...under the objective it serves")

@@ -205,7 +205,8 @@ eq(b._shown, false, "button off hides it")
 -- Procedures
 --------------------------------------------------------------------------------
 
-for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore", "corpse", "look", "rows", "alert" }) do
+for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore", "corpse", "look", "rows", "alert",
+                        "tagged" }) do
     fp("steps so " .. name)
     local rec = FP.db.steps.records["StakeoutProbe/" .. name]
     eq(rec and rec.status, "active", "procedure " .. name .. " starts")
@@ -256,6 +257,580 @@ eq(b._attrs.macrotext,
 eq(b._attrs.macrotext2, "/cleartarget\n/targetexact Pygmy Surf Crawler\n/tm 8", "right-click unchanged")
 eq(T.aim("Pygmy Surf Crawler", 3106, "8"), true, "no variant")
 eq(b._attrs.macrotext, "/cleartarget\n/targetexact Pygmy Surf Crawler", "...is the default macro")
+
+-- #95's tagged procedure: what it scores, and what it leaves inconclusive.
+do
+    local TG = T.state.tagged
+    local A = TG.api
+    rawset(_G, "UnitIsTapDenied", function(t) local u = WoW.units[t] return u and u.tapped == true end)
+    local GA, GB, GC = "Creature-0-1-2-3-3258-0000000A", "Creature-0-1-2-3-3258-0000000B",
+        "Creature-0-1-2-3-3258-0000000C"
+    local function plate(token, g, extra)
+        local u = { name = "Bristleback Quilboar", guid = g, plate = true }
+        for k, v in pairs(extra or {}) do u[k] = v end
+        WoW.SetUnit(token, u)
+    end
+    local function target(g) WoW.SetUnit("target", g and { name = "Bristleback Quilboar", guid = g } or nil) end
+    local function clickOn(down) b._scripts.PostClick(b, "LeftButton", down) end
+    T.state.tagMob = { name = "Bristleback Quilboar", id = 3258 }
+    WoW.units = {}
+    plate("nameplate1", GA)
+    plate("nameplate2", GB)
+
+    -- 1: the tap read, logged with every plate of the name.
+    target(GB)
+    WoW.units.nameplate2.tapped, WoW.units.target.tapped = true, true
+    local ok, _, tap = A.readTap("a mob someone else tagged")()
+    check(ok and tap == "true", "the tap read: true on a tagged mob")
+    check(logged("nameplate2 0000000B tapped true"), "...with every plate of the name logged")
+    WoW.units.nameplate2.tapped = nil
+
+    -- 2: Set aims at a live plate that isn't the target; refused in combat.
+    target(nil)
+    WoW.combat = true
+    check(not pcall(A.setOn, "P1"), "Set is refused in combat")
+    WoW.combat = false
+    target(GA)
+    A.setOn("P1")
+    eq(b._attrs.macrotext, "/cleartarget\n/target nameplate2", "Set never aims at your target")
+    target(nil)
+    plate("nameplate1", GA, { tapped = true })
+    A.setOn("P1", false)
+    eq(b._attrs.macrotext, "/cleartarget\n/target nameplate2", "...and, for the tag trial, only at an untagged one")
+    plate("nameplate1", GA)
+    check((A.setOn("P1")), "Set aims the button")
+    eq(b._attrs.macrotext, "/cleartarget\n/target nameplate1", "...at one plate (P1)")
+    -- Only the action's edge counts: down at ActionButtonUseKeyDown 1, up at 0.
+    WoW.useKeyDown = true
+    target(GA)
+    clickOn(false)
+    eq((A.plateTrial("P1")()), false, "the up edge at 1 isn't the click")
+    clickOn(true)
+    local done, variant, result = A.plateTrial("P1")()
+    check(done and result == "targeted the plate's mob", "the down edge at 1 is: scored, " .. tostring(result))
+    eq(A.chosen(), "P1", "...and P1 is the macro carried forward")
+    -- A hit on a tagged mob is reported, never carried forward.
+    TG.passed = nil
+    target(nil)
+    plate("nameplate1", GA, { tapped = true })
+    plate("nameplate2", GB, { tapped = true })
+    A.setOn("P1", nil, "2")
+    target(GA)
+    clickOn(true)
+    local dT, _, rT = A.plateTrial("P1")()
+    check(dT and rT == "targeted the plate's mob", "a tagged mob's plate targeted: reported")
+    eq(A.chosen(), nil, "...but not carried forward to 3")
+    plate("nameplate1", GA)
+    plate("nameplate2", GB)
+    target(nil)
+    A.setOn("P1", false)
+    target(GA)
+    clickOn(true)
+    A.plateTrial("P1")()
+    eq(A.chosen(), "P1", "an untagged one is")
+    -- Back and Set again: the new result replaces the old one.
+    target(nil)
+    A.setOn("P1", false)
+    eq(A.chosen(), nil, "a new Set for P1 drops its earlier result")
+    target(nil)
+    clickOn(true)
+    A.plateTrial("P1")()
+    eq(A.chosen(), nil, "...and a miss leaves it dropped")
+    A.setOn("P1", false)
+    target(GA)
+    clickOn(true)
+    A.plateTrial("P1")()
+    -- The wait's leave: a pass stands only if that visit scored it.
+    A.keepPass("P1")()
+    eq(A.chosen(), "P1", "left after a scored click: the pass stands")
+    A.keepPass("P1")()
+    eq(A.chosen(), nil, "left again by Done by hand (after a Back): the pass goes")
+    A.setOn("P1", false)
+    target(GA)
+    clickOn(true)
+    A.plateTrial("P1")()
+    -- Anything re-aiming the button (/fp so button) ends the trial, and its
+    -- clicks aren't logged under it.
+    target(nil)
+    A.setOn("P1", false)
+    T.aim("Bristleback Quilboar", 3258, "8")
+    target(GA)
+    local before = TG.clicks
+    clickOn(true)
+    eq(TG.clicks, before, "a click of another macro isn't recorded for the trial")
+    check(not (A.plateTrial("P1")()), "the button re-aimed by something else: P1's wait scores nothing")
+    -- With only tagged mobs about, the general trial still runs ("prefer").
+    plate("nameplate1", GA, { tapped = true })
+    plate("nameplate2", GB, { tapped = true })
+    target(nil)
+    check((A.setOn("P1", "prefer")), "only tagged mobs: Set still aims (the general trial)")
+    plate("nameplate1", GA)
+    plate("nameplate2", GB)
+    -- A target that can't be read could be the mob picked: Set refuses.
+    WoW.units.target = { name = "Bristleback Quilboar", guid = WoW.SECRET }
+    check(not pcall(A.setOn, "P1", false), "an unreadable target: Set refuses (it could be the picked mob)")
+    target(nil)
+    A.setOn("P1", false)
+    target(GA)
+    clickOn(true)
+    A.plateTrial("P1")()
+    eq(A.chosen(), "P1", "P1 passed again, for what follows")
+    -- A wait scores only a click of its own Set: P2's Set skipped, a click
+    -- on the P1 button isn't P2's.
+    local p2set = A.setStep("P2", "2", "", false)
+    p2set.leave("skipped")
+    clickOn(true)
+    local dS, whyS = A.plateTrial("P2")()
+    check(not dS and tostring(whyS):find("Set P2 first", 1, true), "P2's Set skipped: its wait scores nothing")
+    A.setOn("P1", false)
+    clickOn(true)
+    check(not (A.plateTrial("P2")()), "...nor a click of P1's Set")
+    eq(TG.passed.P2, nil, "...so P2 isn't credited")
+    target(nil)
+    A.setOn("P2")
+    eq(b._attrs.macrotext, "/cleartarget\n/target [@nameplate1,exists,nodead]", "P2's macro")
+    WoW.useKeyDown = false
+    target(nil)
+    clickOn(true)
+    eq((A.plateTrial("P2")()), false, "the down edge at 0 isn't the click")
+    WoW.units.target = { name = "Bristleback Quilboar", guid = WoW.SECRET }
+    clickOn(false)
+    local d2, why2 = A.plateTrial("P2")()
+    check(not d2 and tostring(why2):find("inconclusive", 1, true), "a secret target GUID: inconclusive, " .. tostring(why2))
+    plate("nameplate1", GA, { dead = true })
+    target(nil)
+    clickOn(false)
+    d2, why2 = A.plateTrial("P2")()
+    check(not d2 and tostring(why2):find("dead", 1, true), "the aimed mob dead at the click: a retry, " .. tostring(why2))
+    WoW.useKeyDown = true
+    plate("nameplate1", GA)
+
+    -- 3a: only a tag the probe saw on the Set-time mob counts.
+    target(nil)
+    A.setOn("P1", false, "3a")
+    eq((A.tagWait()), false, "waiting for the tag")
+    plate("nameplate1", GC, { tapped = true })   -- the plate now shows another, tagged mob
+    eq((A.tagWait()), false, "a token switching to a tagged mob isn't the change")
+    plate("nameplate1", GA, { tapped = true })
+    check((A.tagWait()), "the aimed mob tagged: seen")
+    target(GA)
+    clickOn(true)
+    local _, scored, res = A.tagClick()
+    check(scored == "scored" and res == "targeted the tagged mob", "...a click then is scored: " .. tostring(res))
+    plate("nameplate1", GA)
+    target(nil)
+    A.setOn("P1", false, "3a")
+    plate("nameplate1", GA, { tapped = true })
+    A.tagWait()
+    WoW.units.target = { name = "Bristleback Quilboar", guid = WoW.SECRET }
+    clickOn(true)
+    local _, rU = A.tagClick()
+    eq(rU, "inconclusive: the target can't be read", "a target that can't be read: inconclusive, not scored")
+    plate("nameplate1", GA)
+    target(nil)
+    A.setOn("P1", false, "3a")
+    clickOn(true)   -- the wait finished by hand (Done): no tag seen
+    local _, r3a = A.tagClick()
+    eq(r3a, "no observed tag, inconclusive", "Done by hand on the tag wait: no observed tag")
+    -- Back from the click to the tag wait, then Done by hand: the earlier
+    -- sighting doesn't stand.
+    target(nil)
+    A.setOn("P1", false, "3a")
+    plate("nameplate1", GA, { tapped = true })
+    A.tagWait()
+    check(TG.tagSeen, "a tag seen")
+    A.forgetTag("back")   -- the click step's leave, on Back
+    clickOn(true)
+    local _, rB = A.tagClick()
+    eq(rB, "no observed tag, inconclusive", "Back from the click step, then Done by hand: the sighting doesn't stand")
+    plate("nameplate1", GA)
+    -- Back to 3a's Set and Skip it: the earlier 3a aim is dropped.
+    A.setOn("P1", false, "3a")
+    A.setStep("chosen", "3a", "", false).leave("skipped")
+    local tw, twWhy = A.tagWait()
+    check(not tw and tostring(twWhy):find("Set first", 1, true), "a skipped Set drops the earlier aim: its wait waits")
+
+    -- 3b: the plate lost and the click in one uninterrupted lockdown.
+    local function fight(on)
+        WoW.combat = on
+        WoW.fire(on and "PLAYER_REGEN_DISABLED" or "PLAYER_REGEN_ENABLED")
+    end
+    local function lose(token) WoW.units[token] = nil WoW.fire("NAME_PLATE_UNIT_REMOVED", token) end
+    A.setOn("P1", nil, "3b")
+    eq((A.lostWait()), false, "waiting for the fight")
+    fight(true)
+    lose("nameplate1")
+    target(nil)
+    clickOn(true)
+    local d3, plateWas, got = A.lostWait()
+    check(d3 and plateWas == "absent" and got == "no target", "lost in a fight, clicked in it: scored, " ..
+        tostring(plateWas) .. " / " .. tostring(got))
+    fight(false)
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    fight(true)
+    lose("nameplate1")
+    fight(false)
+    fight(true)
+    clickOn(true)
+    eq((A.lostWait()), false, "lost, the fight over, a new one, then the click: inconclusive")
+    fight(false)
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    fight(true)
+    lose("nameplate1")
+    plate("nameplate1", GA)   -- the same mob back on that plate
+    clickOn(true)
+    local d4, why4 = A.lostWait()
+    check(not d4 and tostring(why4):find("lose the plate first", 1, true),
+        "the same mob back before the click: not scored, a retry (" .. tostring(why4) .. ")")
+    -- Back at the click but gone again before the poll: judged at the click.
+    lose("nameplate1")
+    plate("nameplate1", GA)
+    clickOn(true)
+    WoW.units.nameplate1 = nil   -- gone again, no event yet
+    local d4b, why4b = A.lostWait()
+    check(not d4b and tostring(why4b):find("lose the plate first", 1, true),
+        "the original on the plate at the click: not scored, a retry")
+    fight(false)
+    -- Lost before the fight, the plate reused: the first click in the fight
+    -- is inconclusive, and a second one isn't scored either (no loss in it).
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    lose("nameplate1")
+    plate("nameplate1", GC)
+    fight(true)
+    clickOn(true)
+    eq((A.lostWait()), false, "lost before the fight: the first click in it is inconclusive")
+    A.lostWait()
+    clickOn(true)
+    eq((A.lostWait()), false, "...and a second click isn't scored: nothing was lost in this fight")
+    fight(false)
+    -- The plate's mob changed with no REMOVED before the fight: that change
+    -- belongs to its own (no) lockdown, never to the fight's.
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    plate("nameplate1", GC)
+    A.lostWait()   -- the poll sees the change, out of combat
+    fight(true)
+    target(nil)
+    clickOn(true)
+    eq((A.lostWait()), false, "a change seen before the fight: the click in it is inconclusive")
+    clickOn(true)
+    eq((A.lostWait()), false, "...and stays so: the aimed mob was never seen in this fight")
+    fight(false)
+    -- PLAYER_REGEN_DISABLED before lockdown reads on: no sighting then, so a
+    -- change before lockdown isn't an in-fight loss.
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    WoW.fire("PLAYER_REGEN_DISABLED")   -- lockdown not on yet
+    plate("nameplate1", GC)             -- changed before lockdown, no poll in between
+    WoW.combat = true
+    target(nil)
+    clickOn(true)
+    eq((A.lostWait()), false, "a change before lockdown read on: not scored")
+    fight(false)
+    -- An earlier loss retired when the mob is seen back, so a real one counts.
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    lose("nameplate1")                  -- before the fight
+    plate("nameplate1", GA)
+    fight(true)
+    A.lostWait()                        -- seen back, in lockdown
+    lose("nameplate1")
+    target(nil)
+    clickOn(true)
+    local dR, plR = A.lostWait()
+    check(dR and plR == "absent", "a loss before the fight, the mob back, a real loss in it: scored")
+    fight(false)
+    -- Judged by the click's own edge: a sighting after the click doesn't make
+    -- a pre-lockdown replacement count...
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    plate("nameplate1", GC)             -- replaced before the fight
+    fight(true)
+    target(nil)
+    clickOn(true)
+    plate("nameplate1", GA)             -- A back, then gone, before the poll
+    WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+    lose("nameplate1")
+    local dO, wO = A.lostWait()
+    check(not dO and tostring(wO):find("not one fight", 1, true), "a sighting after the click doesn't qualify it")
+    -- ...and rejecting that click keeps the newer loss: a click now counts.
+    clickOn(true)
+    local dO2, pO2 = A.lostWait()
+    check(dO2 and pO2 == "absent", "the newer loss stands: the next click is scored")
+    fight(false)
+    -- Seen in the fight, then gone with no REMOVED: the click's own read is
+    -- enough to establish the loss.
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    fight(true)
+    A.lostWait()                        -- seen, in lockdown
+    WoW.units.nameplate1 = nil          -- gone, no event
+    target(nil)
+    clickOn(true)
+    local dA, pA = A.lostWait()
+    check(dA and pA == "absent", "gone with no REMOVED after a sighting in the fight: scored")
+    fight(false)
+    -- ...and a valid loss stays valid when A comes back before the poll.
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    fight(true)
+    lose("nameplate1")
+    target(nil)
+    clickOn(true)
+    plate("nameplate1", GA)             -- back before the poll
+    local dV, plV = A.lostWait()
+    check(dV and plV == "absent", "a valid loss and click, the mob back before the poll: still scored")
+    fight(false)
+    -- No combat events: 3b can't tell fights apart.
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    TG.combatOk = false
+    local dN, wN = A.lostWait()
+    check(dN and tostring(wN):find("inconclusive", 1, true), "combat events refused: 3b inconclusive")
+    TG.combatOk = true
+    -- A plate that can't be read at the click: inconclusive, not "another mob".
+    plate("nameplate1", GA)
+    A.setOn("P1", nil, "3b")
+    fight(true)
+    lose("nameplate1")
+    plate("nameplate1", WoW.SECRET)
+    target(nil)
+    clickOn(true)
+    local dU, whyU = A.lostWait()
+    check(not dU and tostring(whyU):find("can't be read", 1, true), "an unreadable plate at the click: inconclusive")
+    fight(false)
+
+    -- 4: a REMOVED forgets the plate's GUID; only a change with none counts.
+    plate("nameplate1", GA)
+    plate("nameplate2", GB)
+    TG.set = nil
+    A.stability()
+    TG.stabPoll()
+    lose("nameplate2")
+    TG.stabPoll()
+    plate("nameplate2", GC)   -- no ADDED seen: the REMOVED alone says it's a new one
+    TG.stabPoll()
+    eq(TG.stab.silent, 0, "a plate removed, then another mob on it: not a silent change")
+    plate("nameplate1", GC)
+    TG.stabPoll()
+    eq(TG.stab.silent, 1, "a plate's mob changing with no REMOVED: counted")
+    -- Right after ADDED: what it showed then is the baseline.
+    lose("nameplate3")
+    plate("nameplate3", GA)
+    WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate3")
+    plate("nameplate3", GB)
+    TG.stabPoll()
+    eq(TG.stab.silent, 2, "a change right after ADDED, before any poll: counted")
+    -- An ADDED on a token still holding another mob, no REMOVED between.
+    plate("nameplate3", GC)
+    WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate3")
+    eq(TG.stab.silent, 3, "ADDED showing another mob than the token held: counted")
+    -- A refused subscription: the counts mean nothing.
+    TG.stab.from = -1000
+    TG.combatOk = false
+    local dC, wC = A.stability()
+    check(dC and tostring(wC):find("combat events", 1, true),
+        "a combat event refused: 4 can't know it was out of combat, inconclusive")
+    TG.combatOk, TG.plateOk = true, false
+    local dL, wL = A.stability()
+    check(dL and tostring(wL):find("inconclusive", 1, true), "a plate event not registered: inconclusive")
+    TG.plateOk = true
+    -- In combat the two minutes start again once out of it.
+    WoW.combat = true
+    local dF, wF = A.stability()
+    check(not dF and tostring(wF):find("leave combat", 1, true), "in combat: no result, it waits")
+    eq(TG.stab, nil, "...and the window restarts")
+    WoW.combat = false
+    -- A whole fight between two polls restarts it too.
+    plate("nameplate1", GA)
+    A.stability()
+    check(TG.stab ~= nil, "a window running")
+    fight(true)
+    fight(false)
+    eq(TG.stab, nil, "a fight between polls restarts the window")
+    -- Nothing seen twice: inconclusive, not "no changes".
+    WoW.units.nameplate1, WoW.units.nameplate2, WoW.units.nameplate3 = nil, nil, nil
+    A.stability()
+    TG.stabPoll()
+    TG.stab.from = -1000
+    local dE, wE = A.stability()
+    check(dE and tostring(wE):find("inconclusive", 1, true), "no plate to compare: inconclusive, " .. tostring(wE))
+    A.stopStability()
+    WoW.units.nameplate3 = nil
+    -- The start takes its own snapshot: a swap before the first poll counts
+    -- (Codex on PR #101).
+    plate("nameplate1", GA)
+    A.stability()
+    plate("nameplate1", GB)
+    TG.stabPoll()
+    eq(TG.stab.silent, 1, "a swap before the first poll: compared with the start's snapshot")
+    A.stopStability()
+    WoW.units.nameplate1 = nil
+
+    -- 5: needs ranges (Stakeout's seam); without them it says so and ends,
+    -- even with no plate in view (moving wouldn't help).
+    WoW.units.nameplate1, WoW.units.nameplate2 = nil, nil
+    TG.set, TG.near = nil, nil
+    local d5, why5 = A.nearestTrial()
+    check(d5 and tostring(why5):find("range unavailable", 1, true), "no range without Stakeout: inconclusive, done")
+    plate("nameplate1", GA)
+    plate("nameplate2", GB)
+    local ranges = { nameplate1 = { 0, 10 }, nameplate2 = { 25, 30 } }
+    rawset(_G, "Stakeout", { _test = { range = { Get = function(u)
+        local r = ranges[u]
+        if r then return r[1], r[2] end
+    end } } })
+    -- Its Set skipped: the button keeps an older macro, so nothing scores.
+    A.setOn("P1", false)
+    A.setNearest()
+    A.dropSet("skipped")
+    local dK, whyK = A.nearestTrial()
+    check(not dK and tostring(whyK):find("Set first", 1, true), "5's Set skipped: its wait scores nothing")
+    A.setNearest()
+    -- A click on a pair lost before the poll isn't the replacement's.
+    A.nearestTrial()   -- picks the pair
+    target(GA)
+    clickOn(true)
+    WoW.units.nameplate2 = nil
+    plate("nameplate3", GB)
+    ranges.nameplate3 = { 25, 30 }
+    A.nearestTrial()
+    eq(#TG.near.scored, 0, "a click on the old pair isn't scored for the new one")
+    WoW.units.nameplate3, ranges.nameplate3 = nil, nil
+    plate("nameplate2", GB)
+    TG.near = nil
+    A.nearestTrial()   -- picks the pair
+    target(GA)
+    clickOn(true)
+    -- Scored as the click's edge read them, though they swap before the poll.
+    ranges.nameplate1, ranges.nameplate2 = { 25, 30 }, { 0, 10 }
+    local d51, w51 = A.nearestTrial()
+    check(not d51 and tostring(w51):find("1 of 4", 1, true), "1 of 4 scored, from the click's own reading")
+    eq(TG.near.scored[1], "the nearer", "...the nearer at the click, not at the poll")
+    ranges.nameplate1, ranges.nameplate2 = { 25, 30 }, { 0, 10 }
+    target(nil)
+    clickOn(true)
+    local _, noT = A.nearestTrial()
+    check(tostring(noT):find("no target", 1, true), "a click with no target: said so, not \"a third mob\"")
+    ranges.nameplate1, ranges.nameplate2 = { 0, 10 }, { 25, 30 }
+    target(GA)
+    clickOn(true)
+    local _, same = A.nearestTrial()
+    check(tostring(same):find("other one is nearer", 1, true), "the same nearer one again: not scored")
+    ranges.nameplate1, ranges.nameplate2 = { 25, 30 }, { 0, 10 }
+    target(GB)
+    clickOn(true)
+    A.nearestTrial()
+    ranges.nameplate1, ranges.nameplate2 = { 0, 10 }, { 25, 30 }
+    target(GA)
+    clickOn(true)
+    A.nearestTrial()
+    clickOn(true)                       -- the same nearer one again: not scored...
+    ranges.nameplate1, ranges.nameplate2 = { 25, 30 }, { 0, 10 }
+    target(GB)
+    clickOn(true)                       -- ...then the valid fourth, both before one poll
+    WoW.units.nameplate2 = nil          -- a plate goes before the poll: the clicks still count
+    clickOn(true)                       -- ...and a click after it doesn't hide them
+    local d6, picks = A.nearestTrial()
+    check(d6 and picks == "the nearer, the nearer, the nearer, the nearer", "four alternating clicks: " .. tostring(picks))
+    lose("nameplate2")
+    A.nearestTrial()
+    eq(TG.near.pair, nil, "...a lost pair is dropped, to be chosen again")
+    -- A pair member moved to another plate isn't the same observation.
+    plate("nameplate2", GB)
+    TG.near = nil
+    A.nearestTrial()
+    WoW.units.nameplate2 = nil
+    plate("nameplate3", GB)
+    A.nearestTrial()
+    check(TG.near.pair == nil or TG.near.pair[2].token ~= "nameplate2", "a mob moved to another plate: the pair is chosen again")
+    -- A pair member dead on its plate is let go for a live one.
+    WoW.units.nameplate3 = nil
+    plate("nameplate2", GB)
+    TG.near = nil
+    A.nearestTrial()
+    plate("nameplate2", GB, { dead = true })
+    plate("nameplate3", GC)
+    ranges.nameplate1, ranges.nameplate3 = { 0, 10 }, { 50, 60 }
+    A.nearestTrial()
+    check(TG.near.pair and TG.near.pair[2].guid == GC, "a dead pair member: the pair is chosen again with a live one")
+    WoW.units.nameplate3, ranges.nameplate3 = nil, nil
+    -- A third mob picked: an outcome kept in the result, with its range and
+    -- the count of other live ones (Codex on PR #101).
+    plate("nameplate2", GB)
+    plate("nameplate3", GC)
+    ranges.nameplate1, ranges.nameplate2, ranges.nameplate3 = { 0, 10 }, { 25, 30 }, { 40, 45 }
+    TG.near = nil
+    A.nearestTrial()
+    check(TG.near.pair and TG.near.pair[1].guid == GA and TG.near.pair[2].guid == GB, "the pair: the first two apart")
+    target(GC)
+    ranges.target = { 40, 45 }
+    clickOn(true)
+    local n3 = #db.log
+    A.nearestTrial()
+    local s1 = tostring(TG.near.scored[1])
+    check(s1:find("a third mob", 1, true) and s1:find("40-45 yd", 1, true), "a third mob picked: scored as one, at its range: " .. s1)
+    local logged = false
+    for i = n3 + 1, #db.log do if db.log[i]:find("1 other live", 1, true) then logged = true end end
+    check(logged, "...and the log counts the other live one")
+    ranges.target = nil
+    for _, step in ipairs({ { { 25, 30 }, { 0, 10 }, GB }, { { 0, 10 }, { 25, 30 }, GA }, { { 25, 30 }, { 0, 10 }, GB } }) do
+        ranges.nameplate1, ranges.nameplate2 = step[1], step[2]
+        target(step[3])
+        clickOn(true)
+    end
+    local dT, wT = A.nearestTrial()
+    check(dT and tostring(wT):find("a third mob was picked", 1, true), "...and the result says the pair isn't the rule: " .. tostring(wT))
+    WoW.units.nameplate3, ranges.nameplate3 = nil, nil
+    rawset(_G, "Stakeout", nil)
+    -- Stopped mid-trial: the aim goes, and nothing more is logged for it.
+    plate("nameplate1", GA)
+    plate("nameplate2", GB)
+    target(nil)
+    A.setOn("P1", false)
+    A.keepPass("P1")("stopped")
+    eq(TG.set, nil, "a stopped trial drops its aim")
+    local n0 = #db.log
+    lose("nameplate1")
+    local quiet = true
+    for i = n0 + 1, #db.log do if db.log[i]:find("tagged:", 1, true) then quiet = false end end
+    check(quiet, "...so a later event on that plate isn't logged for it")
+    A.setOn("P1", false)
+    A.stopAim("stopped")
+    eq(TG.set, nil, "the other aimed waits drop it on Stop too")
+    plate("nameplate1", GA)
+
+    -- The first step starts a fresh run; with no target it stays (a throw).
+    WoW.units.target = nil
+    check(not pcall(A.readMob), "Read target with no target throws: the step stays")
+    eq(T.state.tagMob, nil, "...and the last run's mob doesn't carry on")
+    -- UnitName throwing: never the error's text as the mob's name.
+    target(GA)
+    local realName = rawget(_G, "UnitName")
+    rawset(_G, "UnitName", function() error("UnitName broke") end)
+    check(not pcall(A.readMob), "UnitName throwing: Read target throws too")
+    eq(T.state.tagMob, nil, "...and no mob is set")
+    rawset(_G, "UnitName", realName)
+    -- The first step skipped: nothing of the last run carries on.
+    T.state.tagMob = { name = "Bristleback Quilboar", id = 3258 }
+    A.resetRun()
+    eq(T.state.tagMob, nil, "a fresh run with its Read skipped has no mob")
+    T.state.tagMob = { name = "Bristleback Quilboar", id = 3258 }
+
+    -- The cleanup: refused in combat (the step stays), done out of it.
+    T.aim("Bristleback Quilboar", 3258, "8")
+    WoW.combat = true
+    check(not pcall(A.cleanup), "Remove in combat throws: the step stays")
+    check(b._shown, "...and the button is still up")
+    WoW.combat = false
+    check(A.cleanup(), "out of combat it's removed")
+    eq(b._shown, false, "...hidden")
+    rawset(_G, "UnitIsTapDenied", nil)
+    WoW.units = {}
+end
 
 -- The list layout mockups (#88): plain frames, never secure.
 do

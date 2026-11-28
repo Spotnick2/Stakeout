@@ -19,6 +19,9 @@
 
 - Shift+right-click on a quest button no longer targets and marks the mob (it ran the left-click's macro).
   Right-click and left-click are unchanged.
+- **A button targets a corpse when no live mob of its name is in reach** (#95), so you can tell "they're dead"
+  from "wrong place". It's never marked. With a live one in reach it still targets that one. Settings, Target
+  frame, **Skip dead mobs** brings back the old way: with only corpses in reach, no target.
 
 ## v2.7.0 - 2026-11-25
 

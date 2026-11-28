@@ -33,11 +33,50 @@ check(WoW.chatText():find("Detected: Rare Mob", 1, true), "the chat names it")
 local btn = T.buttons[1]
 check(btn and btn._shown, "a target button is shown")
 eq(btn:GetAttribute("type"), "macro", "left-click runs a macro")
-eq(btn:GetAttribute("macrotext"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]\n/tm [exists,nodead] !6",
-    "left-click targets by exact name, never a corpse (the corpse probe), and marks: SetRaidTarget is " ..
-    "forbidden to addon code, the click does it; ! keeps the mark on a second click; no live target, no /tm")
-eq(btn:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]",
+eq(btn:GetAttribute("macrotext"), "/cleartarget\n/targetexact Rare Mob\n/tm [exists,nodead] !6",
+    "left-click targets by exact name (a corpse only when no live one is in reach, #95) and marks: " ..
+    "SetRaidTarget is forbidden to addon code, the click does it; ! keeps the mark on a second click; " ..
+    "no live target (a corpse, or none), no /tm")
+eq(btn:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Rare Mob",
     "right-click only targets")
+
+-- Skip dead mobs (#95): the corpse is dropped, on both clicks; the mark's
+-- guard stays. A switch in combat waits for the fight to end.
+StakeoutDB.skipDead = true
+T.RefreshTargetFrame()
+eq(btn:GetAttribute("macrotext"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]\n/tm [exists,nodead] !6",
+    "Skip dead mobs: the left click drops a corpse, and still marks only a live one")
+eq(btn:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]",
+    "...and the right click drops it too")
+WoW.combat = true
+WoW.fire("PLAYER_REGEN_DISABLED")
+local writes = 0
+local realSet = getmetatable(btn).__index.SetAttribute
+btn.SetAttribute = function(self, k, v) writes = writes + 1 return realSet(self, k, v) end
+StakeoutDB.skipDead = false
+T.RefreshTargetFrame()
+eq(writes, 0, "turned off in combat: no attribute written")
+eq(btn:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]", "...the old macro stays")
+WoW.combat = false
+WoW.fire("PLAYER_REGEN_ENABLED")
+btn.SetAttribute = nil
+eq(btn:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Rare Mob", "...and is rewritten when combat ends")
+-- The settings' checkbox: saves it and rewrites the buttons.
+SlashCmdList.STAKEOUT("config")
+local sd = StakeoutConfigFrame.skipDeadCheck
+check(sd and not sd:GetChecked(), "the settings' Skip dead mobs box, off by default")
+sd:SetChecked(true)
+sd._scripts.OnClick(sd)
+check(StakeoutDB.skipDead == true, "...ticking it saves it")
+eq(btn:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Rare Mob\n/cleartarget [dead]", "...and rewrites the buttons")
+sd._scripts.OnEnter(sd)
+check(table.concat(GameTooltip._lines or {}, "|"):find("Skip corpses when no live mob is in reach.", 1, true),
+    "...its tooltip says what it does")
+sd._scripts.OnLeave(sd)
+sd:SetChecked(false)
+sd._scripts.OnClick(sd)
+eq(btn:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Rare Mob", "...unticking it puts them back")
+StakeoutConfigFrame:Hide()
 eq(btn:GetAttribute("typerelease"), nil, "no typerelease: it would double-fire")
 eq(btn._forClicks and btn._forClicks[1], "AnyUp", "both edges registered (the secure handler picks one)")
 eq(btn._forClicks and btn._forClicks[2], "AnyDown", "both edges registered")
@@ -193,7 +232,7 @@ check(ok, "a death in combat doesn't touch the protected frame (" .. tostring(er
 WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 WoW.combat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
-eq(T.buttons[1]:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Twin Mob\n/cleartarget [dead]",
+eq(T.buttons[1]:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Twin Mob",
     "the buttons are rebuilt when combat ends")
 
 ------------------------------------------------------------

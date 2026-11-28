@@ -89,10 +89,21 @@ see("Mob A", 100); see("Mob B", 101); see("Mob C", 102)
 see("Orgnil Soulscar", 3142, false); see("Gornek", 3143, false)
 eq(order(), "Orgnil Soulscar,Gornek,Mob A,Mob B,Mob C", "NPCs (friendly row) first, then mobs, each in the order seen")
 local b = button("Mob A")
-eq(b:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Mob A\n/cleartarget [dead]",
-    "a mob's left click never ends on a corpse")
-eq(b:GetAttribute("macrotext"), "/cleartarget\n/targetexact Mob A\n/cleartarget [dead]\n/tm [exists,nodead] !8",
+eq(b:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Mob A",
+    "a mob's right click: a corpse when no live one is in reach (#95)")
+eq(b:GetAttribute("macrotext"), "/cleartarget\n/targetexact Mob A\n/tm [exists,nodead] !8",
     "left click adds /tm [exists,nodead] !8 (skull; ! keeps the mark on a second click); right click only targets")
+-- Skip dead mobs (#95): a mob button drops a corpse; an NPC's never has the line.
+StakeoutDB.skipDead = true
+T.RefreshTargetFrame()
+eq(b:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Mob A\n/cleartarget [dead]",
+    "Skip dead mobs: a mob's click never ends on a corpse")
+eq(b:GetAttribute("macrotext"), "/cleartarget\n/targetexact Mob A\n/cleartarget [dead]\n/tm [exists,nodead] !8",
+    "...and the left click still marks only a live one")
+eq(button("Orgnil Soulscar"):GetAttribute("macrotext2"), "/cleartarget\n/targetexact Orgnil Soulscar",
+    "...an NPC's click is unchanged")
+StakeoutDB.skipDead = false
+T.RefreshTargetFrame()
 eq(b:GetAttribute("type2"), "macro", "...as a right-click macro")
 eq(b:GetAttribute("typerelease"), nil, "no typerelease")
 eq(button("Mob B"):GetAttribute("macrotext"):match("/tm %[exists,nodead%] !(%d)$"), "7", "the second mob gets the cross")

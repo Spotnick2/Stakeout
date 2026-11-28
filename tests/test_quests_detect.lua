@@ -137,7 +137,7 @@ Q.Rebuild()
 plate("nameplate1", { name = "Bloodtalon Matriarch ", guid = guid(3247), attackable = true })
 eq(shown(), "Bloodtalon Matriarch ", "matched by NPC ID; the observed name is what /targetexact uses")
 eq(button("Bloodtalon Matriarch ") and button("Bloodtalon Matriarch "):GetAttribute("macrotext2"),
-    "/cleartarget\n/targetexact Bloodtalon Matriarch \n/cleartarget [dead]", "...in the macro")
+    "/cleartarget\n/targetexact Bloodtalon Matriarch ", "...in the macro")
 -- A secret GUID: matched by the provider's name instead.
 WoW.SetUnit("target", { name = "Orgnil Soulscar", secretGuid = true, attackable = false })
 WoW.fire("PLAYER_TARGET_CHANGED")
