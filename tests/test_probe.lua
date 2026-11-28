@@ -660,6 +660,15 @@ do
     check(dE and tostring(wE):find("inconclusive", 1, true), "no plate to compare: inconclusive, " .. tostring(wE))
     A.stopStability()
     WoW.units.nameplate3 = nil
+    -- The start takes its own snapshot: a swap before the first poll counts
+    -- (Codex on PR #101).
+    plate("nameplate1", GA)
+    A.stability()
+    plate("nameplate1", GB)
+    TG.stabPoll()
+    eq(TG.stab.silent, 1, "a swap before the first poll: compared with the start's snapshot")
+    A.stopStability()
+    WoW.units.nameplate1 = nil
 
     -- 5: needs ranges (Stakeout's seam); without them it says so and ends,
     -- even with no plate in view (moving wouldn't help).
@@ -748,6 +757,33 @@ do
     ranges.nameplate1, ranges.nameplate3 = { 0, 10 }, { 50, 60 }
     A.nearestTrial()
     check(TG.near.pair and TG.near.pair[2].guid == GC, "a dead pair member: the pair is chosen again with a live one")
+    WoW.units.nameplate3, ranges.nameplate3 = nil, nil
+    -- A third mob picked: an outcome kept in the result, with its range and
+    -- the count of other live ones (Codex on PR #101).
+    plate("nameplate2", GB)
+    plate("nameplate3", GC)
+    ranges.nameplate1, ranges.nameplate2, ranges.nameplate3 = { 0, 10 }, { 25, 30 }, { 40, 45 }
+    TG.near = nil
+    A.nearestTrial()
+    check(TG.near.pair and TG.near.pair[1].guid == GA and TG.near.pair[2].guid == GB, "the pair: the first two apart")
+    target(GC)
+    ranges.target = { 40, 45 }
+    clickOn(true)
+    local n3 = #db.log
+    A.nearestTrial()
+    local s1 = tostring(TG.near.scored[1])
+    check(s1:find("a third mob", 1, true) and s1:find("40-45 yd", 1, true), "a third mob picked: scored as one, at its range: " .. s1)
+    local logged = false
+    for i = n3 + 1, #db.log do if db.log[i]:find("1 other live", 1, true) then logged = true end end
+    check(logged, "...and the log counts the other live one")
+    ranges.target = nil
+    for _, step in ipairs({ { { 25, 30 }, { 0, 10 }, GB }, { { 0, 10 }, { 25, 30 }, GA }, { { 25, 30 }, { 0, 10 }, GB } }) do
+        ranges.nameplate1, ranges.nameplate2 = step[1], step[2]
+        target(step[3])
+        clickOn(true)
+    end
+    local dT, wT = A.nearestTrial()
+    check(dT and tostring(wT):find("a third mob was picked", 1, true), "...and the result says the pair isn't the rule: " .. tostring(wT))
     WoW.units.nameplate3, ranges.nameplate3 = nil, nil
     rawset(_G, "Stakeout", nil)
     -- Stopped mid-trial: the aim goes, and nothing more is logged for it.
