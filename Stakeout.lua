@@ -537,9 +537,10 @@ end
 L.DistanceText = DistanceText
 
 -- A button's tooltip, the live one's and the preview's (#98): s = { name,
--- friendly, distance, lines, clicks, quest, alertOn }, in the order it always
--- had, each part as the settings say. "Not seen yet" is one of the quest
--- lines; "Alert on" is state and always shows, its hint a click hint.
+-- friendly, distance, lines, clicks, quest, alertOn, hunt }, in the order it
+-- always had, each part as the settings say. "Not seen yet" and "Alert on"
+-- are state and always show; their instructions are click hints (Codex on
+-- PR #102).
 function L.FillTooltip(tt, s)
     if s.friendly then tt:AddLine(s.name, 0.2, 1, 0.2) else tt:AddLine(s.name, 1, 0.2, 0.2) end
     local clicks = StakeoutDB.tipClicks ~= false
@@ -547,6 +548,7 @@ function L.FillTooltip(tt, s)
     if StakeoutDB.tipProgress ~= false then
         for _, line in ipairs(s.lines or {}) do tt:AddLine(line, 0.7, 0.7, 0.7) end
     end
+    if s.hunt then tt:AddLine("Not seen yet", 0.7, 0.7, 0.7) end
     if clicks then
         for _, line in ipairs(s.clicks or {}) do tt:AddLine(line, 0.7, 0.7, 0.7) end
     end

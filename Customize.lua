@@ -32,8 +32,7 @@ local SAMPLES = {
     { group = 3, name = "Bloodscalp Warrior", quest = true, icon = QUEST_ICON, face = true,
       progress = "3/10", progressMax = "10/10", alertOn = true, targeted = true, low = 25, high = 30,
       tooltip = { "Bloodscalp Ears: 3/10 Bloodscalp Warrior slain" } },
-    { group = 3, name = "Kobold Laborer", quest = true, icon = QUEST_ICON, hunt = true,
-      tooltip = { "Not seen yet" } },
+    { group = 3, name = "Kobold Laborer", quest = true, icon = QUEST_ICON, hunt = true },
 }
 Customize.SAMPLES = SAMPLES
 

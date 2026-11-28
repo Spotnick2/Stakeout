@@ -1421,10 +1421,9 @@ local function ButtonSpecs()
         local tooltip, clicks = {}, {}
         for _, ref in ipairs(nt.refs) do tooltip[#tooltip + 1] = Progress(ref) end
         if nt.other then tooltip[#tooltip + 1] = "Related to one of your quests" end
-        if nt.tier == HUNT then
-            tooltip[#tooltip + 1] = "Not seen yet"
-            clicks[#clicks + 1] = "Click to look for one"
-        end
+        -- "Not seen yet" is drawn from the spec's hunt flag, outside Quest
+        -- progress (L.FillTooltip); its instruction is a click hint.
+        if nt.tier == HUNT then clicks[#clicks + 1] = "Click to look for one" end
         local mark
         if StakeoutDB.enableMarking then
             local marks = Marks(nt.row)

@@ -201,7 +201,7 @@ check(t:find("3/10 Kobold Laborer", 1, true) and not t:find("Left-click", 1, tru
 StakeoutDB.tipClicks = nil
 -- An armed hunt button with progress shown and clicks hidden: its state, no instruction.
 specs[1].hunt = true
-specs[1].tooltip = { "Not seen yet" }
+specs[1].tooltip = { "3/10 Kobold Laborer slain" }
 specs[1].clicks = { "Click to look for one", "Left-click: target" }
 ns.quests.AlertOn = function(name) return name == "Kobold Laborer" end
 T.RefreshTargetFrame()
@@ -211,8 +211,13 @@ check(t:find("Not seen yet", 1, true) and t:find("Alert on", 1, true) and not t:
     and not t:find("Shift", 1, true), "an armed hunt button, clicks hidden: \"Alert on\", \"Not seen yet\", no instruction: " .. t)
 StakeoutDB.tipProgress = false
 t = tipOf(buttonOf("Kobold Laborer"))
-check(t:find("Alert on", 1, true) and not t:find("Not seen yet", 1, true) and not t:find("Shift", 1, true),
-    "progress and clicks hidden: \"Not seen yet\" is a quest line and goes, \"Alert on\" stays: " .. t)
+check(t:find("Alert on", 1, true) and t:find("Not seen yet", 1, true) and not t:find("slain", 1, true)
+    and not t:find("Shift", 1, true) and not t:find("look for one", 1, true),
+    "progress and clicks hidden: the quest line goes, \"Not seen yet\" and \"Alert on\" stay (Codex on PR #102): " .. t)
+-- Not a hunt button: no "Not seen yet", whatever the settings.
+specs[1].hunt = nil
+T.RefreshTargetFrame()
+check(not tipOf(buttonOf("Kobold Laborer")):find("Not seen yet", 1, true), "not hunting: no \"Not seen yet\"")
 StakeoutDB.tipClicks, StakeoutDB.tipProgress = nil, nil
 ns.quests.AlertOn = function() return false end
 
