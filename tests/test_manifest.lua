@@ -76,15 +76,18 @@ eq(H.directive("SavedVariablesPerCharacter"), "StakeoutDB",
 -- The library first (its files run before ours, as LibStub embedding needs),
 -- then the look and the distance estimator the tooltips read, then the core
 -- that builds the windows with both, then the quest targets, which plug into
--- the core's hooks (ns.core).
+-- the core's hooks (ns.core). Customize.lua (#98) draws through the core's
+-- ns.looks, so it comes right after the core.
 local files = H.tocFiles()
-eq(#files, 6, "the TOC loads the library, Theme.lua, Range.lua, Stakeout.lua, Quests.lua and QuestieData.lua")
+eq(#files, 7, "the TOC loads the library, Theme.lua, Range.lua, Stakeout.lua, Customize.lua, Quests.lua and "
+    .. "QuestieData.lua")
 eq(files[1], "Libs\\LibGlass-1.0\\LibGlass-1.0.xml", "the embedded LibGlass-1.0 loads first")
 eq(files[2], "Theme.lua", "then Theme.lua")
 eq(files[3], "Range.lua", "then Range.lua")
 eq(files[4], "Stakeout.lua", "then Stakeout.lua")
-eq(files[5], "Quests.lua", "then Quests.lua, after the core it hooks into")
-eq(files[6], "QuestieData.lua", "then QuestieData.lua, the provider Quests.lua asks")
+eq(files[5], "Customize.lua", "then Customize.lua, which draws through the core's looks")
+eq(files[6], "Quests.lua", "then Quests.lua, after the core it hooks into")
+eq(files[7], "QuestieData.lua", "then QuestieData.lua, the provider Quests.lua asks")
 -- Libs/ is the packager's (.pkgmeta externals) and gitignored: not on disk here.
 for i = 2, #files do
     check(H.readFile(files[i]) ~= nil, "the TOC loads " .. files[i] .. ", which does not exist")

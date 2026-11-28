@@ -24,7 +24,10 @@ specific NPC shows up. The target button was inspired by RestedXP's targeting sy
 - Experimental quest buttons (a checkbox in the config, or `/stakeout quests on`): mobs named in unfinished kill
   objectives, and with Questie installed, the mobs that drop quest items and the NPC to turn a finished quest in to
 - An optional hunt mode for quest mobs (with Questie): a button before you see them, to click until one is in reach
-- An approximate distance in a button's tooltip while its NPC is visible
+- An approximate distance in a button's tooltip while its NPC is visible, and on the button itself if you want
+- **Customize buttons…** in the settings: a live preview of the buttons beside the settings window, where you
+  choose the layout, icon and scale, and what the buttons and their tooltips show (portraits, names, progress,
+  labels, distance; the tooltip's distance, quest lines and click hints)
 - Two NPCs with the same name keep their button until both are dead
 - Movable, lockable, scalable frame, shrunk to fit the screen when your scale would make it too big
 
@@ -73,9 +76,16 @@ NPC names must match exactly, spaces included (`/stakeout add Captain Flat Tusk`
 - **Raid marking:** left-click a button to target the NPC and put your marker on it (clicking again keeps the
   mark); right-click only targets. Turn the mark off, or pick the marker.
 - **Target frame:** lock the position (Alt+drag still moves it), Skip dead mobs (off: a click with only corpses
-  in reach targets one), the layout, the button icon, and the scale.
-  The layout is *Icons* (the default), *List* (a row per NPC: portrait, whole name, quest progress) or *List,
-  two columns*. Your current target's button has a gold outline.
+  in reach targets one), and **Customize buttons…**.
+- **Customize buttons…** opens a panel beside the settings, with a preview of the buttons (sample ones, your own
+  portrait standing in for an NPC's face) that changes as you choose:
+  - the layout: *Icons* (the default), *List* (a row per NPC: portrait, whole name, quest progress) or *List, two
+    columns*; the button icon; the scale;
+  - on the buttons: Portraits (off: always the icon), Names and Progress (the lists), Labels under icons, and
+    Distance (the approximate distance on the button while its NPC is in sight, off by default);
+  - in the tooltip: Distance, Quest progress, Click hints.
+
+  A change in combat shows on the real buttons once the fight ends. Your current target's button has a gold outline.
 - **Look:** WoW Forever (the default) or Glass, a smoked glass look shared with other glass addons. It
   applies to every Stakeout window after a `/reload`.
 - **Quest targets:** tick *Show buttons for quest mobs* for the experimental quest buttons (the same switch as

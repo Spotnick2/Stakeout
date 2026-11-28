@@ -289,7 +289,10 @@ rebuild()
 do
     local function tip(name)
         for _, b in ipairs(T.buttons) do
-            if b._shown and b.npcName == name then return table.concat(b.tooltipLines or {}, "|") end
+            -- "Not seen yet" comes from the hunt flag since #98 (L.FillTooltip).
+            if b._shown and b.npcName == name then
+                return (b.hunt and "Not seen yet|" or "") .. table.concat(b.tooltipLines or {}, "|")
+            end
         end
     end
     -- Clacker drops the eye, and spawns at 60, 80; the crawler drops it too,

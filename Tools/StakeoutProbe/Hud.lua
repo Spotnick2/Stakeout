@@ -69,8 +69,11 @@ local function shortProgress(lines)
     end
 end
 
-local function isHunt(lines)
-    for _, line in ipairs(type(lines) == "table" and lines or {}) do
+-- The button's own flag since #98 (its "Not seen yet" left the quest lines);
+-- the line itself for a Stakeout from before it.
+local function isHunt(btn)
+    if btn.hunt ~= nil then return btn.hunt == true end
+    for _, line in ipairs(type(btn.tooltipLines) == "table" and btn.tooltipLines or {}) do
         local s = plain(line)
         if s and s:find("Not seen yet", 1, true) then return true end
     end
@@ -90,7 +93,7 @@ local function stakeoutRows()
             -- which the mockup can't copy (Codex, P3): btn.portrait since
             -- #90's cache, btn.portraitOf before it. A boolean either way.
             out[#out + 1] = { group = group, name = name, unit = btn.unit, icon = btn.icon and btn.icon:GetTexture(),
-                              progress = shortProgress(btn.tooltipLines), hunt = isHunt(btn.tooltipLines),
+                              progress = shortProgress(btn.tooltipLines), hunt = isHunt(btn),
                               stakeoutFace = btn.portrait ~= nil or btn.portraitOf == name }
         end
     end

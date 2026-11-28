@@ -671,6 +671,19 @@ plate("nameplate2", "Guard", guid(811, "A"))
 eq(detections("Guard"), 1, "...and the Guard still needed alerts at once (no quiet started)")
 unplate("nameplate1"); unplate("nameplate2")
 
+-- #98: the distance's token for a quest button: any token a member of that
+-- name holds that still shows it, a stale one skipped.
+clean()
+quests({ { 1, { { 701, "Bloodscalp Warrior" } } } })
+plate("nameplate1", "Bloodscalp Warrior", guid(701, "A"))
+plate("nameplate2", "Bloodscalp Warrior", guid(701, "B"))
+WoW.SetUnit("nameplate1", { name = "Someone Else", guid = guid(999, "Z"), plate = true })   -- stale, no event yet
+eq(Q.TokenFor("Bloodscalp Warrior"), "nameplate2", "TokenFor skips a stale token for one that still shows it")
+WoW.units.nameplate2 = nil
+eq(Q.TokenFor("Bloodscalp Warrior"), nil, "...and gives none when no token shows it")
+eq(Q.TokenFor("Nobody"), nil, "...nor for a name no member has")
+unplate("nameplate1")
+
 -- The tooltip says what the click does, and the state.
 clean()
 quests({ { 1, { { 701, "Bloodscalp Warrior" } } } })
@@ -682,5 +695,20 @@ shiftRight(bw)
 bw._scripts.OnEnter(bw)
 check(table.concat(GameTooltip._lines or {}, "|"):find("Alert on", 1, true), "...and says when it's on")
 bw._scripts.OnLeave(bw)
+
+-- #98: a real quest button's click hints come from ButtonSpecs' own field,
+-- and Click hints off hides them all.
+bw._scripts.OnEnter(bw)
+local withHints = table.concat(GameTooltip._lines or {}, "|")
+bw._scripts.OnLeave(bw)
+check(withHints:find("Left-click: target and mark", 1, true) and withHints:find("Right-click: target only", 1, true),
+    "a quest button's tooltip has its click hints: " .. withHints)
+StakeoutDB.tipClicks = false
+bw._scripts.OnEnter(bw)
+local noHints = table.concat(GameTooltip._lines or {}, "|")
+bw._scripts.OnLeave(bw)
+check(not noHints:find("click", 1, true) and noHints:find("Alert on", 1, true),
+    "...Click hints off: none, the alert's state kept: " .. noHints)
+StakeoutDB.tipClicks = nil
 
 done("test_alerts")

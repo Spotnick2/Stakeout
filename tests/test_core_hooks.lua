@@ -143,7 +143,7 @@ WoW.SetUnit("nameplate1", { name = "Rare Mob", guid = "Creature-R", plate = true
 WoW.fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 specs = {
     spec("Vile Familiar", "enemy", { macrotext2 = "/cleartarget\n/targetexact Vile Familiar\n/tm !8" }),
-    spec("Orgnil Soulscar", "friendly", { tooltip = { "Report to Orgnil", "Left-click: target" } }),
+    spec("Orgnil Soulscar", "friendly", { tooltip = { "Report to Orgnil" }, clicks = { "Left-click: target" } }),
     spec("Rare Mob", "enemy"),                                -- shown by the watch list already
     spec("Bad\n/run Evil()", "enemy"),                        -- not a name a macro may carry
 }
@@ -157,6 +157,13 @@ eq(T.buttons[3]:GetAttribute("macrotext"), "/cleartarget\n/targetexact Vile Fami
 eq(T.buttons[3]:GetAttribute("macrotext2"), "/cleartarget\n/targetexact Vile Familiar\n/tm !8", "...and its mark")
 eq(T.buttons[3]:GetAttribute("type2"), "macro", "...as a right-click macro")
 eq(T.buttons[2].tooltipLines and T.buttons[2].tooltipLines[1], "Report to Orgnil", "its tooltip lines")
+-- The rendered tooltip: the quest lines, then the click hints, each from its
+-- own field (#98).
+T.buttons[2]._scripts.OnEnter(T.buttons[2])
+eq(table.concat(GameTooltip._lines or {}, "|"),
+    "Orgnil Soulscar|Report to Orgnil|Left-click: target|Shift+right-click: alert when one appears",
+    "...and its rendered tooltip: name, quest line, click hints")
+T.buttons[2]._scripts.OnLeave(T.buttons[2])
 check(T.frame()._shown, "the frame shows")
 eq(T.frame()._height, 16 + 3 * 28 + 2 * 9 + 2 + 4, "three lines tall, the two quest lines with their labels")
 eq(T.buttons[1].label:GetText(), "", "a watch button has no label: the player typed the name")

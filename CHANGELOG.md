@@ -14,6 +14,13 @@
 - A quest button's tooltip says "Shift+right-click: alert when one appears", or that it's on.
 - Nine more alert sounds, from NodeRadar: Minimap Ping, Sonar Ping, Radar Ping, and six of its own (Sonar, Radar
   Blip, Deep Sea Sonar, Bell Chime, Notification, HUD Ping).
+- **Customize buttons…** (#98), in the settings: a panel beside them with a live preview of the buttons. The
+  layout, the button icon and the scale moved there, and you choose what the buttons and their tooltips show:
+  - on the buttons: Portraits (off: always the icon), Names and Progress in the lists, Labels under icons, and
+    **Distance**, new: the approximate distance on the button while its NPC is in sight (off by default);
+  - in the tooltip: the distance, the quest lines and the click hints, each on its own.
+
+  Everything starts as it was. A change in combat reaches the real buttons when the fight ends.
 
 ### Changed
 

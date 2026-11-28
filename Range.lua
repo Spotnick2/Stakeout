@@ -259,12 +259,27 @@ function Range.Get(unit)
 end
 
 -- "25-30 yd", "within 8 yd", "over 40 yd", or nil when nothing could tell.
-function Range.Text(unit)
-    local low, high = Range.Get(unit)
+-- TextOf and ShortOf format a bracket already known (the preview's, #98).
+function Range.TextOf(low, high)
     if not low then return nil end
     if high == INF then return ("over %d yd"):format(low) end
     if low == 0 then return ("within %d yd"):format(high) end
     return ("%d-%d yd"):format(low, high)
+end
+function Range.Text(unit)
+    return Range.TextOf(Range.Get(unit))
+end
+
+-- The same, short, for the button itself (#98): the bracket's top ("30" for
+-- 25-30 yd, "8" within 8 yd), "40+" past the longest check, nil when nothing
+-- could tell. The lists add " yd".
+function Range.ShortOf(low, high)
+    if not low then return nil end
+    if high == INF then return ("%d+"):format(low) end
+    return ("%d"):format(high)
+end
+function Range.Short(unit)
+    return Range.ShortOf(Range.Get(unit))
 end
 
 function Range.Invalidate()

@@ -111,5 +111,127 @@ Probe:Steps("rows", {
           .. "layout you like in its settings." },
 })
 
+-- #98, the Customize panel: its preview beside the live buttons, a few parts
+-- turned off, the distance on a button as the owner walks. Opens the panel
+-- through Stakeout's own button; the parts are the owner's clicks.
+-- Procedure: /fp steps so customize.
+local function openCustomize()
+    stakeout("config")
+    local cfg = G("StakeoutConfigFrame")
+    if not (cfg and cfg:IsShown()) then stakeout("config") end
+    cfg = G("StakeoutConfigFrame")
+    local btn = cfg and cfg.customizeButton
+    if not btn then error("This Stakeout has no Customize panel: deploy the branch's Stakeout (Tools/deploy.ps1 -Probe), /reload", 0) end
+    local panel = G("StakeoutCustomizeFrame")
+    if not (panel and panel:IsShown()) then btn:GetScript("OnClick")(btn) end
+    panel = G("StakeoutCustomizeFrame")
+    return true, ("panel shown %s, placed %s"):format(tostring(panel and panel:IsShown()), tostring(panel and panel.where))
+end
+
+-- Each shown live button's distance text, until it has read two different
+-- numbers (the owner walking toward a mob).
+local distSeen = {}
+local function distanceChanges()
+    for i = 1, 40 do
+        local btn = G("StakeoutBtn" .. i)
+        if not btn then break end
+        if btn:IsShown() and btn.dist and btn.dist:IsShown() then
+            -- The number only: "30 yd" in a list and "30" on an icon are one
+            -- reading (a layout switch isn't a move; Codex on #98's code).
+            local t = plain(btn.dist:GetText())
+            t = t and t:gsub(" yd$", "")
+            if t and t ~= "" then
+                local name = plain(btn.npcName) or ("button " .. i)
+                distSeen[name] = distSeen[name] or {}
+                if not distSeen[name][t] then
+                    distSeen[name][t] = true
+                    say(("customize: %s shows %s"):format(name, t))
+                end
+                local n = 0
+                for _ in pairs(distSeen[name]) do n = n + 1 end
+                if n >= 2 then return true, name .. " changed distance on its button" end
+            end
+        end
+    end
+    return false, "walk toward (or away from) a mob that has a button, with Distance ticked"
+end
+-- Each attempt starts with nothing seen: a later run must see two numbers
+-- of its own (Codex on #98's code).
+local function forgetDistances() distSeen = {} return true end
+
+-- Where the panel is: visible, on the screen, and anchored as the branch
+-- Stakeout chose says (right: its TOPLEFT on the settings' TOPRIGHT; left:
+-- TOPRIGHT on TOPLEFT; moved: right of the moved window; over: on the
+-- window's TOPLEFT). want: the branch the step expects, or nil for any.
+local ANCHORS = { right = { "TOPLEFT", "TOPRIGHT" }, moved = { "TOPLEFT", "TOPRIGHT" },
+                  left = { "TOPRIGHT", "TOPLEFT" }, over = { "TOPLEFT", "TOPLEFT" } }
+local function where(want)
+    return function()
+        local panel, cfg = G("StakeoutCustomizeFrame"), G("StakeoutConfigFrame")
+        if not (panel and panel:IsVisible()) then error("Open the settings and the Customize panel first (Back)", 0) end
+        local sw = G("UIParent") and G("UIParent"):GetWidth()
+        -- Worked out each time (the screen can change between two runs).
+        local expected = want
+        if type(want) == "function" then expected = want(sw, cfg:GetWidth(), panel:GetWidth()) end
+        local point, rel, relPoint, x, y = panel:GetPoint()
+        local relName = rel and rel.GetName and rel:GetName() or tostring(rel)
+        local l, r = panel:GetLeft(), panel:GetRight()
+        local inside = type(l) == "number" and type(r) == "number" and type(sw) == "number" and l >= -0.5
+            and r <= sw + 0.5
+        local a = ANCHORS[panel.where or ""]
+        local anchored = a ~= nil and rel == cfg and point == a[1] and relPoint == a[2]
+        local ok = inside and anchored and (expected == nil or panel.where == expected)
+        return ok, ("anchored %s to %s %s (%s, %s); left %s, right %s on a %s px wide screen; placed %s%s"):format(
+            tostring(point), tostring(relName), tostring(relPoint), tostring(x), tostring(y),
+            tostring(l and math.floor(l)), tostring(r and math.floor(r)), tostring(sw and math.floor(sw)),
+            tostring(panel.where), expected and (" (wanted " .. expected .. ")") or "")
+    end
+end
+
+-- With the settings at the screen's right edge: on their left when the pair
+-- fits the screen, else over their left column (Customize.Place; Codex on
+-- #98's code: a 1024-wide screen doesn't hold the 1072 units the pair needs).
+local function leftOrOver(sw, cw, pw)
+    if type(sw) == "number" and type(cw) == "number" and type(pw) == "number" and sw >= cw + 4 + pw then
+        return "left"
+    end
+    return "over"
+end
+
+-- Opens the panel, then switches to a layout (read back from the live frame,
+-- as `rows` does) before its screenshot.
+local function openAnd(layout)
+    return function()
+        openCustomize()
+        return switch(layout)()
+    end
+end
+
+Probe:Steps("customize", {
+    rev = 2,
+    title = "Stakeout: the Customize panel (#98)",
+    { text = "Stand where Stakeout shows a few buttons (quest mobs too if you can), out of combat. Press Run: the "
+          .. "settings open with the Customize panel beside them, on Icons.", run = openAnd("icons"),
+      screenshot = "customize-icons" },
+    { text = "Press Run: the list layout, in the preview and on the live buttons.", run = openAnd("list"),
+      screenshot = "customize-list" },
+    { text = "Press Run: two columns.", run = openAnd("list2"), screenshot = "customize-list2" },
+    { text = "Does the preview look like your real buttons (the faces are your own portrait, standing in)?", ask = true },
+    { text = "In the panel, untick Portraits, Names and Labels under icons. Then press Next.", screenshot = "customize-parts" },
+    { text = "Did the preview and the live buttons both change (no faces, no names)?", ask = true },
+    { text = "Tick Distance. Walk toward a mob that has a button until its number changes (up to 3 minutes).",
+      when = forgetDistances, wait = distanceChanges, timeout = 180 },
+    { text = "Is the number on the button easy to read, and in the right place?", ask = true, screenshot = "customize-distance" },
+    { text = "Where the panel went on your screen (logged).", auto = true, run = where(), check = where() },
+    { text = "Drag the settings window (by its top) to the right edge of your screen, then press Run: the panel "
+          .. "should move to its left (on a narrow screen, over its left column).", run = where(leftOrOver),
+      check = where(leftOrOver), screenshot = "customize-left" },
+    { text = "Hover a preview button, and a live one: do their tooltips read alike?", ask = true },
+    { text = "Anything else? Type it in the box (or nothing). Then tick back what you want, set the layout you "
+          .. "like, and press Next." },
+})
+
 NS._test = NS._test or {}
 NS._test.rows = { readRows = readRows }
+NS._test.customize = { openCustomize = openCustomize, distanceChanges = distanceChanges, where = where,
+    forgetDistances = forgetDistances, openAnd = openAnd, leftOrOver = leftOrOver }

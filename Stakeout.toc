@@ -12,5 +12,6 @@ Libs\LibGlass-1.0\LibGlass-1.0.xml
 Theme.lua
 Range.lua
 Stakeout.lua
+Customize.lua
 Quests.lua
 QuestieData.lua

@@ -206,7 +206,7 @@ eq(b._shown, false, "button off hides it")
 --------------------------------------------------------------------------------
 
 for _, name in ipairs({ "quests", "range", "hostile", "events", "core", "mulgore", "corpse", "look", "rows", "alert",
-                        "tagged" }) do
+                        "tagged", "customize" }) do
     fp("steps so " .. name)
     local rec = FP.db.steps.records["StakeoutProbe/" .. name]
     eq(rec and rec.status, "active", "procedure " .. name .. " starts")
@@ -830,6 +830,62 @@ do
     eq(b._shown, false, "...hidden")
     rawset(_G, "UnitIsTapDenied", nil)
     WoW.units = {}
+end
+
+-- #98's customize procedure: the distance wait needs two numbers on a button.
+do
+    local Cz = ns._test.customize
+    local fb = CreateFrame("Button", "StakeoutBtn1", UIParent)
+    fb.npcName = "Bristleback Quilboar"
+    fb.dist = fb:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    fb.dist:SetText("30")
+    fb.dist:Show()
+    Cz.forgetDistances()
+    check(not Cz.distanceChanges(), "one distance read: still waiting")
+    fb.dist:SetText("25")
+    check((Cz.distanceChanges()), "a second, different one: done")
+    -- A second run starts from nothing: one reading isn't enough again.
+    Cz.forgetDistances()
+    check(not Cz.distanceChanges(), "a new attempt: one reading, still waiting")
+    -- A layout switch ("25" on an icon, "25 yd" in a list) isn't a move.
+    fb.dist:SetText("25 yd")
+    check(not Cz.distanceChanges(), "\"25\" then \"25 yd\": one reading, not a change")
+    fb:Hide()
+    -- Where the panel is: visible, inside the screen, anchored as its branch says.
+    local uw, uh = UIParent._width, UIParent._height
+    UIParent:SetSize(1920, 1080)
+    local fcfg = CreateFrame("Frame", "StakeoutConfigFrame", UIParent)
+    local fpan = CreateFrame("Frame", "StakeoutCustomizeFrame", fcfg)
+    fpan:SetPoint("TOPLEFT", fcfg, "TOPRIGHT", 4, 0)
+    fpan.where, fpan._left, fpan._right = "right", 900, 1256
+    check((Cz.where()()), "beside the settings, anchored as placed: a pass")
+    check(not Cz.where("left")(), "...but not when the step wants it on the left")
+    fpan.where = "left"
+    check(not Cz.where("left")(), "a branch its anchor doesn't match: a fail")
+    fpan.where = "right"
+    fpan._right = 2000
+    check(not Cz.where()(), "past the screen's edge: a fail")
+    fpan._right = 1256
+    -- The drag step's expectation: left where the pair fits, over where not.
+    eq(Cz.leftOrOver(1920, 712, 356), "left", "a wide screen: on the left")
+    eq(Cz.leftOrOver(1024, 712, 356), "over", "a 1024-wide screen: over the left column")
+    fcfg:SetSize(712, 600)
+    fpan:SetSize(356, 600)
+    fpan:ClearAllPoints()
+    fpan:SetPoint("TOPLEFT", fcfg, "TOPLEFT", 0, 0)
+    fpan.where, fpan._left, fpan._right = "over", 0, 356
+    -- One callback, as the registered step has, run at both widths in turn.
+    local dragCheck = Cz.where(Cz.leftOrOver)
+    UIParent:SetSize(1024, 768)
+    check((dragCheck()), "the drag step on a narrow screen: over is a pass")
+    UIParent:SetSize(1920, 1080)
+    check(not dragCheck(), "...the same step on a wide one: over is a fail (it should be left)")
+    UIParent:SetSize(1024, 768)
+    check((dragCheck()), "...and narrow again: a pass again (worked out each run)")
+    UIParent:SetSize(1920, 1080)
+    fcfg:Hide()
+    check(not pcall(Cz.where()), "the settings closed (the panel not visible): it says to open them")
+    UIParent._width, UIParent._height = uw, uh
 end
 
 -- The list layout mockups (#88): plain frames, never secure.
