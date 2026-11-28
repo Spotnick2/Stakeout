@@ -1121,6 +1121,19 @@ do
                 end
                 c.near[k] = s
             end
+            -- A third mob of the name can be picked too: how many were live
+            -- and where the picked one was, on this edge (Codex on PR #101).
+            local others = 0
+            for _, p in ipairs(platesOf(state.tagMob and state.tagMob.name or "")) do
+                if p.guid and p.dead == false and p.guid ~= N.pair[1].guid and p.guid ~= N.pair[2].guid then
+                    others = others + 1
+                end
+            end
+            c.others = others
+            if hasTarget and c.target ~= "unreadable" and c.target ~= N.pair[1].guid and c.target ~= N.pair[2].guid then
+                c.thirdDead = flag("UnitIsDead", "target")
+                c.thirdLow, c.thirdHigh = bracket("target")
+            end
         end
         TG.click = c
         -- Every click is kept, in order: two before a poll are both judged
@@ -1410,6 +1423,9 @@ do
                     if g then s.guids[token] = g end
                 end
             end
+            -- The baseline now, not a poll later: a swap in the first quarter
+            -- second has an old GUID to compare with (Codex on PR #101).
+            TG.stabPoll()
         end
         local s = TG.stab
         local left = 120 - ((G("GetTime") or function() return 0 end)() - s.from)
@@ -1480,7 +1496,7 @@ do
                 -- Gone from its plate, or dead on it: no use for the trial.
                 if not (presence(m.token) and plainGuid(m.token) == m.guid) or flag("UnitIsDead", m.token) == true then
                     say("tagged: 5 lost the pair; choosing again")
-                    N.pair, N.scored, N.last, N.pendingMsg = nil, {}, nil, nil
+                    N.pair, N.scored, N.last, N.pendingMsg, N.third = nil, {}, nil, nil, nil
                     break
                 end
             end
@@ -1529,22 +1545,33 @@ do
             say("tagged: 5 click not scored: the same one is still the nearer")
             return false, "not scored: move until the other one is nearer, then click"
         end
-        local picked = c.target == near.guid and "the nearer"
-            or ((c.target == now[1].guid or c.target == now[2].guid) and "the farther")
-            or "another (inconclusive)"
-        if picked:find("inconclusive") then
-            local what = c.target == "none" and "no target" or (c.target == "unreadable" and "a target that can't be read")
-                or ("a third mob, " .. shortGuid(c.target))
+        if c.target == "none" or c.target == "unreadable" then
+            local what = c.target == "none" and "no target" or "a target that can't be read"
             say("tagged: 5 not scored, the click gave " .. what)
             return false, "not scored (" .. what .. "): click again"
         end
+        -- A third mob is an outcome, kept in the result: the pair alone
+        -- doesn't explain it (Codex on PR #101).
+        local picked
+        if c.target == near.guid then
+            picked = "the nearer"
+        elseif c.target == now[1].guid or c.target == now[2].guid then
+            picked = "the farther"
+        else
+            local at = c.thirdLow and ("%s-%s yd"):format(tostring(c.thirdLow), tostring(c.thirdHigh)) or "range unknown"
+            picked = ("a third mob (%s, %s%s)"):format(shortGuid(c.target), at,
+                c.thirdDead == true and ", dead" or "")
+            N.third = true
+        end
         N.scored[#N.scored + 1] = picked
         N.last = near.guid
-        say(("tagged: 5 scored %d: picked %s (nearer %s at %s-%s yd, farther %s at %s-%s yd)"):format(#N.scored,
-            picked, shortGuid(near.guid), tostring(near.low), tostring(near.high), shortGuid(far.guid),
-            tostring(far.low), tostring(far.high)))
+        say(("tagged: 5 scored %d: picked %s (nearer %s at %s-%s yd, farther %s at %s-%s yd; %s other live)"):format(
+            #N.scored, picked, shortGuid(near.guid), tostring(near.low), tostring(near.high), shortGuid(far.guid),
+            tostring(far.low), tostring(far.high), tostring(c.others or "?")))
         if #N.scored < 4 then return false, ("%d of 4 scored: now move until the other one is nearer"):format(#N.scored) end
-        return true, table.concat(N.scored, ", ")
+        local result = table.concat(N.scored, ", ")
+        if N.third then result = result .. "; a third mob was picked, so the pair's order alone isn't the rule" end
+        return true, result
     end
 
     local function readTap(what)
